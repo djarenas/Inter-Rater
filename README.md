@@ -1,9 +1,7 @@
 # Inter-Rater
-Inter-rater quantifies the reliability between multiple raters who evaluate a group of subjects.  
+Inter-rater quantifies the reliability between multiple raters who evaluate a group of subjects.  It calculates the group quantity, Fleiss kappa, and it improves on existing software by keeping information about each rater by quantifying how each rater agreed with the rest of the group. This is accomplished through permutations of rater pairs. 
 
-It calculates the group quantity, Fleiss kappa, and it improves on existing software by keeping information about each user and quantifying how each user agreed with the rest of the group. This is accomplished through permutations of user pairs. The software was written in Python, can be run in Linux, and the code is deposited in Zenodo and GitHub.  
-
-This software can be used for evaluation of inter-rater reliability in systematic reviews, medical diagnosis algorithms, education applications, and others.
+The software was written in Python and the code is deposited in Zenodo and GitHub. This software can be used for evaluation of inter-rater reliability in systematic reviews, medical diagnosis algorithms, education applications, and others.
 
 This software has been used in the following academic work:
 
