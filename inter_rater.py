@@ -10,13 +10,12 @@ import sys
 
 #-----------------------------------------------------------------------------
 #Input parameters
-from input_file import *
+from input_parameters import *
 #------------------------------------------------------------------------------
 
 
 #------------------------------------------------------------------------------
 #Read categories file; data_file and examine its properties
-global categories
 categories = readfile_categories(categories_filename)
 array = readfile_array(data_filename)
 n = len(array[0])   #number of raters
