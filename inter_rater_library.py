@@ -3,16 +3,12 @@
 """
 Created on Sat Sep 16 15:35:52 2017
 @author: daniel
-Last update: April 5th
+Last update: October 2022
 """
-#==============================================================
+
 import csv
-import numpy as np
-import random
 import math
 import matplotlib.pyplot as plt
-from itertools import cycle
-#==============================================================
 
 
 #==============================================================
@@ -20,80 +16,85 @@ from itertools import cycle
 #==============================================================
 def readfile_categories(filename):
     """
-    Purpose: Read the categories style files
-    Output: A list with k categories
+    The one thing it does: Categories-style files --> list
+    Input: string filename. File must be tab separated.
+    Output: List with k categories
     """
-    array = []        #Lists are mutable
+    rlist = []        #Lists are mutable
     with open(filename, 'r') as inF: 
       for line in csv.reader(inF, dialect="excel-tab"):
-            array = array + line
-    return(array)
+          rlist = rlist + line # "+" concatenates
+    return(rlist)
 
 def readfile_array(filename):
     """
-    Purpose: Reads the input style files
+    The one thing it does: Ratings-file --> Two-dimensional list
+    Input: string filename.
+    Output: A list of the form [[row1], [row2], ....]
     Filename style:    
                  rater 1   rater 2   rater 3
         study 1    0         0          1
         study 2    -1        1          1
-    Output: A list of the form [[row1], [row2], ....]
+
     """
-    array = []        #Lists are mutable
+    list2D = []
     with open(filename, 'r') as inF:
         for line in csv.reader(inF, dialect="excel-tab"):
-            array = array + [line]
-    return(array)
-#==============================================================
-#==============================================================
+            list2D = list2D + [line] 
+    return(list2D)
+
+def print2Dlist (l2):
+    print("\n")
+    for x in l2:
+        for y in x:
+            print(y, end="\t")
+        print("\n")
+    return
 
 
 #==============================================================
-#These are the functions for handing nij matrices
+#These are the functions for calculating/handling nij matrices
 #==============================================================
-def calculate_specific_nij(i, r, array):
+def calc_specific_nij(i, r, list2D):
     """
-    Purpose: Calculates number of raters who chose a rating for ith item
+    The one thing it does: Calc # of raters who chose a rating for ith item
     Inputs:
     i: item index  (int from 1 to n)
     r: rating (string )
-    array: List in the format [[row1], [row2],...], where 
-                 rater 1   rater 2   rater 3 
-        study 1    0         0          1
-        study 2    -1        1          1
-    Output: Specific nij (integer)
-    """
-    n = len(array[0])   #n: Number of raters
-    row = array[i]
-    nij = 0
-    for l in range(0,n):
-        if row[l] == r:
-            nij = nij + 1
-    return(nij)
-
-def calculate_row_nij(i,categories, array):
-    """
-    Purpose: Calculates the ith row of the nij matrix 
-    Inputs:
-    i: item index  (int from 1 to N)
-    categories: Possible ratings (list of strings)
-    array: List in the format [[row1], [row2],...], where 
+    list2D: List in the format [[row1], [row2],...], where 
                  rater 1   rater 2   rater 3
         study 1    0         0          1
         study 2    -1        1          1
-    
-    Output: nij row (list of integers)
+    Output: nij (integer)
     """
-    k = len(categories)   #k: Number of categories
+    
+    row = list2D[i]
+    t = sum([True for j in row if j == r])
+    return(t)
+
+
+def calc_row_nij(i,categories, list2D):
+    """
+    The one thing it does: Calculates the ith row of the nij matrix 
+    Inputs:
+    i: item index  (int from 1 to N)
+    categories: Possible ratings (list of strings)
+    list2D: List in the format [[row1], [row2],...], where 
+                 rater 1   rater 2   rater 3
+        study 1    0         0          1
+        study 2    -1        1          1
+    Output: ith row of nij matrix (list of integers)
+    """
     row = []
-    for m in range(0,k):
-        nij = calculate_specific_nij(i,categories[m], array)
+    for c in categories:
+        nij = calc_specific_nij(i,c, list2D)
         row = row + [nij]
     return(row)
 
-def calculate_nijmatrix(array,categories):
+def calc_nijmatrix(list2D,categories):
     """
-    Purpose: Calculate nij matrix. Number of raters who chose jth category
-             in ith study. 
+    What it does: Calculate nij matrix. 
+    nij matrix is the number of raters who chose jth category in ith item. 
     Inputs:
     categories: Possible ratings (list of strings)
     array: List in the format [[row1], [row2],...], where 
@@ -102,60 +103,59 @@ def calculate_nijmatrix(array,categories):
         study 2    -1        1          1    
     Output: nij matrix ([[row1], [row2],...])
     """
-    matrix = []
-    N = len(array)
+    ijmatrix = []
+    N = len(list2D) #Number of items that were rated
     for m in range(0,N):
-        row = calculate_row_nij(m,categories,array)
-        matrix = matrix + [row]
-    return(matrix)
-#==============================================================
-#==============================================================
+        row = calc_row_nij(m,categories,list2D)
+        ijmatrix = ijmatrix + [row]
+    return(ijmatrix)
 
 #==============================================================
 #These functions take the nij matrix and calculate probabilities
 #==============================================================
-def calculate_probi(matrix, i):
+def calc_probi(ijmatrix, i):
     """
-    Purpose: Calculate agreement for ith item 
+    Purpose: Calculate agreement-probability for ith item 
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
-    Output: Agreement for ith item (float from 0 to 1)
+    Output: Agreement-probability for ith item (float)
     """
-    k = len(matrix[i])          #k: Number of categories
+    k = len(ijmatrix[i])          #k: Number of categories
     n = 0.0                     #n: Number of ratings
-    for m in range(0,k):
-        n = n + matrix[i][m]    #n: (Not every rater has to evaluate ith study) 
-    total = 0.0
-    for m in range(0,k):
-        nij = matrix[i][m]
-        total = total + (1/(n**2-n))*(nij**2-nij)
-    return(total)
+    #How many raters evaluated ith item?
+    for j in range(0,k):
+        n = n + ijmatrix[i][j]
+    #Calculate probability of agreement for ith item
+    probi = 0.0
+    for j in range(0,k):
+        nij = ijmatrix[i][j]
+        probi = probi + (1/(n**2-n))*(nij**2-nij)
+    return(probi)
 
-def calculate_probi_column(matrix):
+def calc_probi_column(ijmatrix):
     """
-    Purpose: Obtain list of agreements (0 to 1) for each of the Nth items
+    Purpose: Calculate agreement (0 to 1) for each of the Nth items
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
-    Output: Agreement column (list of floats from 0 to 1) 
+    Output: Probability-agreement column (list of floats from 0 to 1) 
     """
-    N = len(matrix)             #N: Number of studies
+    N = len(ijmatrix)             #N: Number of studies
     probi_column = []
-    for l in range(0,N):
-        value = calculate_probi(matrix, l)
-        probi_column = probi_column + [value]
+    for j in range(0,N):
+        probi_column = probi_column + [calc_probi(ijmatrix, j)]
     return(probi_column)
 
-def calculate_po_group(matrix):
+def calc_po_group(matrix):
     """
     Purpose: Obtain total agreement (0 to 1)
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
     Output: Agreement column (float from 0 to 1) 
     """
-    Pi_column = calculate_probi_column(matrix)
+    Pi_column = calc_probi_column(matrix)
     return(sum(Pi_column)/float(len(matrix)))
 
-def calculate_total_row(matrix):
+def calc_total_row(matrix):
     """
     Purpose: Across all items, obtain number of total ratings for jth category 
             Not trivial since not every rater needs to evaluate every item
@@ -165,15 +165,15 @@ def calculate_total_row(matrix):
     """
     total_row = []    
     #For each item
-    for i in range (0, len(matrix[0])):
+    for j in range (0, len(matrix[0])):
         totalj = 0
         #For each category
-        for j in range (0,len(matrix)):
-            totalj = totalj + matrix[j][i]
+        for i in range (0,len(matrix)):
+            totalj = totalj + matrix[i][j]
         total_row = total_row + [totalj]
     return(total_row)
 
-def calculate_pj_row(matrix):
+def calc_pj_row(matrix):
     """
     Purpose: For each jth category, obtain probability that it was chosen
     Inputs:
@@ -181,59 +181,63 @@ def calculate_pj_row(matrix):
     Output: pj_row (list of floats) 
     """
     pj_row = []
-    Total_row = calculate_total_row(matrix) 
+    Total_row = calc_total_row(matrix) 
     for x in range(0,len(Total_row)):
         pj_row = pj_row + [Total_row[x]/float(sum(Total_row))]
     return(pj_row)  
       
-def calculate_first_order(matrix):
+def calc_first_order(matrix):
     """
     Purpose: Sum of first orders of pj (Should always equal one)
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
     Output: float (0 to 1)
     """    
-    pj_row = calculate_pj_row(matrix)
+    pj_row = calc_pj_row(matrix)
     return(sum(pj_row))
 
-def calculate_pe(matrix):
+def calc_pe(matrix):
     """
     Purpose: Calculate agreement by chance: Sum of second orders of pj
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
     Output: float (0 to 1)
     """    
-    pj_row = calculate_pj_row(matrix)
-    return(sum([x**2 for x in pj_row]))
+    pj_row = calc_pj_row(matrix)
+    pe = sum([x**2 for x in pj_row])
+    # if (pe == 1):
+    #         print("Warning: A probability of agreement by chance \
+    #               was calculated to be one. This means only one rating was \
+    #               chosen by n > 1 users in all items.")
+    return(pe)
 
-def calculate_third_order(matrix):
+def calc_third_order(matrix):
     """
     Purpose: Sum of third orders of pj
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
     Output: float (0 to 1)
     """    
-    pj_row = calculate_pj_row(matrix)
+    pj_row = calc_pj_row(matrix)
     return(sum([x**3 for x in pj_row]))
-#==============================================================
-#==============================================================
+
 
 #================================================================
 #These functions calculate Fleiss kappa and its variance (n > 2)
 #================================================================
-def calculate_fleiss_kappa(matrix):
+def calc_fleiss_kappa(matrix):
     """
-    Purpose: Calculate Fleiss kappa (groups > 2)
+    Purpose: Take the nij matrix and calculate Fleiss kappa (groups > 2)
     Inputs:
     matrix: nij matrix (list in the format [[row1], [row2],...], )
     Output: float (0 to 1)
     """    
-    Pe = calculate_pe(matrix)
-    P = calculate_po_group(matrix)
+    Pe = calc_pe(matrix)
+    P = calc_po_group(matrix)
     kappa = (P - Pe)/(1-Pe)
     return(kappa)
 
-def calculate_fleiss_kappa_SE(n, matrix):
+def calc_fleiss_kappa_SE(n, matrix):
     """
     Purpose: Calculate variance of Fleiss kappa (groups > 2)
              Based on an equation from Fleiss 1979 manuscript
@@ -242,22 +246,21 @@ def calculate_fleiss_kappa_SE(n, matrix):
     Output: Square root of variance (float)
     """ 
     N = len(matrix)
-    first_order = calculate_first_order(matrix)
+    first_order = calc_first_order(matrix)
     if abs(first_order - 1) > 0.01:
         print ("Your probabilities are not adding to one")
-    Pe = calculate_pe(matrix)
-    third_order = calculate_third_order(matrix)
+    Pe = calc_pe(matrix)
+    third_order = calc_third_order(matrix)
     numerator = 2*((1-Pe)**2 + 3*Pe - 2*third_order - 1)
     denominator = N*n*(n-1)*(1-Pe)**2
     SE = (numerator/denominator)**0.5
     return(SE)
-#================================================================
 
 
 #================================================================
 #These functions calculate Cohen kappa and its variance (n = 2)
 #================================================================
-def calculate_cohen_nij(array,categories):
+def calc_cohen_nij(array,categories):
     """
     Purpose: Return nij matrix for n = 2 (All items must have valid ratings)
     Inputs:
@@ -278,10 +281,10 @@ def calculate_cohen_nij(array,categories):
                 error = error + 1
     if (error > 0):
         print("There were ", error, "items without two valid ratings")
-    nijmatrix = calculate_nijmatrix(array,categories)
+    nijmatrix = calc_nijmatrix(array,categories)
     return(nijmatrix)
 
-def calculate_cohen_kappa(array,categories):
+def calc_cohen_kappa(array,categories):
     """
     Purpose: Return Cohen kappa for n = 2 (All items must have valid ratings)
     Inputs:
@@ -292,117 +295,130 @@ def calculate_cohen_kappa(array,categories):
         study 2    -1        1          1    
     Output: nij matrix ([[row1], [row2],...])
     """
-    matrix = calculate_cohen_nij(array,categories)
-    pe = calculate_pe(matrix)
-    po = calculate_po_group(matrix)
+    matrix = calc_cohen_nij(array,categories)
+    pe = calc_pe(matrix)
+    po = calc_po_group(matrix)
     kappa = (po - pe)/(1-pe)
     return(kappa)
 
-def calculate_cohen_kappa_SE(array,categories):
+def calc_cohen_kappa_SE(array,categories):
     """
     Purpose: Calculates variance for Cohen kappa (n = 2) 
     Inputs:
-    categories: Possible ratings (list of strings)
-    array: List in the format [[row1], [row2],...], where 
-                 rater 1   rater 2   rater 3
-        study 1    0         0          1
-        study 2    -1        1          1    
+        categories: Possible ratings (list of strings)
+        array: List in the format [[row1], [row2],...], where 
+                     rater 1   rater 2   rater 3
+            study 1    0         0          1
+            study 2    -1        1          1    
     Output: Standard deviation of Cohen kappa (float)
     """
-    matrix =  calculate_cohen_nij(array,categories)
-    SE = calculate_fleiss_kappa_SE(2, matrix)
+    matrix =  calc_cohen_nij(array,categories)
+    SE = calc_fleiss_kappa_SE(2, matrix)
     return(SE)
 
-def calculate_cohen_kappa_simplisticSE(array,categories):
+def calc_cohen_kappa_simplisticSE(array,categories):
     """
     Purpose: Calculates variance for Cohen kappa (n = 2) 
     Using equation form McHugh 2012 paper. 
     This expression overestimates the standard error
     
     Inputs:
-    categories: Possible ratings (list of strings)
-    array: List in the format [[row1], [row2],...], where 
-                 rater 1   rater 2   rater 3
-        study 1    0         0          1
-        study 2    -1        1          1    
+        categories: Possible ratings (list of strings)
+        array: List in the format [[row1], [row2],...], where 
+                     rater 1   rater 2   rater 3
+            study 1    0         0          1
+            study 2    -1        1          1    
     Output: Standard deviation of Cohen kappa (float)
     """
-    matrix = calculate_cohen_nij(array,categories)
-    pe = calculate_pe(matrix)
-    po = calculate_po_group(matrix)
+    matrix = calc_cohen_nij(array,categories)
+    pe = calc_pe(matrix)
+    po = calc_po_group(matrix)
     N = len(array)
     SE = math.sqrt(po*(1-po)/(N*(1-pe)**2))    
     return(SE)
-#================================================================
-#================================================================
 
 #================================================================
 #These functions permutate pairs of raters and find the kappas
 #================================================================
-def extract_two(array, r1, r2):
+def extract_two(list2D, r1, r2):
     """
     Purpose: Extracts two raters (indices r1 and r2) from an n > 2 group
     Inputs:
-    array: List in the format [[row1], [row2],...], where 
+        array: List in the format [[row1], [row2],...], where 
                  rater 1   rater 2   rater 3
-        study 1    0         0          1
-        study 2    -1        1          1    
-    Output: Array of two users in the format ([r11, r12], [r21, r22], ...)
+            study 1    0         0          1
+            study 2    -1        1          1    
+    Output: Array of two users as a 2D list ([r11, r12], [r21, r22], ...)
     """    
     new = []
-    N = len(array)
-    for m in range(0,N):
-        newrow = [array[m][r1]] + [array[m][r2]] 
+    N = len(list2D)
+    for j in range(0,N):
+        newrow = [list2D[j][r1]] + [list2D[j][r2]] 
         new = new + [newrow]
     return(new)    
 
-def keep_ValidRhatings(Dosarray, categories):
+def keep_ValidRatings(list2D, categories):
     """
     Purpose: In array for two raters, keep only items with two valid ratings
     Inputs:
-    Dosarray: ([r11, r12], [r21, r22], ...)
+        list2D: ([r11, r12], [r21, r22], ...)
     Output: Array of two users in the format ([r11, r12], [r21, r22], ...)
     """        
     new = []
-    N = len(Dosarray)
-    for m in range(0,len(Dosarray)):
-      if (Dosarray[m][0] in categories) and (Dosarray[m][1] in categories):  
-                newrow = [Dosarray[m][0]] + [Dosarray[m][1]]
+    N = len(list2D)
+    for i in range(0,N):
+      if (list2D[i][0] in categories) and (list2D[i][1] in categories):  
+                newrow = [list2D[i][0]] + [list2D[i][1]]
                 new = new + [newrow]
     return(new)
 
-def calculate_permutated_kappa_tensor(array,categories):
+def calc_permutated_kappa_tensor(array,categories):
     """
     Purpose: Calculates permutated kappa tensor    
     Inputs:
-    categories: Possible ratings (list of strings)
-    array: List in the format [[row1], [row2],...], where 
-                 rater 1   rater 2   rater 3
-        study 1    0         0          1
-        study 2    -1        1          1    
+        categories: Possible ratings (list of strings)
+        array: List in the format [[row1], [row2],...], where 
+                     rater 1   rater 2   rater 3
+            study 1    0         0          1
+            study 2    -1        1          1    
     Output: 
     Returns a tensor where for each user the kappa and the standard deviation 
     are given: PK_tensor[raterx][ratery][kappa,SE]
     List in the form: [ [ [kappa12, SE12], [kappa13, SE13], ...], ... )
     """    
-    N = len(array)          #How many subjects were examined?
     n = len(array[0])       #Number of raters
     pk_tensor = []
+    #print("Calculating permutated kappa tensor")
     for y in range(0,n):
-      row = []
-      for x in range(0,n):
+        row = []
+        for x in range(0,n):
             z = extract_two(array,y,x)          #Extract two users
-            z = keep_ValidRhatings(z, categories)   #Keep only simultaneous ratings
-            kappa = calculate_cohen_kappa(z,categories)
-            SE = calculate_cohen_kappa_SE(z,categories)
+            z = keep_ValidRatings(z, categories)   #Keep only simultaneous ratings
+            #Comparing the rater to herself is trivial
+            if (x == y):
+                kappa = 1
+                SE = 0
+            else:            
+                #Make sure that pe is not equal to one
+                ijmatrix = calc_nijmatrix(z, categories)
+                pe = calc_pe(ijmatrix) #Check that pe is not equal to one
+                if (pe == 1): 
+                    print("Error in users: ", str(x), ", ", str(y) )
+                #Calculate kappa, SE if pe is not equal to one
+                kappa = calc_cohen_kappa(z,categories)
+                SE = calc_cohen_kappa_SE(z,categories)
+            #Update the row
             row = row + [[kappa, SE]]
-      pk_tensor = pk_tensor + [row]
+        #Update the tensor 
+        pk_tensor = pk_tensor + [row]
     return(pk_tensor)
 
-def pk_tensor_average_rater(pk_tensor, rater): 
+def calc_pk_tensor_average_rater(pk_tensor, rater): 
     """
     Purpose: Average cohen kappa for rater across pair permutations    
-    Input: pk_tensor
+    Input: 
+        PK_tensor[raterx][ratery][kappa,SE] (multidimentional list)
+        rater: Which rater you want to analyze (integer)
     Output: Cohen kappa's [Average, standard deviation]
     """
     n = len(pk_tensor)
@@ -418,12 +434,10 @@ def pk_tensor_average_rater(pk_tensor, rater):
     std_k = (sumdiff/(n-2))**0.5            #Sample standard deviation
     SE = std_k/(n-1)**0.5                  #Standard error
     return([aver_k, SE])
-#================================================================
-#================================================================
 
 
 #================================================================
-#These functions are for printing the results
+#These functions are for printing and plotting the results
 #================================================================
 def fleiss_kappa_report(n, nij_matrix, categories):
     """
@@ -434,11 +448,11 @@ def fleiss_kappa_report(n, nij_matrix, categories):
     nij_matrix: (list)
     categories: (list of strings)
     """
-    pj = calculate_pj_row(nij_matrix)   
-    Pe = calculate_pe(nij_matrix)       #Prob of agreement by chance
-    P = calculate_po_group(nij_matrix)  #Agreement (0 to 1)
-    kappa = calculate_fleiss_kappa(nij_matrix)
-    SE = calculate_fleiss_kappa_SE(n, nij_matrix)
+    pj = calc_pj_row(nij_matrix)   
+    Pe = calc_pe(nij_matrix)       #Prob of agreement by chance
+    P = calc_po_group(nij_matrix)  #Agreement (0 to 1)
+    kappa = calc_fleiss_kappa(nij_matrix)
+    SE = calc_fleiss_kappa_SE(n, nij_matrix)
 
     print("-------------------------------------------")
     print("Fleiss-kappa analysis (Group statistics):")
@@ -505,7 +519,7 @@ def rater_report(array,categories, pk_tensor):
             print("Cohen kappa between users " + "%i" % x + " and " + \
                   "%i" % y + ": " + "%.3f" % pk_tensor[x][y][0] + \
                   " [" + "%.3f" % cilow + ", " + "%.3f" % cihigh + "]")
-      pkz = pk_tensor_average_rater(pk_tensor, y)
+      pkz = calc_pk_tensor_average_rater(pk_tensor, y)
       print("Permutated kappa average: " + "%.3f" % pkz[0])
       print("Permutated kappa standard deviation: " + "%.3f" %pkz[1])
       print("Permutated kappa confidence interval: [" \
@@ -513,12 +527,7 @@ def rater_report(array,categories, pk_tensor):
             "%.3f" % (pkz[0]+1.96*pkz[1])+"]")
     print("-------------------------------------")
     return
-###================================================================
-###================================================================
 
-  
-###===================Plot output graph============================
-###================================================================
 def plot_PK_tensor(pk_tensor, nij_matrix, ymin, 
                    ymax, graph_filename, h, indbars):
     """
@@ -534,8 +543,8 @@ def plot_PK_tensor(pk_tensor, nij_matrix, ymin,
     #--------------------------------------
     #Calculate Fleiss kappa
     n = len(pk_tensor)  #Number of raters
-    kappa = calculate_fleiss_kappa(nij_matrix)
-    SE = calculate_fleiss_kappa_SE(n, nij_matrix)
+    kappa = calc_fleiss_kappa(nij_matrix)
+    SE = calc_fleiss_kappa_SE(n, nij_matrix)
     #--------------------------------------
 
     #--------------------------------------
@@ -559,7 +568,7 @@ def plot_PK_tensor(pk_tensor, nij_matrix, ymin,
     #x-values: User #
     #y-values: permutated kappa
     #y-error: 1.96*SE
-    x_values = []; y_values = []; y_error = []; colors= []; counter = 0
+    x_values = []; y_values = []; y_error = []; counter = 0
     for i in range(0,len(pk_tensor)):
         for j in range(0,len(pk_tensor[0])):
           if i != j:
@@ -578,7 +587,6 @@ def plot_PK_tensor(pk_tensor, nij_matrix, ymin,
     #If researchers wants individual error bars on each pair Cohen Kappa
     if indbars == "yes":   
         for i in range(0,entries):
-            rcolor = "%03x" % np.random.randint(0, 0xFFF)
             ax1.errorbar(x_values[i], y_values[i], y_error[i], \
                      elinewidth = 2, fmt = '^', markersize = 12)
     #Label each pair (i.e. [0,2])
@@ -595,7 +603,7 @@ def plot_PK_tensor(pk_tensor, nij_matrix, ymin,
     #For each user: Plot average and CI from permutated-kappas
     x_values = []; y_values = []; y_error = []
     for r in range(0,len(pk_tensor)):
-        st = pk_tensor_average_rater(pk_tensor, r)
+        st = calc_pk_tensor_average_rater(pk_tensor, r)
         x_values = x_values + [r]
         y_values = y_values +  [st[0]]
         y_error = y_error + [st[1]]
