@@ -3,21 +3,21 @@
 """
 Created on Sat Sep 16 15:35:52 2017
 @author: daniel
-Last update: 10/04/22
+Last update: April 5th
 """
-from inter_rater_library import *
-import sys
+import inter_rater_library as irl
 
 #-----------------------------------------------------------------------------
 #Input parameters
-from input_parameters import *
+from input_file import * 
 #------------------------------------------------------------------------------
 
 
 #------------------------------------------------------------------------------
 #Read categories file; data_file and examine its properties
-categories = readfile_categories(categories_filename)
-array = readfile_array(data_filename)
+global categories
+categories = irl.readfile_categories(categories_filename)
+array = irl.readfile_array(data_filename)
 n = len(array[0])   #number of raters
 N = len(array)      #Number of subjects
 #------------------------------------------------------------------------------
@@ -25,29 +25,29 @@ N = len(array)      #Number of subjects
 
 #------------------------------------------------------------------------------
 #Calculate nij matrix
-nij_matrix = calculate_nijmatrix(array,categories) 
+nij_matrix = irl.calc_nijmatrix(array,categories) 
 #------------------------------------------------------------------------------
 
 
 #------------------------------------------------------------------------------
 #Permutated-kappa analysis. 
 #------------------------------------------------------------------------------
-pk_tensor = calculate_permutated_kappa_tensor(array,categories)
+pk_tensor = irl.calc_permutated_kappa_tensor(array,categories)
 
 
 #------------------------------------------------------------------------------
 #User Statistics 
 #------------------------------------------------------------------------------
-rater_report(array,categories, pk_tensor) #m is number of users
+irl.rater_report(array,categories, pk_tensor) #m is number of users
 
 
 #------------------------------------------------------------------------------
 #Fleiss-kappa analysis. 
 #------------------------------------------------------------------------------
-fleiss_kappa_report(n, nij_matrix, categories)
+irl.fleiss_kappa_report(n, nij_matrix, categories)
 
 
 #------------------------------------------------------------------------------
 #Plot Group and Permutated kappas
 #------------------------------------------------------------------------------
-plot_PK_tensor(pk_tensor, nij_matrix, ymin, ymax, graph_filename, highlight, indbars)
+irl.plot_PK_tensor(pk_tensor, nij_matrix, ymin, ymax, graph_filename, highlight, indbars)
