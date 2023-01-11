@@ -9,9 +9,6 @@ Last update: January 2023
 import numpy as np
 import matplotlib.pyplot as plt
 
-#==============================================================
-#Functions for reading the data files
-#==============================================================
 def read_file(filename):
     """
     Purpose: Tab-separated file -> Numpy-array of strings
@@ -80,12 +77,6 @@ def check_input_data(categories, ratings_array):
               the equations used in the estimation of the variances")
 
     return True
-
-
-#==============================================================
-#Functions for calculating/handling nij matrices
-#==============================================================
-
 
 def calc_specific_nij(i, k, ratings_array):
     """
