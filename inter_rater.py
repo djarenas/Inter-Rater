@@ -9,7 +9,7 @@ import inter_rater_library as irl
 
 #-----------------------------------------------------------------------------
 #Input parameters
-from input_file import * 
+from input_parameters import * 
 #------------------------------------------------------------------------------
 
 
