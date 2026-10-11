@@ -1,0 +1,7 @@
+raters: 4
+categories:
+    kind: unordered
+    names: ['1', '0', '-1']
+    # weighting: quadratic
+n_subjects: 1617
+unique_subjects: true

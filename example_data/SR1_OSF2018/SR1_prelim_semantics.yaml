@@ -1,0 +1,6 @@
+raters: 4
+categories:
+    kind: unordered
+    names: ['1', '0', '-1']
+n_subjects: 199
+unique_subjects: true

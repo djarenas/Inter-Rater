@@ -1,0 +1,7 @@
+raters: 2
+categories:
+    kind: unordered
+    names: ['Ectopic', 'AIU', 'NIU']
+    # weighting: quadratic
+n_subjects: 100
+unique_subjects: true

@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: interrater
+message: >-
+  If you use this software, please cite both the software
+  and the paper describing the method it implements.
+type: software
+authors:
+  - family-names: Arenas
+    given-names: Daniel J.
+repository-code: "https://github.com/djarenas/Inter-Rater"
+license: GPL-3.0-or-later
+version: 2.0.0
+date-released: 2026-10-11
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.1227660
+    description: Version 1, archived on Zenodo
+preferred-citation:
+  type: article
+  title: >-
+    Software for analysis of inter-rater reliability by
+    permutating pairs of multiple raters
+  authors:
+    - family-names: Arenas
+      given-names: Daniel J.
+  year: 2018
+  identifiers:
+    - type: other
+      value: "arXiv:1809.05731"
+      description: arXiv preprint

@@ -1,0 +1,292 @@
+# test_example_data/
+
+Integration tests that run analyzers on the shipped example datasets and assert
+point estimates against the validated reference values in `example_data/README.md`.
+
+These sit above the unit test suite: a unit test checks that `FleissKappaAnalyzer`
+handles a 4x3 NijMatrix correctly; an integration test checks that the full
+pipeline -- load file, clean, build Ratings/NijMatrix, configure analyzer,
+estimate -- reproduces a published result end-to-end.
+
+
+## Design decisions
+
+**Point estimates only (deterministic).** Each test asserts the point estimate
+to 3 decimal places. This is deterministic -- no bootstrap needed, runs in
+milliseconds. CI structure (lower < point < upper, both floats) is checked as
+a sanity guard with `n_resamples=50` to keep runtime low.
+
+**One conftest, flat test files.** `conftest.py` provides dataset-loading
+fixtures. Each test file covers one logical group (reference data, research
+data, permutations).
+
+**Tolerance.** `pytest.approx(expected, abs=5e-4)` for 3-decimal-place
+agreement. This is looser than the unit test tolerance (1e-12) because these
+are end-to-end checks, not formula-level assertions.
+
+**No slow marks for now.** Everything uses low `n_resamples`. A future
+`@pytest.mark.slow` tier could run full `n_resamples=4000` assertions against
+the README's CI bounds.
+
+
+## Test matrix
+
+### Coverage goals
+
+1. All 8 leaf analyzers appear at least once
+2. All 5 systematic review datasets represented
+3. Both data pathways exercised (ratings and nij)
+4. Both balance conditions covered (balanced and unbalanced)
+5. Both pairwise bootstrap methods tested (correlated and independent)
+6. Weighted analysis (linear and quadratic) tested on multiple datasets
+   across both WeightableGroupConfig and WeightableIndividualConfig
+
+### Analyzer coverage map
+
+| Analyzer | Unweighted | Weighted | Total |
+|---|---|---|---|
+| FleissKappaAnalyzer | Fleiss 1971, SR1 prelim, SR1 main | SR1 prelim (quadratic) | 4 |
+| GwetAC1Analyzer | Fleiss 1971, SR2, SR4 | — (not weightable) | 3 |
+| BrennanPredigerAnalyzer | Fleiss 1971, SR3, SR5 | Synthetic 2-rater (linear) | 4 |
+| KrippendorffAlphaAnalyzer | Gwet cont3x3, SR1 main | SR1 prelim (linear) | 3 |
+| CohenKappaAnalyzer | Gwet cont3x3, Synthetic 2-rater | Gwet cont3x3 (quadratic) | 3 |
+| ScottsAnalyzer | Synthetic 2-rater | — (not weightable) | 1 |
+| CongerKappaAnalyzer | SR1 prelim | — (not weightable) | 1 |
+| LightKappaAnalyzer | SR1 prelim | — (not weightable) | 1 |
+| PairwisePermutationAnalysis | SR1 prelim (corr. + indep.) | — | 2 |
+
+
+## Files
+
+| File | What it tests | Tests |
+|------|---------------|-------|
+| test_reference_data.py | Datasets with published reference values (textbook / external validation) | 8 |
+| test_research_data.py | Original systematic review datasets (internal validation against README) | 9 |
+| test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches | ~4 |
+| test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | ~4 |
+| conftest.py | Dataset-loading fixtures, shared analyzer config builder | -- |
+
+
+## test_reference_data.py (8 tests)
+
+Tests against datasets with externally published reference values.
+
+### Fleiss 1971 (nij pathway, 6 raters, 5 categories, balanced)
+
+| Test | Analyzer | Expected | Source |
+|------|----------|----------|--------|
+| test_fleiss_kappa | FleissKappaAnalyzer | 0.430 | Fleiss (1971) original |
+| test_gwet_ac1 | GwetAC1Analyzer | 0.448 | V2 validated |
+| test_brennan_prediger | BrennanPredigerAnalyzer | 0.444 | V2 validated, Pe = 1/5 |
+
+### Gwet cont3x3 (ratings + nij pathways, 2 raters, 3 categories, balanced)
+
+| Test | Analyzer | Expected | Source |
+|------|----------|----------|--------|
+| test_cohen_kappa_ratings | CohenKappaAnalyzer | 0.796 | irrCAC: 0.79641 |
+| test_gwet_ac1_ratings | GwetAC1Analyzer | 0.849 | irrCAC: 0.84933 |
+| test_krippendorff_alpha_nij | KrippendorffAlphaAnalyzer | 0.797 | V2 validated |
+
+### Synthetic 2-rater (ratings pathway, 2 raters, 3 categories, balanced)
+
+| Test | Analyzer | Expected | Source |
+|------|----------|----------|--------|
+| test_cohen_kappa | CohenKappaAnalyzer | 0.641 | V2 validated |
+| test_scotts_pi | ScottsAnalyzer | 0.641 | V2 validated, = Fleiss at n=2 |
+
+
+## test_research_data.py (9 tests)
+
+Tests against the original systematic review datasets. Each SR gets one
+coefficient chosen to exercise a different analyzer and avoid redundancy.
+
+### SR1 prelim (ratings, 4 raters, K=3, balanced, ~83% skew)
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_fleiss_kappa | FleissKappaAnalyzer | 0.493 | Group coefficient on balanced |
+| test_conger_kappa | CongerKappaAnalyzer | 0.494 | Group-level, individual marginals |
+| test_light_kappa | LightKappaAnalyzer | 0.496 | Mean of C(4,2)=6 pairwise Cohens; n_pairs=6 |
+
+Conger's group-level estimate (0.494) differs from the pairwise-mean Cohen
+kappa (0.496) because it uses each rater's full marginal distribution, not
+pair-by-pair marginals.  Light's kappa (0.496) is by definition the mean of
+all pairwise Cohen kappas, so it matches the pairwise mean exactly.
+
+### SR1 main (ratings, 4 raters, K=3, unbalanced, ~90% skew)
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_fleiss_kappa | FleissKappaAnalyzer | 0.619 | Unbalanced approximation; `balanced_data_only=False` |
+| test_krippendorff_alpha | KrippendorffAlphaAnalyzer | 0.618 | Exact on unbalanced |
+
+Note: `FleissKappaConfig` defaults to `balanced_data_only=True`, which rejects
+unbalanced data.  This test builds the config with `balanced_data_only=False`
+to exercise the unbalanced-data approximation path.  Other configs (Krippendorff,
+AC1, B-P) default to `False`.
+
+### SR2 (ratings, 4 raters, K=3, nearly balanced 80/81)
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_gwet_ac1 | GwetAC1Analyzer | 0.782 | AC1 on near-balanced, 3 categories |
+
+### SR3 FIS Psych (ratings, 3 raters, K=2, balanced, ~90% skew)
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_brennan_prediger | BrennanPredigerAnalyzer | 0.886 | B-P on binary, 3 raters |
+
+### SR4 FIS CVD (ratings, 4 raters, K=2, balanced, ~82% skew)
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_gwet_ac1 | GwetAC1Analyzer | 0.879 | AC1 on binary, 4 raters |
+
+### SR5 Cocaine Cardio (ratings, 3 raters, K=2, balanced, ~88% skew)
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_brennan_prediger | BrennanPredigerAnalyzer | 0.788 | B-P on binary, 3 raters |
+
+
+## test_pairwise_permutation.py (~4 tests)
+
+Pairwise permutation analysis on SR1 prelim (4 raters, balanced).
+Tests both bootstrap methods to verify the CI width relationship.
+
+### SR1 prelim pairwise (C(4,2) = 6 pairs)
+
+| Test | Coefficient | Bootstrap | Mean | CI | Notes |
+|------|-------------|-----------|------|-----|-------|
+| test_cohen_correlated | Cohen κ | correlated | 0.496 | ~[0.382, 0.605] | Correct uncertainty |
+| test_cohen_independent | Cohen κ | independent | 0.496 | ~[0.436, 0.555] | ~53% width of correlated |
+| test_correlated_wider_than_independent | -- | -- | -- | -- | Structural: correlated CI width > independent CI width |
+| test_n_pairs | -- | -- | -- | -- | Result has n_pairs = 6 |
+
+
+## test_weighted.py (~4 tests)
+
+Weighted analysis across multiple datasets. Tests that distance-based weighting
+changes the point estimate (weighted != unweighted) and exercises both
+WeightableGroupConfig (Fleiss, B-P, Krippendorff) and WeightableIndividualConfig
+(Cohen).
+
+Weights only matter when K >= 3 -- with binary categories, linear and quadratic
+collapse to identity (there is only one distance). All datasets below have K=3.
+
+### SR1 prelim (ratings, 4 raters, K=3, balanced, ordinal -1/0/1)
+
+| Test | Analyzer | Weights | Expected | Notes |
+|------|----------|---------|----------|-------|
+| test_fleiss_kappa_quadratic | FleissKappaAnalyzer | quadratic | 0.593 | -1/0 closer than -1/1; WeightableGroupConfig |
+| test_krippendorff_alpha_linear | KrippendorffAlphaAnalyzer | linear | 0.555 | Different weight type on same data |
+
+### Gwet cont3x3 (ratings, 2 raters, K=3, balanced)
+
+| Test | Analyzer | Weights | Expected | Notes |
+|------|----------|---------|----------|-------|
+| test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | 0.892 | WeightableIndividualConfig; irrCAC cross-check possible |
+
+### Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal -1/0/1)
+
+| Test | Analyzer | Weights | Expected | Notes |
+|------|----------|---------|----------|-------|
+| test_brennan_prediger_linear | BrennanPredigerAnalyzer | linear | 0.651 | Second WeightableGroup analyzer with weights |
+
+*Weighted values established by discovery run (V2 validated). Unweighted
+references for comparison: Fleiss 0.493, Krippendorff 0.493, Cohen 0.796,
+B-P 0.670. For Gwet cont3x3 weighted Cohen, irrCAC may provide an external
+cross-check.*
+
+### Structural assertions (all weighted tests)
+
+Each weighted test also checks:
+- `result.point != unweighted_point` (weights changed the estimate)
+- CI structure (lower < point < upper)
+- `result.weights_type` matches the requested type
+
+
+## Unbalanced nij (nij pathway, variable raters, K=3, unbalanced)
+
+*Note: This dataset has no reference values in the README yet. The first run
+will establish them. Once established, the values should be added to both
+example_data/README.md and this file.*
+
+| Test | Analyzer | Expected | Notes |
+|------|----------|----------|-------|
+| test_fleiss_kappa | FleissKappaAnalyzer | TBD | Unbalanced nij pathway |
+| test_gwet_ac1 | GwetAC1Analyzer | TBD | Unbalanced nij pathway |
+
+
+## conftest.py
+
+### Data loading
+
+Two helpers handle file → object conversion:
+
+- **`_load_ratings(data_path, semantics_path, cleaner_config_path)`** --
+  Full RatingsCleaner pipeline.  Reads the data file into a DataFrame,
+  builds `RatingsSemantics` and `CleanerConfig` from their YAML files,
+  and returns `RatingsCleaner(df, semantics, config).ratings`.
+
+- **`_load_nij(data_path, *, index_col, sep)`** -- Reads a counts file
+  into `NijMatrix(array)`.
+
+**Header detection** uses the file extension: `.csv` → `header=0`,
+`.txt` → `header=None`.  This is a property of the file format, NOT of
+`CleanerConfig.frame_layout.use_column_names`.  The `use_column_names`
+flag controls rater-label matching inside `RatingsCleaner` (whether
+DataFrame column labels must equal declared rater names), not whether the
+source file has a header row.  The Gwet CSV proves this: it has headers
+(`Subject,Rater1,Rater2`) but `use_column_names: false` (raters are
+positional, not named).
+
+### Fixtures
+
+**Dataset fixtures** (scope="module"):
+
+| Fixture | What it provides |
+|---------|------------------|
+| fleiss1971_nij | NijMatrix from Fleiss1971_psychiatric_data_nij.csv |
+| gwet_ratings | Ratings from gwet_cont3x3_data.csv (via cleaner) |
+| gwet_nij | NijMatrix from gwet_cont3x3_data_nij.csv |
+| synthetic_ratings | Ratings from synthetic_2raters_data.txt (via cleaner) |
+| sr1_prelim_ratings | Ratings from SR1_prelim_data.csv (via cleaner) |
+| sr1_main_ratings | Ratings from SR1_main_data.txt (via cleaner) |
+| sr2_ratings | Ratings from SR2_data.txt (via cleaner) |
+| sr3_ratings | Ratings from SR_FIS_Psych_data.txt (via cleaner) |
+| sr4_ratings | Ratings from SR_FIS_CVD_data.txt (via cleaner) |
+| sr5_ratings | Ratings from SR_cocaine_cardio_data.txt (via cleaner) |
+| unbalanced_nij | NijMatrix from unbalanced_data_nij.txt |
+
+**Config fixtures** (scope="session", all use `n_resamples=50, random_state=42, ci_method="bca"`):
+
+| Fixture | Config class |
+|---------|--------------|
+| fast_fleiss_config | FleissKappaConfig |
+| fast_gwet_config | GwetAC1Config |
+| fast_bp_config | BrennanPredigerConfig |
+| fast_krippendorff_config | KrippendorffAlphaConfig |
+| fast_cohen_config | CohenKappaConfig |
+| fast_scotts_config | ScottsConfig |
+| fast_conger_config | CongerKappaConfig |
+| fast_light_config | LightKappaConfig |
+
+
+## Datasets used
+
+| Dataset | Source | Format | Raters | K | Balance | Tests |
+|---------|--------|--------|--------|---|---------|-------|
+| Fleiss 1971 | Fleiss (1971) | nij (csv) | 6 | 5 | Balanced | 3 |
+| Gwet cont3x3 | Gwet (2014) Table 4.1 | ratings (csv) + nij (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
+| Synthetic 2-rater | Synthetic | ratings (txt) | 2 | 3 | Balanced | 2 + 1 weighted |
+| SR1 prelim | OSF 2018 | ratings (csv) | 4 | 3 | Balanced | 3 + 2 weighted + 4 pairwise |
+| SR1 main | OSF 2018 | ratings (txt) | 4 | 3 | Unbalanced | 2 |
+| SR2 | JSRC 2019 | ratings (txt) | 4 | 3 | Nearly balanced | 1 |
+| SR3 FIS Psych | JGIM 2019 | ratings (txt) | 3 | 2 | Balanced | 1 |
+| SR4 FIS CVD | -- | ratings (txt) | 4 | 2 | Balanced | 1 |
+| SR5 CocCardio | -- | ratings (txt) | 3 | 2 | Balanced | 1 |
+| Unbalanced nij | Synthetic | nij (txt) | variable | 3 | Unbalanced | 2 |
+
+**Total: ~28 tests** (8 reference + 9 research + ~4 weighted + ~4 pairwise + 2 unbalanced + 1 structural)

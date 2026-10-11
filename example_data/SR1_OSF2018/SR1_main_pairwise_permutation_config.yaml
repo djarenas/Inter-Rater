@@ -1,0 +1,23 @@
+coefficient_to_compute: 'cohen_kappa'
+config_of_coefficient:
+  n_resamples: 4000
+  alpha: 0.05
+  random_state: 42
+  ci_method: bca
+  convergence_test: null
+  rater_jackknife: false
+  weights_type: "identity"
+  custom_weights_path: null
+  balanced_data_only: false
+  injection:
+    type: 'extremal'
+    strategy: 'contrarian'
+    n_new_raters: 1
+    random_state: 42
+bootstrap_mean_config:
+  n_bootstraps: 4000
+  method: 'correlated'
+  ci_method: 'bca'
+  alpha: 0.05
+  random_state: 42
+

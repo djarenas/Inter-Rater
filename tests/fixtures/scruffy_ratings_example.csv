@@ -1,0 +1,41 @@
+subject_id,ann,bob,cara,dev,eve
+s000,exclude,,,,
+s001,include,,,,
+s002,exclude,,,,
+s003,?,?,exclude,exclude,exclude
+s004,include ,exclude,Exclude,include,include
+s005,exclude,exclude,include,exclude,exclude
+s006,exclude,include,include,exclude,include
+s007,Exclude,include,   ,include,include
+s008,include,include,include,include,include
+s009,exclude,Exclude,exclude,include,N/A
+s010,exclude, include,include,?,NOT SHOWN
+s011,exclude,NOT SHOWN,exclude,exclude,exc
+s012,exclude,exclude,exclude,include,
+s013,include,exclude,EXCLUDE,exclude,
+s014,include,include,include,,
+s015,exclude,include,,exclude,
+s016,exclude,exclude,Include,include,
+s017,exclude,exclude,include,exclude,
+s018,include,exclude,include,include,
+s019,,include,   ,include,
+s020,include,exclude,include,include,
+s021,exclude,include,include,,
+s022,exclude,include,EXCLUDE,include,
+s023,exclude,Exclude,include,exclude,
+s024,maybe,INCLUDE,exclude,include,
+s025,include,exclude,exclude,exclude ,
+s026,mabye,exclude,exclude,include,
+s027,maybe,include ,include,exclude,
+s028,exclude,exclude,exclude,exclude,
+s029,include,NOT SHOWN,NOT SHOWN,include,
+s030,include,include,exclude,exclude,
+s031,exclude,exclude,exclude,include,
+s032,exclude,exclude,include,mabye,
+s033,exclude,   ,exclude,,
+s034, include,exclude,exclude,exclude,
+s035,exclude,include,include,include,
+s036,exclude ,exclude,exclude,exclude,
+s037,include ,inc,exc,inc,
+s004,exclude ,exc,include,,
+s003,exclude,include,exc,include,

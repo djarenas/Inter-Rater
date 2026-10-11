@@ -1,0 +1,75 @@
+"""Configuration for Fleiss' kappa analysis."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from .weightable_group_config import WeightableGroupConfig
+
+if TYPE_CHECKING:
+    from ...injectors import InjectorConfig
+    from .hypothesis_test_config import HypothesisTestConfig
+    from ..convergence_test import ConvergenceTest
+
+_ERROR_PREFIX = "[FleissKappaConfig] Error"
+
+
+@dataclass(frozen=True)
+class FleissKappaConfig(WeightableGroupConfig):
+    """
+    I am the configuration for Fleiss' kappa analysis.
+
+    Fleiss' kappa works exactly on balanced data (constant raters per subject).
+    On unbalanced data, an approximation is available using per-subject
+    averaging of marginals.
+
+    I default balanced_data_only=True (prefer exact formula), but the user can
+    set it to False to allow approximations. The analyzer then reports what
+    was used and warns if approximation occurred.
+
+    Attributes
+    ----------
+    balanced_data_only : bool, default True
+        If True, the analyzer will throw an error on unbalanced data (exact formula only).
+        If False, the analyzer will allow unbalanced data (use approximation + warning).
+    weights_type : str, default "identity"
+        Fleiss' kappa supports optional weighting for ordinal data.
+        Options: "identity" (no weights), "linear", "quadratic", "custom".
+    (all other fields inherited from WeightableGroupConfig and parents)
+    """
+
+    # Attribute declaration
+
+    # Inherited from parent class AnalyzerConfig
+    n_resamples: int
+    alpha: float 
+    random_state: int | None 
+    ci_method: str
+    convergence_test: ConvergenceTest | None
+    hypothesis_test_config: HypothesisTestConfig | None
+    injection: tuple[InjectorConfig] | None
+    # Inherited from parent class GroupCoefficientConfig
+    rater_jackknife: bool
+    weights_type: str
+    # Inherited from parent class WeightableGroupConfig
+    custom_weights_path: str | None
+    # Override parent default: Fleiss prefers balance by default
+    balanced_data_only: bool = True
+
+    # Constructor ------------------------------------------------------------ #
+
+    def __post_init__(self) -> None:
+        """Validate Fleiss' kappa configuration."""
+
+        # Call validation by parent classes
+        try:
+            super().__post_init__()
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
+    # Public API ------------------------------------------------------------- #
+
+    def summary(self) -> dict:
+        """Return configuration (inherits parent's summary)."""
+        return super().summary()

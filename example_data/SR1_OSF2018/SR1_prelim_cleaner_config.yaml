@@ -1,0 +1,13 @@
+frame_layout:
+    use_column_names: true     
+    subject_id_col: "(internal) id"   
+case_sensitive: false
+strip_whitespace: true
+missing_values: ['o']         # v1's marker for "not rated"
+value_map: {}                 # nothing needs repairing
+unknown_policy: 'error'
+unused_categories: 'error'
+insufficient_data_drops:
+    min_ratings_per_rater:   2
+    min_ratings_per_subject: 2
+    method:                  iterate

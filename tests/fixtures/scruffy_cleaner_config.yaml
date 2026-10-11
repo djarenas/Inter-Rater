@@ -1,0 +1,40 @@
+# Permissive enough to clean scruffy_ratings_example.csv all the way through.
+#
+# The same file fails without these settings, one layer at a time:
+#   no frame_layout   -> subject_id is read as a rater column
+#   unknown_policy    -> stops on 'maybe', 'mabye', '?', 'TBD'
+#   unused_categories -> stops on 'unsure', which nobody chose
+# That is the point of the fixture: what is fatal is decided here, not by the
+# data.
+
+frame_layout:
+  use_column_names: true
+  subject_id_col: subject_id
+
+case_sensitive: false
+strip_whitespace: true
+
+# Six spellings of nothing. Nulls are always missing and cannot be listed.
+# Note that "" and "   " fold to the same token once whitespace is stripped,
+# so counts for them land together in the report.
+missing_values: ["", "   ", "NA", "N/A", "NOT SHOWN", "-"]
+
+# Shorthand some raters used. Each target must be a declared category.
+value_map:
+  inc: include
+  exc: exclude
+  unk: unsure
+
+# 'maybe', 'mabye', '?' and 'TBD' were never declared and no repair covers
+# them. 'error' would stop the clean; 'empty' records them and treats them as
+# no rating.
+unknown_policy: empty
+
+# 'unsure' was offered and nobody chose it. Keeping it holds K at 3, which
+# matters for any coefficient whose chance term counts categories.
+unused_categories: keep
+
+insufficient_data_drops:
+  min_ratings_per_rater: 10
+  min_ratings_per_subject: 2
+  method: iterate
