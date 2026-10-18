@@ -33,7 +33,11 @@ Also what happens when a rating was not something you expected (e.g. '0' instead
 'o' or 'O'). Even these data cleaning or management issues are hard to handle with
 scripts in a way that is easily reproducible and archivable.
 
-What is also missing in existing packages is detail beyond two raters, such as whether one rater disagreed with the others more than usual, along with extendability. Dropping a rater who quit halfway changes what your data describes. A pair of raters who share eight subjects produces a coefficient that is perfectly valid and perfectly useless.
+What is also missing in existing packages is detail beyond two raters, such as
+whether one rater disagreed with the others more than usual, along with
+extendability. Dropping a rater who quit halfway changes what your data
+describes. A pair of raters who share eight subjects produces a coefficient
+that is perfectly valid and perfectly useless.
 
 The `interrater` package is built for the case where you want those things checked rather
 than assumed. Every analysis runs through one pipeline: a cleaner that declares
@@ -277,8 +281,8 @@ it would change:
 
 Every one of those crosses with every coefficient, and with whatever form your
 data arrived in. Most of the combinations are fine. Some are not, and the ones
-that are not fail *quietly*. This package throws error on configurations that 
-have unreasonable requests.
+that are not fail *quietly*. This package throws an error on configurations that 
+make unreasonable requests.
 
 **Resampling subjects and resampling raters are not symmetric.** A subject
 drawn twice is two subjects that happen to be identical, which is what a
@@ -340,7 +344,7 @@ about your actual subjects:
 | **Chance** | `DistributionInjector` | draws from a distribution you declare: a pure null rater |
 | **Conformist** | `ExtremalInjector` | always picks the majority category: goes with the crowd |
 | **Dissenter** | `ExtremalInjector` | picks the least common category anyone actually used |
-| **Contrarian** | `ExtremalInjector` | picks a category nobody used at all |
+| **Contrarian** | `ExtremalInjector` | picks a category nobody used on that subject: goes where nobody went |
 | **Median** | `ExtremalInjector` | picks the middle-prevalence category |
 
 The dissenter picks the road less travelled; the contrarian picks the road no
