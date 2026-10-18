@@ -565,7 +565,7 @@ package from a two-line kappa is machinery for noticing it.
   Fleiss' kappa, Brennan-Prediger, Krippendorff's alpha), so the same data
   can be viewed under different chance models side by side.
 
-## What is coming in version 2.1
+## What is coming next
 
 Version 2.0 is the pipeline: cleaning, validated data objects, eight
 coefficients, bootstrap intervals, permutation tests, pairwise and subset
