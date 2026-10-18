@@ -4,6 +4,10 @@ Agreement between raters, for any rating task where there is no ground truth to
 check against. For example: systematic review screening, content coding, annotation
 quality, evaluation panels, etc.
 
+- **Install:** `pip install interrater` · [PyPI: interrater](https://pypi.org/project/interrater/)
+- **Source:** [GitHub: interrater](https://github.com/djarenas/Inter-Rater)
+- **Paper:** [arXiv:1809.05731](https://arxiv.org/abs/1809.05731) (describes the original version)
+
 Version 2 is a complete rewrite in object-oriented Python; see
 [What version 2 adds](#what-version-2-adds) below.
 
