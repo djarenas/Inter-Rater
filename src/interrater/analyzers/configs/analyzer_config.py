@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .hypothesis_test_config import HypothesisTestConfig
 
 _ERROR_PREFIX = "[AnalyzerConfig] Error"
+_WARNING_PREFIX = "[AnalyzerConfig] Warning"
 
 @dataclass(frozen=True)
 class AnalyzerConfig:
@@ -183,6 +184,39 @@ class AnalyzerConfig:
                         f"an InjectorConfig, "
                         f"got {type(step).__name__}"
                     )
+
+    # Subclass helpers -------------------------------------------------------- #
+
+    def _warn_parametric_null(self) -> None:
+        """
+        Warn that ``ci_method='parametric_null'`` is a reproduction tool.
+
+        **I am not called from __post_init__.** Only the three configs whose
+        coefficient has a published closed-form null variance call me --
+        Fleiss, Cohen and Scott. The other five reject ``parametric_null``
+        outright, and they do it *after* calling ``super().__post_init__()``,
+        so a warning fired from the base class would tell someone how to
+        interpret an interval they are about to be told they cannot have.
+
+        I fire at config construction rather than when the interval appears,
+        because this is the moment the choice was made and the moment the
+        caller still knows which parameter to change. The interval warns
+        again when it is built, in different words: by then the useful thing
+        to say is how far off the width is, not where the knob lives.
+        """
+        import warnings
+
+        warnings.warn(
+            f"{_WARNING_PREFIX}: ci_method='parametric_null' builds the "
+            f"interval from the variance under H0: kappa = 0, which is the "
+            f"right variance for a hypothesis test and the wrong one for an "
+            f"interval around a non-zero estimate. It is here to reproduce "
+            f"or compare against published analyses that used this formula. "
+            f"For reporting uncertainty, set ci_method='percentile' or "
+            f"'bca'.",
+            UserWarning,
+            stacklevel=4,
+        )
 
     # Public API ------------------------------------------------------------- #
 

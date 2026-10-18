@@ -9,8 +9,8 @@ from .analyzer import Analyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates import AnalysisResult
-    from ..intermediates.analysis_results import HypothesisTestResult
+    from ..intermediates.results import AnalysisResult
+    from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile
     from ..intermediates.estimator_parts.estimator_input import EstimatorInput
     from .configs import IndividualMarginalConfig

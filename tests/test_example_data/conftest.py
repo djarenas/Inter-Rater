@@ -36,6 +36,9 @@ from interrater.analyzers.configs import (
     CohenKappaConfig,
     CongerKappaConfig,
     LightKappaConfig,
+    PairwisePermutationConfig,
+    SubsetPermutationConfig,
+    PermutationBootstrapMeanConfig,
 )
 
 
@@ -52,6 +55,15 @@ SR3_DIR        = EXAMPLE_DATA_DIR / "SR3_JGIM2019"
 SR4_DIR        = EXAMPLE_DATA_DIR / "SR4_FIS_CVD"
 SR5_DIR        = EXAMPLE_DATA_DIR / "SR5_CocCardio"
 UNBALANCED_DIR = EXAMPLE_DATA_DIR / "Unbalanced_nij"
+
+
+# -- Resample count --------------------------------------------------------- #
+
+# Efron & Tibshirani (1986) section 9, p. 72: the rough minimum for a useful
+# percentile interval. Every config in this file uses it, including the
+# permutation ones, so that no interval these tests build ever reports
+# below_recommended_resamples -- which would be correct of it, and noise here.
+_INTEGRATION_RESAMPLES = 250
 
 
 # -- Helpers ---------------------------------------------------------------- #
@@ -114,15 +126,52 @@ def _load_nij(data_path: Path, *, index_col: int | str | None = None,
     return NijMatrix(df.values.astype(np.int32))
 
 
-def _fast_config(config_cls, **overrides):
+def _integration_config(config_cls, **overrides):
     """
-    Build a fast analyzer config for integration testing.
+    Build an analyzer config for integration testing.
 
-    Uses n_resamples=50 and random_state=42 for CI structural checks.
-    Point estimates are deterministic and do not depend on these values.
+    Percentile at B=250, which is two deliberate choices.
+
+    **Percentile, because these tests assert that the point estimate falls
+    inside its interval.** Under percentile that is a sound assertion. Under
+    BCa it is not an invariant at all -- strong bias correction can put the
+    interval entirely to one side of the point legitimately, which is why
+    ``PointEstimateResult`` stopped requiring it. Asserting it on a BCa
+    interval is asserting something that is allowed to be false.
+
+    **B=250, because that is the minimum Efron & Tibshirani (1986) section 9
+    give for a useful percentile interval.** Below it, every interval these
+    tests build would report ``below_recommended_resamples`` and say so in
+    its own description -- correct of it, and noise here.
+
+    This file previously used BCa at B=50, which was under the published
+    minimum of 1000 for that method and paid for a jackknife besides: BCa
+    needs one estimator call per subject regardless of B, so on the larger
+    fixtures the jackknife cost far more than the bootstrap. Percentile at
+    250 runs the four largest fixtures in 0.2s against 1.8s for that.
+
+    BCa is not left untested end-to-end -- see ``bca_fleiss_config`` below.
+    Point estimates are deterministic and do not depend on any of this.
     """
     defaults = dict(
-        n_resamples=50,
+        n_resamples=_INTEGRATION_RESAMPLES,
+        random_state=42,
+        ci_method="percentile",
+    )
+    defaults.update(overrides)
+    return config_cls(**defaults)
+
+
+def _bca_config(config_cls, **overrides):
+    """
+    Build a BCa config at the resample count the literature asks for.
+
+    B=1000 is Efron & Tibshirani's rough minimum for BCa. Used by a single
+    end-to-end test, on a small fixture: the jackknife costs one estimator
+    call per subject, so this belongs on 30 subjects rather than 1617.
+    """
+    defaults = dict(
+        n_resamples=1000,
         random_state=42,
         ci_method="bca",
     )
@@ -244,47 +293,152 @@ def sr5_ratings():
 
 @pytest.fixture(scope="session")
 def fast_fleiss_config():
-    """FleissKappaConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(FleissKappaConfig)
+    """FleissKappaConfig for integration CI checks."""
+    return _integration_config(FleissKappaConfig)
 
 
 @pytest.fixture(scope="session")
 def fast_gwet_config():
-    """GwetAC1Config with n_resamples=50 for fast CI checks."""
-    return _fast_config(GwetAC1Config)
+    """GwetAC1Config for integration CI checks."""
+    return _integration_config(GwetAC1Config)
 
 
 @pytest.fixture(scope="session")
 def fast_bp_config():
-    """BrennanPredigerConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(BrennanPredigerConfig)
+    """BrennanPredigerConfig for integration CI checks."""
+    return _integration_config(BrennanPredigerConfig)
 
 
 @pytest.fixture(scope="session")
 def fast_krippendorff_config():
-    """KrippendorffAlphaConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(KrippendorffAlphaConfig)
+    """KrippendorffAlphaConfig for integration CI checks."""
+    return _integration_config(KrippendorffAlphaConfig)
 
 
 @pytest.fixture(scope="session")
 def fast_cohen_config():
-    """CohenKappaConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(CohenKappaConfig)
+    """CohenKappaConfig for integration CI checks."""
+    return _integration_config(CohenKappaConfig)
 
 
 @pytest.fixture(scope="session")
 def fast_scotts_config():
-    """ScottsConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(ScottsConfig)
+    """ScottsConfig for integration CI checks."""
+    return _integration_config(ScottsConfig)
 
 
 @pytest.fixture(scope="session")
 def fast_conger_config():
-    """CongerKappaConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(CongerKappaConfig)
+    """CongerKappaConfig for integration CI checks."""
+    return _integration_config(CongerKappaConfig)
 
 
 @pytest.fixture(scope="session")
 def fast_light_config():
-    """LightKappaConfig with n_resamples=50 for fast CI checks."""
-    return _fast_config(LightKappaConfig)
+    """LightKappaConfig for integration CI checks."""
+    return _integration_config(LightKappaConfig)
+
+
+@pytest.fixture(scope="session")
+def subset_config():
+    """Build a SubsetPermutationConfig for integration testing.
+
+    Returns a callable taking the subset size k, since the tests that use
+    it compare behaviour across k rather than fixing one.
+
+    Uses Fleiss' kappa with balanced_data_only=False, because the dataset
+    this exists for is SR1 main: partially crossed, which is the only
+    shipped data where a subset's measurable pool and its complete cases
+    differ. On balanced data the two coincide and the test proves nothing.
+    """
+    def _make(k: int):
+        return SubsetPermutationConfig(
+            coefficient_to_compute="fleiss_kappa",
+            config_of_coefficient=_integration_config(
+                FleissKappaConfig, balanced_data_only=False,
+            ),
+            subset_k=k,
+        )
+
+    return _make
+
+
+@pytest.fixture(scope="session")
+def pairwise_config():
+    """Build a PairwisePermutationConfig for integration testing.
+
+    Returns a callable, because the mean-bootstrap method is what varies
+    across these tests and one fixture per method would be three
+    near-identical fixtures.
+
+    Both resample counts -- the per-pair bootstrap and the mean bootstrap --
+    use _INTEGRATION_RESAMPLES, the same number every other config here
+    uses. The per-pair intervals are the reason that matters: a pairwise
+    run builds one interval per rater pair, so an under-resampled setting
+    is not one noisy interval but C(n,2) of them.
+
+    Usage:
+        config = pairwise_config()               # no mean bootstrap
+        config = pairwise_config("correlated")
+    """
+    def _make(mean_method: str | None = None):
+        kwargs = dict(
+            coefficient_to_compute="cohen_kappa",
+            config_of_coefficient=CohenKappaConfig(
+                n_resamples=_INTEGRATION_RESAMPLES,
+                random_state=42,
+            ),
+        )
+        if mean_method is not None:
+            kwargs["bootstrap_mean_config"] = PermutationBootstrapMeanConfig(
+                method=mean_method,
+                n_bootstraps=_INTEGRATION_RESAMPLES,
+                random_state=99,
+            )
+        return PairwisePermutationConfig(**kwargs)
+
+    return _make
+
+
+@pytest.fixture(scope="session")
+def weighted_config():
+    """Build an integration config carrying a weights_type.
+
+    Returns a callable rather than a config, because the weighted tests
+    need several different (analyzer, weights_type) combinations and one
+    fixture per combination would be eight near-identical fixtures.
+
+    Routing through _integration_config is the point: the resample count
+    and CI method stay defined in exactly one place, so these tests cannot
+    quietly keep an old setting the way the inline configs here did.
+
+    Usage:
+        config = weighted_config(FleissKappaConfig, "quadratic")
+    """
+    def _make(config_cls, weights_type: str):
+        return _integration_config(config_cls, weights_type=weights_type)
+
+    return _make
+
+
+@pytest.fixture(scope="session")
+def fleiss_unbalanced_config():
+    """FleissKappaConfig that accepts unbalanced data.
+
+    FleissKappaConfig defaults to balanced_data_only=True and rejects data
+    where subjects were rated different numbers of times. SR1 main is such
+    a dataset, and the approximation path needs exercising. Everything else
+    matches _integration_config, so the resample count and method stay in
+    one place rather than being written out again at the call site.
+    """
+    return _integration_config(FleissKappaConfig, balanced_data_only=False)
+
+
+@pytest.fixture(scope="session")
+def bca_fleiss_config():
+    """FleissKappaConfig running real BCa at B=1000.
+
+    The one config in this file that exercises the BCa path end-to-end.
+    Paired with a small fixture on purpose -- see _bca_config.
+    """
+    return _bca_config(FleissKappaConfig)

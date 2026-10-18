@@ -68,6 +68,16 @@ class FleissKappaConfig(WeightableGroupConfig):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        # Fleiss has a published closed-form null variance (Fleiss, Nee &
+        # Landis 1979, Eq. 12), so parametric_null is permitted here -- and
+        # warned about, since the variance it uses is the right one for a
+        # test and the wrong one for an interval. Called last, and from here
+        # rather than from the base class: the five configs that reject this
+        # method do so after super(), so a base-class warning would fire for
+        # them too. See AnalyzerConfig._warn_parametric_null.
+        if self.ci_method == "parametric_null":
+            self._warn_parametric_null()
+
     # Public API ------------------------------------------------------------- #
 
     def summary(self) -> dict:

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
 from .group_analyzer import GroupAnalyzer
+from ..intermediates.results.ci_results import BootstrapCIResult
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.analysis_results import HypothesisTestResult, GwetsAC1Result
+    from ..intermediates.results import HypothesisTestResult, GwetsAC1Result
     from ..intermediates.data_profiles import BalanceProfile
     from ..intermediates.estimator_parts import NijMatrix
     from .configs import GwetAC1Config
@@ -152,19 +153,13 @@ class GwetAC1Analyzer(GroupAnalyzer):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self, use_scipy_bca: bool = False) -> GwetsAC1Result:
+    def estimate(self) -> GwetsAC1Result:
         """
         Compute AC1 from ratings and return the result.
 
         Performs point estimation and bootstrap confidence interval computation.
         The bootstrap loop resamples subjects with replacement, recomputes AC1
         on each resample, and builds a distribution for CI bounds.
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa
-            computation (for testing/validation only).
 
         Returns
         -------
@@ -182,7 +177,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         from .agreement_functions.group_agreement import gwet_ac1
         from .resampling_functions.subject_resampling import subject_bootstrap
         from ..array_utils import category_counts
-        from ..intermediates.analysis_results import GwetsAC1Result
+        from ..intermediates.results import GwetsAC1Result
 
         # Guard: ratings must be available for this path
         if self.ratings is None:
@@ -198,31 +193,18 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"{_ERROR_PREFIX}: convergence_test not yet implemented"
             )
 
-        # Get number of categories
-        n_categories = self.ratings.semantics.n_categories
-
         # Compute point estimate from original data
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        nij = NijMatrix(matrix=nij_array)
-        point = gwet_ac1(nij)  # No weights -- AC1 is unweighted
+        nij_array = category_counts(
+            self.ratings.category_index, self._n_categories()
+        )
+        point = self._estimate_from_nij(nij_array)
 
-        # Bootstrap loop
-        bootstrap_values = []
-
-        for resampled_array in subject_bootstrap(
-            self.ratings.category_index,
-            n_resamples=self.config.n_resamples,
-            random_state=self.config.random_state,
-        ):
-            nij_array_resamp = category_counts(resampled_array, n_categories)
-            nij_resampled = NijMatrix(matrix=nij_array_resamp)
-            ac1_resample = gwet_ac1(nij_resampled)
-            bootstrap_values.append(ac1_resample)
-
-        bootstrap_distribution = np.array(bootstrap_values)
+        bootstrap_distribution = self._bootstrap_distribution()
 
         # Compute confidence interval
-        ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+        ci = self._compute_ci(
+            bootstrap_distribution, point, self._jackknife_estimates
+        )
 
         # Build and return result
         return GwetsAC1Result(
@@ -233,18 +215,11 @@ class GwetAC1Analyzer(GroupAnalyzer):
             ci_method=self.config.ci_method,
         )
 
-    def estimate_from_nij_matrix(
-        self, use_scipy_bca: bool = False
-    ) -> GwetsAC1Result:
+    def estimate_from_nij_matrix(self) -> GwetsAC1Result:
         """
         Compute AC1 from NijMatrix (counts matrix) and return the result.
 
         Uses subject bootstrap resampling on the counts matrix directly.
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa.
 
         Returns
         -------
@@ -261,7 +236,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         from .agreement_functions.group_agreement import gwet_ac1
         from .resampling_functions.subject_resampling import subject_bootstrap_from_nij_matrix
         from ..intermediates.estimator_parts import NijMatrix
-        from ..intermediates.analysis_results import GwetsAC1Result
+        from ..intermediates.results import GwetsAC1Result
 
         # Guard: nij_matrix must be available for this path
         if self.nij_matrix is None:
@@ -277,25 +252,17 @@ class GwetAC1Analyzer(GroupAnalyzer):
             )
 
         # Compute point estimate from nij_matrix
-        point = gwet_ac1(self.nij_matrix)
+        nij_array = self.nij_matrix.matrix
+        point = self._estimate_from_nij(nij_array)
 
-        # Bootstrap loop on nij_matrix
-        bootstrap_values = []
-        n_categories = self.nij_matrix.n_categories
-
-        for resampled_nij_array in subject_bootstrap_from_nij_matrix(
-            self.nij_matrix.matrix,
-            n_resamples=self.config.n_resamples,
-            random_state=self.config.random_state,
-        ):
-            nij_resampled = NijMatrix(matrix=resampled_nij_array)
-            ac1_resample = gwet_ac1(nij_resampled)
-            bootstrap_values.append(ac1_resample)
-
-        bootstrap_distribution = np.array(bootstrap_values)
+        bootstrap_distribution = self._bootstrap_distribution_from_nij(nij_array)
 
         # Compute confidence interval
-        ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+        ci = self._compute_ci(
+            bootstrap_distribution,
+            point,
+            lambda: self._jackknife_estimates_from_nij(nij_array),
+        )
 
         # Build and return result
         return GwetsAC1Result(
@@ -328,7 +295,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
             If method is not "permutation".
             If ratings is None (permutation requires raw ratings).
         """
-        from ..intermediates.analysis_results import HypothesisTestResult
+        from ..intermediates.results import HypothesisTestResult
         from ..intermediates.estimator_parts import NijMatrix
         from .agreement_functions.group_agreement import gwet_ac1
         from .resampling_functions.permutation_resampling import (
@@ -427,12 +394,27 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
+    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+        """
+        Gwet's AC1 from a counts matrix.
+
+        The only coefficient-specific step in my resampling. Everything that
+        draws samples -- bootstrap or jackknife, from ratings or from counts
+        -- is written once on my base classes in terms of this.
+
+        AC1 takes no weights: Gwet (2008) defines it as unweighted.
+        """
+        from .agreement_functions.group_agreement import gwet_ac1
+        from ..intermediates.estimator_parts import NijMatrix
+
+        return gwet_ac1(NijMatrix(matrix=nij_array))
+
     def _compute_ci(
         self,
         bootstrap_distribution: np.ndarray,
         point: float,
-        use_scipy_bca: bool,
-    ) -> tuple[float, float]:
+        jackknife_fn: Callable[[], np.ndarray],
+    ) -> BootstrapCIResult:
         """
         Compute confidence interval from bootstrap distribution.
 
@@ -442,23 +424,30 @@ class GwetAC1Analyzer(GroupAnalyzer):
             Array of bootstrap coefficient values.
         point : float
             Point estimate of AC1.
-        use_scipy_bca : bool
-            If True and ci_method == "bca", use scipy BCa.
+        jackknife_fn : Callable[[], np.ndarray]
+            Produces leave-one-subject-out estimates when called. A callable
+            rather than an array because only BCa needs them, and producing
+            them costs one coefficient evaluation per subject. I am the only
+            place that knows which methods need them, so I am the only place
+            that pays for them.
 
         Returns
         -------
-        tuple[float, float]
-            Lower and upper bounds of the confidence interval.
+        BootstrapCIResult
+            Bounds, the method asked for against the one that ran, and how
+            many resamples failed.
         """
-        from .ci_methods import percentile_ci, bca_ci, scipy_bca_ci
+        from .ci_methods import percentile_ci, bca_ci
 
         if self.config.ci_method == "percentile":
             return percentile_ci(bootstrap_distribution, self.config.alpha)
         elif self.config.ci_method == "bca":
-            if use_scipy_bca:
-                return scipy_bca_ci(bootstrap_distribution, point, self.config.alpha)
-            else:
-                return bca_ci(bootstrap_distribution, point, self.config.alpha)
+            return bca_ci(
+                bootstrap_distribution,
+                point,
+                self.config.alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}'. "

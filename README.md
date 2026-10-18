@@ -1,11 +1,51 @@
 # interrater
 
 Agreement between raters, for any rating task where there is no ground truth to
-check against — systematic review screening, content coding, annotation
-quality, evaluation panels, etc...
+check against. For example: systematic review screening, content coding, annotation
+quality, evaluation panels, etc.
 
-Version 2 is a complete rewrite in object-oriented Python — see
+Version 2 is a complete rewrite in object-oriented Python; see
 [What version 2 adds](#what-version-2-adds) below.
+
+## Is this package good for you?
+
+If you are looking for a kappa you can defend later, one that arrives with a
+pipeline you can re-run from config files, result files that carry the details
+behind it, and plots you can produce directly from those results, this package
+is for you.
+
+Why? Because although there is no shortage of ways to compute a kappa, and
+several good libraries do it well in a handful of lines of R or Python, what is
+harder to come by is reproducible pipelines, result/run details, and knowing
+whether the number means what you think it means.
+
+For example, the original Fleiss' kappa assumes every subject was rated the same
+number of times. If yours were not, the formula does not apply. A package function
+may still run, and nothing afterwards would tell you. Other silent issues may be
+that not all your subjects were rated by all raters (hereafter referred to as
+unbalanced). A category nobody chose changes coefficients whose chance term counts
+categories, and leaves the others untouched. This may not matter for Fleiss' kappa,
+but it matters for Brennan-Prediger, Gwet's AC1, and Bennett's S, where the number
+of categories goes into the kappa. Not knowing how your package function handled
+unchosen categories would be bad.
+
+Also what happens when a rating was not something you expected (e.g. '0' instead of
+'o' or 'O'). Even these data cleaning or management issues are hard to handle with
+scripts in a way that is easily reproducible and archivable.
+
+What is also missing in existing packages is detail beyond two raters, such as whether one rater disagreed with the others more than usual, along with extendability. Dropping a rater who quit halfway changes what your data describes. A pair of raters who share eight subjects produces a coefficient that is perfectly valid and perfectly useless.
+
+The `interrater` package is built for the case where you want those things checked rather
+than assumed. Every analysis runs through one pipeline: a cleaner that declares
+its decisions in a config file and reports what it did, a validated data object
+that cannot exist in an invalid state, and analysers that refuse data their
+coefficient does not apply to. The intent is that a wrong number is hard to
+produce, and that a right one arrives with an account of how it was reached.
+
+The trade is deliberate. There is no shortcut that takes a bare array and
+returns a coefficient, because a shortcut is exactly where the guarantees are
+lost. If you want the two-line version, other packages do it well and this one
+is not trying to compete with them.
 
 ## Install
 
@@ -21,7 +61,7 @@ An analysis needs three things: your ratings, a declaration of what they mean,
 and a declaration of how to read them. The second and third are files rather
 than arguments, so that a reviewer can be shown them.
 
-This example runs on data that ships with the repository — the preliminary
+This example runs on data that ships with the repository: the preliminary
 screening round of a real systematic review, 199 abstracts rated by four
 reviewers. Clone the repository, or copy
 [`example_data/SR1_OSF2018/`](example_data/SR1_OSF2018/), and run it as it
@@ -81,7 +121,7 @@ print(cleaner.report.render())     # what cleaning did, before any statistics
 config = FleissKappaConfig(n_resamples=4000, random_state=42, ci_method="bca")
 result = FleissKappaAnalyzer(ratings, config).estimate()
 print(f"Fleiss' kappa = {result.point:.3f}  95% CI "
-      f"[{result.confidence_interval[0]:.3f}, {result.confidence_interval[1]:.3f}]")
+      f"[{result.confidence_interval.lower:.3f}, {result.confidence_interval.upper:.3f}]")
 ```
 
 ```
@@ -100,7 +140,7 @@ Drops
 Categories
     used       : 1 13%, 0 4%, -1 83%
 
-Fleiss' kappa = 0.493  95% CI [0.378, 0.602]
+Fleiss' kappa = 0.493  95% CI [0.383, 0.606]
 ```
 
 The report is the part worth noticing. Before any coefficient appears you are
@@ -131,7 +171,8 @@ pairwise = PairwisePermutationAnalysis(ratings, PairwisePermutationConfig(
 pairwise.pairwise_values      # (0,1) 0.539  (0,2) 0.453  (0,3) 0.425
                               # (1,2) 0.553  (1,3) 0.522  (2,3) 0.481
 pairwise.mean_over_pairs      # 0.496
-pairwise.bootstrap_ci_of_mean # (0.382, 0.604)
+print(pairwise.bootstrap_ci_of_mean)
+                              # [0.387, 0.608] (95% CI, bca, n=4000)
 ```
 
 And what a fifth reviewer would have done to the number:
@@ -147,8 +188,8 @@ augmented = ExtremalInjector(
 FleissKappaAnalyzer(augmented, config).estimate().point   # 0.563, up from 0.493
 ```
 
-A reviewer who contributes no independent judgment — who simply agrees with
-whatever the other four decided — raises this panel's reported reliability by
+A reviewer who contributes no independent judgment, who simply agrees with
+whatever the other four decided, raises this panel's reported reliability by
 0.07. (The seed matters: with four reviewers and three categories a majority
 can tie, and ties are broken at random.) See
 [What if one of your raters were someone else?](#what-if-one-of-your-raters-were-someone-else)
@@ -168,33 +209,6 @@ is a complete rewrite in object-oriented Python, undertaken to fix maintenance
 issues and limitations that emerged from real-world use. Version 1 remains
 available at git tag `v1.5`.
 
-## What this is for
-
-There is no shortage of ways to compute a kappa. A handful of lines of R or
-Python will do it, and several good libraries will do it well.
-
-What is harder to come by is knowing whether the number means what you think it
-means. Fleiss' kappa assumes every subject was rated the same number of times —
-if yours were not, the formula does not apply and nothing will tell you.
-Also, dropping a rater who quit halfway changes what your data describes. A category
-nobody chose changes coefficients whose chance term counts categories, and
-leaves the others untouched. A pair of raters who share eight subjects produces
-a coefficient that is perfectly valid and perfectly useless.
-
-`interrater` is built for the case where you want those things checked rather
-than assumed. Every analysis runs through one pipeline: a cleaner that declares
-its decisions in a config file and reports what it did, a validated data object
-that cannot exist in an invalid state, and analysers that refuse data their
-coefficient does not apply to. The intent is that a wrong number is hard to
-produce, and that a right one arrives with an account of how it was reached.
-
-The trade is deliberate. There is no shortcut that takes a bare array and
-returns a coefficient, because a shortcut is exactly where the guarantees are
-lost. If you want the two-line version, other packages do it well and this one
-is not trying to compete with them.
-
-
-
 ## Why pairwise, and not only a single number
 
 Version 1 computed a coefficient for every pair of raters as well as one for
@@ -204,16 +218,15 @@ clear while building version 2.
 **A group coefficient cannot tell you that one rater was the problem.** In one
 of the screening rounds behind this package, the pairwise kappas run from 0.58
 to 0.82 and one reviewer accounts for the whole spread; Fleiss' kappa for the
-same data is 0.71, with no hint that anything is uneven. In another round the
-six pairs span 0.05. Those are different situations calling for different
-responses -- a conversation with one reviewer, or nothing at all -- and the
+same data is 0.71, with no hint that anything is uneven. In another systematic review,
+three pairs span a 0.05 variation. Those are different situations calling for different
+responses (a conversation with one reviewer, or nothing at all) and the
 single number is identical in kind for both.
 
 **On unbalanced data, pairwise arithmetic is better defined.** Fleiss' kappa
 assumes every subject was rated the same number of times, and he said plainly
 that varying numbers were out of scope. Applying it anyway means choosing among
-generalisations he did not give -- and implementations do choose differently,
-by around 0.01 of kappa on real data. A pair, by contrast, is always analysed
+generalisations he did not give. A pair, by contrast, is always analysed
 on the subjects both raters saw, so the count is exactly two for every subject
 by construction. There is no generalisation to choose and nothing for two
 implementations to disagree about.
@@ -223,33 +236,30 @@ every C(n,2) pair grouped by rater, with bootstrap confidence intervals on each
 pair and a shaded band for the uncertainty on the mean. A reviewer can see at a
 glance whether one rater is pulling the group coefficient, whether pairs cluster
 or spread, and how the uncertainty on any single pair compares to the
-uncertainty on the average -- all things a single number hides.
+uncertainty on the average, all things a single number hides.
 
 **The uncertainty on the mean is not the obvious calculation.** Every pair is
 computed on the same subjects, so the six pairwise kappas of a four-rater panel
 are not six independent numbers; an abstract that both confuses rater 0 and
 confuses rater 2 moves several pairs at once. Averaging them and treating the
-result as a mean of independent estimates understates the interval badly — by
-40 to 47% on the four-rater screening rounds behind this package. Version 2
-therefore resamples subjects once per draw and recomputes every pair on the
-same resampled subjects, which keeps that dependence in the interval. The
-narrower calculation is still available, under the name `independent`, because
-seeing the two side by side is the clearest way to understand why one of them
-is wrong. See [Correlated and independent error](#correlated-and-independent-error).
+result as a mean of independent estimates can understate the interval, badly. This was a 
+mistake I made in Version 1. In contrast, Version 2
+resamples subjects once per draw and recomputes every pair on the
+same resampled subjects, which keeps that dependence in the interval. For more information see: [Correlated and independent error](#correlated-and-independent-error).
 
 **And agreement structure is not the only thing you can perturb.** A panel is
 also a thing you can add to: a reviewer who agrees with whatever the others
 said, a contrarian, someone guessing from a declared distribution. Asking what
 such a rater would have done to your coefficient is a harder analysis to
 arrange than any single formula, and arranging it is most of why version 2 is
-built the way it is — a tight object-oriented design that composes, even though
+built the way it is: a tight object-oriented design that composes, even though
 the ramp-up is steeper than a function call. See
 [What if one of your raters were someone else?](#what-if-one-of-your-raters-were-someone-else)
 
 ## Why this is built out of objects, and what the flexibility buys
 
 A coefficient is a formula, and a formula is a function. So it is fair to ask
-what the types are for.
+what the types are for, and why we spent so much time on a OOP design.
 
 The answer is not the coefficients. It is everything you might want to do
 *around* them. Once you have a number, the interesting questions are about how
@@ -267,12 +277,13 @@ it would change:
 
 Every one of those crosses with every coefficient, and with whatever form your
 data arrived in. Most of the combinations are fine. Some are not, and the ones
-that are not fail *quietly*.
+that are not fail *quietly*. This package throws error on configurations that 
+have unreasonable requests.
 
 **Resampling subjects and resampling raters are not symmetric.** A subject
 drawn twice is two subjects that happen to be identical, which is what a
 bootstrap is for. A rater drawn twice is one rater agreeing perfectly with
-themselves, which inflates every coefficient — on three raters, 77% of draws
+themselves, which inflates every coefficient: on three raters, 77% of draws
 contain a duplicate and 11% return exactly 1.0.
 
 **Dropping a rater changes what the data describes.** Dropping a subject does
@@ -285,8 +296,8 @@ columns: rater identity was discarded when the counts were made, so leaving one
 rater out is not a harder computation, it is an impossible one. Nothing about a
 bare array says which of those you have.
 
-That is the case for types. Not that they make the arithmetic cleaner — they do
-not — but that the number of *legal* combinations here is large, the number of
+That is the case for types. Not that they make the arithmetic cleaner (they do
+not) but that the number of *legal* combinations here is large, the number of
 illegal ones is larger, and several of the illegal ones return a plausible
 number rather than an error. A function will compute leave-one-rater-out on
 counts that have no raters in them. An object that never had rater identity
@@ -302,7 +313,7 @@ analyses are not routine in packages that offer them.
 
 Every operation above perturbs the data: drop a subject, drop a rater, take the
 pairs. The panel itself stays fixed, and in every other agreement package it
-stays fixed permanently — the raters you had are the raters the analysis knows
+stays fixed permanently: the raters you had are the raters the analysis knows
 about.
 
 But the question a reviewer actually asks is about the panel. *How much does
@@ -314,7 +325,7 @@ worth knowing before you report the number.
 
 Version 2 answers that by letting you add a rater who does not exist. You
 declare what kind of rater they are, and you get back a new `Ratings` object
-with a synthetic column appended — the original is never modified, and the new
+with a synthetic column appended. The original is never modified, and the new
 columns are named `injected_rater0`, `injected_rater1`, so an injected panel can
 never be mistaken for a real one.
 
@@ -323,10 +334,10 @@ about your actual subjects:
 
 | kind | class | what it simulates |
 | --- | --- | --- |
-| **Echo** | `WithinSubjectInjector` | copies a real answer at each subject, with tunable noise — a reviewer who follows the panel |
+| **Echo** | `WithinSubjectInjector` | copies a real answer at each subject, with tunable noise: a reviewer who follows the panel |
 | **Clone** | `RaterBootstrapInjector` | resamples one real rater's column: keeps their base rates, scrambles their judgments |
-| **Chance** | `PooledInjector` | draws from the pool of all observed ratings — correct base rates, no subject signal |
-| **Chance** | `DistributionInjector` | draws from a distribution you declare — a pure null rater |
+| **Chance** | `PooledInjector` | draws from the pool of all observed ratings: correct base rates, no subject signal |
+| **Chance** | `DistributionInjector` | draws from a distribution you declare: a pure null rater |
 | **Conformist** | `ExtremalInjector` | always picks the majority category: goes with the crowd |
 | **Dissenter** | `ExtremalInjector` | picks the least common category anyone actually used |
 | **Contrarian** | `ExtremalInjector` | picks a category nobody used at all |
@@ -356,8 +367,8 @@ at once without name collisions.
 
 ### What this tells you
 
-Run the spectrum on one of the screening rounds here — 770 abstracts, three real
-reviewers, Fleiss' kappa 0.675 — and the panel's dependence on its own
+Run the spectrum on one of the screening rounds here (770 abstracts, three real
+reviewers, Fleiss' kappa 0.675) and the panel's dependence on its own
 composition becomes visible (one injected rater each, `random_state=42`):
 
 | added rater | Fleiss' κ | change |
@@ -372,8 +383,8 @@ composition becomes visible (one injected rater each, `random_state=42`):
 | contrarian | −0.226 | −0.901 |
 
 The first row is the one worth sitting with. A fourth reviewer who contributes
-no independent judgment at all — who simply agrees with whatever the other three
-decided — *raises* the reported reliability by 0.08. Agreement statistics cannot
+no independent judgment at all, who simply agrees with whatever the other three
+decided, *raises* the reported reliability by 0.08. Agreement statistics cannot
 distinguish a panel of careful independent readers from a panel with a
 rubber stamp in it, and the direction of the error is the flattering one.
 
@@ -390,7 +401,7 @@ the line where you report your study's agreement. The point of the naming and
 the immutability is that the distinction survives being written down.
 
 One connection worth making explicit: resampling raters with replacement is
-refused here as a confidence interval method, for the reason given above — a
+refused here as a confidence interval method, for the reason given above: a
 rater drawn twice agrees perfectly with themselves and inflates everything. The
 same mechanic is offered as the `Clone` injector, because there the duplication
 is the declared intent rather than an accident of the procedure. The difference
@@ -399,7 +410,7 @@ between a bug and a feature is whether you asked for it.
 ## Two ways to mean "by chance"
 
 Every chance-corrected coefficient must decide what to do when two raters use
-the categories at different rates — when one says "include" twice as often as
+the categories at different rates, when one says "include" twice as often as
 the other. There are two defensible answers, and which one a coefficient picks
 is most of what separates the familiar names from each other.
 
@@ -416,7 +427,7 @@ as disagreement.
 
 Version 2 reports both, because the **gap between them is informative in its
 own right.** It is zero when two raters use the categories at the same rate and
-grows as their rates diverge — so it measures how differently two raters draw
+grows as their rates diverge, so it measures how differently two raters draw
 the line, as distinct from how erratic they are. Those are different problems
 with different remedies: a conversation about the criteria, or retraining. A
 single coefficient cannot tell them apart, and neither can a single pair of
@@ -442,13 +453,13 @@ kappa that is *not* zero is a different question, and the answer is not the
 same number.
 
 **They also assume more.** An analytic variance comes with a sampling model
-attached — in 1979, that each subject's ratings are multinomial and that
+attached: in 1979, that each subject's ratings are multinomial and that
 subjects are independent. If your subjects are clustered, or a rater's mistakes
 run together across subjects, the formula is wrong and nothing says so.
 Resampling subjects asks only that subjects be exchangeable.
 
 None of which makes the null test unnecessary. "Could this have happened by
-chance" is a real question and version 2 answers it — under its own name,
+chance" is a real question and version 2 answers it, under its own name,
 returning its own number, so that the two cannot be mistaken for each other.
 
 ## Correlated and independent error
@@ -457,7 +468,7 @@ Almost every default in agreement statistics assumes that errors are
 independent: that two raters disagree for unrelated reasons, that one abstract
 being hard tells you nothing about the next, that two estimates computed from
 the same data can be averaged as though they came from separate studies. When
-that assumption fails, it fails in a consistent direction — the numbers look
+that assumption fails, it fails in a consistent direction: the numbers look
 more certain, or more reliable, than they are. Four cases come up in practice,
 and version 2 takes a position on each.
 
@@ -485,15 +496,15 @@ there is to ignore. `correlated` is the default for exactly this reason, and
 ambiguous abstract, will often be wrong in the same direction. Every
 chance-corrected coefficient reads that as agreement, because agreement is all
 it can see. No coefficient can separate "these readers are careful" from "these
-readers share a blind spot" — but the injectors can show you what the second
+readers share a blind spot." But the injectors can show you what the second
 one does to your number, which is what the conformist and echo rows of the
 table in the previous section are for.
 
 **Subjects that cluster.** Abstracts from the same trial, the same author
 group, or the same journal are not independent draws. An analytic variance
 derived under independent multinomial subjects is simply wrong on such data and
-says nothing about it. The subject bootstrap asks less — only that subjects be
-exchangeable — but clustering strains that too, and the honest answer is that
+says nothing about it. The subject bootstrap asks less (only that subjects be
+exchangeable), but clustering strains that too, and the honest answer is that
 the resampling unit should be the cluster. Version 2 does not yet offer a
 clustered bootstrap; the limitation is stated here rather than hidden.
 
@@ -517,8 +528,8 @@ package from a two-line kappa is machinery for noticing it.
 - **An auditable cleaning layer.** Which strings meant nothing, which were
   repaired and into what, how thin the data was allowed to get: declared in a
   versioned config file and reported afterwards, rather than reconstructed from
-  memory when a reviewer asks. If cleaning changed what the data describes —
-  a rater dropped, a category removed — the report says so and hands back a
+  memory when a reviewer asks. If cleaning changed what the data describes
+  (a rater dropped, a category removed), the report says so and hands back a
   corrected declaration.
 
 - **Preconditions in the type system.** Exact Fleiss' kappa requires a constant
@@ -526,8 +537,8 @@ package from a two-line kappa is machinery for noticing it.
   checked before the coefficient is computed rather than assumed by it.
 
 - **Synthetic raters, in eight declared kinds.** Add a reviewer who does not
-  exist — a conformist, a contrarian, an echo of the panel with tunable noise, a
-  guesser drawing from prevalences you declare — and see what your coefficient
+  exist (a conformist, a contrarian, an echo of the panel with tunable noise, a
+  guesser drawing from prevalences you declare) and see what your coefficient
   would have been. The original data is never modified and injected columns are
   named as such. This does not appear to be available in other agreement
   packages, and it is the clearest way to ask how much a reported kappa depends
@@ -544,7 +555,7 @@ package from a two-line kappa is machinery for noticing it.
 
 - **Pairwise permutation with visualization.** Compute any agreement
   coefficient for every pair of raters, bootstrap each pair and the mean, and
-  plot the full agreement structure -- which pairs agree, which do not, and
+  plot the full agreement structure: which pairs agree, which do not, and
   how much of the spread one rater accounts for. The plot supports seven
   coefficients (Cohen's kappa, Scott's pi, Conger's kappa, Gwet's AC1,
   Fleiss' kappa, Brennan-Prediger, Krippendorff's alpha), so the same data
@@ -560,8 +571,8 @@ direction, not a schedule.
 
 - **Declarative configuration for plots.** Version 2.0 ships plotting as
   standalone functions: pass a result, get a figure. That is fine once and
-  awkward for a figure in a paper, because the choices that shape it — sort
-  order, which intervals are drawn, labels — live in the call rather than in a
+  awkward for a figure in a paper, because the choices that shape it (sort
+  order, which intervals are drawn, labels) live in the call rather than in a
   file. Plotting moves to the config-plus-plotter pattern already used here for
   cleaning and analysis, and used throughout
   [eventus](https://github.com/djarenas/eventus), so that a figure is
@@ -571,12 +582,12 @@ direction, not a schedule.
 - **One YAML story for every config.** A prerequisite for the above, and worth
   having on its own. Cleaning, semantics and the top-level analyzer config load
   from YAML today; the leaf configs do not. When they all do, an entire
-  analysis — cleaning, coefficient, resampling, plotting — is declarable in
+  analysis (cleaning, coefficient, resampling, plotting) is declarable in
   files and recoverable from them.
 
 - **Gwet's AC2 and extended weighting schemes.** AC2 is AC1 with weights, so it
   waits on extending the weight set beyond identity, linear and quadratic to
-  ordinal, interval and ratio — which also widens Krippendorff's alpha to the
+  ordinal, interval and ratio, which also widens Krippendorff's alpha to the
   variants its literature defines. Loading a custom weight matrix from file
   arrives with it. Further coefficients follow once that foundation is in
   place.
@@ -585,7 +596,7 @@ direction, not a schedule.
   by value and as a strip. Neither yet shows what the analysis is for: how
   agreement degrades as raters are removed, and whose absence accounts for it.
   A panel across subset sizes is planned, along with a smaller fix that is
-  overdue — results carry rater indices, so plots read `(0, 1)` where they
+  overdue: results carry rater indices, so plots read `(0, 1)` where they
   should read `(Smith, Jones)`.
 
 - **Orchestrators, for computing every coefficient at once.** Eight
@@ -597,20 +608,20 @@ direction, not a schedule.
   A function that hands back eight coefficients is also a function that invites
   reporting the largest one, and the position of this package is that the
   comparison across chance models is informative only if the set is reported as
-  a set — the gap between Fleiss' kappa and AC1 on skewed data is a fact about
+  a set: the gap between Fleiss' kappa and AC1 on skewed data is a fact about
   the data, not a menu. So the design is meant to make that the easy path: a
   primary coefficient declared in the config before anything is computed and
   recorded in the result, output in a fixed order with no ranking and no
   sort-by-value convenience, and each coefficient labelled with the chance
   model it assumes so a reader can see why two numbers differ. Alongside it, a
-  utility for bootstrapping the difference between two estimates directly —
+  utility for bootstrapping the difference between two estimates directly,
   because the tempting shortcut, reading non-overlapping 95% intervals as a
   significant difference, is closer to a p < 0.005 test than a p < 0.05 one
   (Schenker & Gentleman, 2001).
 
 - **Rater influence by replacement.** For each rater: drop them, inject a
-  synthetic replacement — a contrarian, a draw from a declared distribution, a
-  resample of the rest of the panel — and re-run. One coefficient per "what if
+  synthetic replacement (a contrarian, a draw from a declared distribution, a
+  resample of the rest of the panel) and re-run. One coefficient per "what if
   this rater were someone else" scenario, which distinguishes a rater who was
   already noise from one who was holding the panel together. The injectors ship
   in 2.0; the loop around them does not.
@@ -618,7 +629,7 @@ direction, not a schedule.
 - **Fewer lines, without losing the account of what was decided.** Building an
   analysis today means naming every config explicitly. That is deliberate where
   the choice matters, and it is more ceremony than it should be where the choice
-  is obvious — a first coefficient on clean balanced data does not need four
+  is obvious: a first coefficient on clean balanced data does not need four
   objects. 2.1 will explore defaults for config values, under two conditions:
   anything assumed rather than declared says so in a warning, and the result
   records which defaults it used, so a figure remains reproducible from what the
@@ -632,7 +643,7 @@ Also planned, less immediately: diagnostics for agreement by category and rater
 confusion, a visualiser for the balance profile, convergence checking cheap
 enough to leave on by default, pairwise variants of the individual-marginal
 coefficients, a clustered bootstrap for subjects that are not independent
-draws, and generating ratings from a declared true coefficient — so that an
+draws, and generating ratings from a declared true coefficient, so that an
 estimator can be checked against an answer known in advance, an interval can be
 checked for actually covering it, and a review can be powered before it starts
 rather than regretted after.

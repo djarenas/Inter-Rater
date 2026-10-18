@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..ci_results import BootstrapCIResult
 from .permutation_result import PermutationResult
 
 if TYPE_CHECKING:
-    from ..data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.balance_profile import BalanceProfile
 
 _ERROR_PREFIX = "[PairwisePermutationResult] Error"
 
@@ -99,14 +100,21 @@ class PairwisePermutationResult(PermutationResult):
         "correlated" (same resampled subjects across all pairs in each
         draw, preserving pair correlations) or "independent" (each pair
         bootstrapped separately). None if bootstrap was not performed.
-    bootstrap_ci_of_mean : tuple[float, float] | None
-        Bootstrap CI on the mean. None if bootstrap was not performed.
+    bootstrap_ci_of_mean : BootstrapCIResult | None
+        Bootstrap CI on the mean, carrying which method ran and how many
+        draws failed. None means no bootstrap was performed, which is a
+        different statement from an interval whose ``method_used`` is None
+        -- that one was attempted and every draw failed.
     bootstrap_distribution_of_mean : np.ndarray | None
         Raw bootstrap draws of the mean (shape: n_resamples,). None if
         bootstrap was not performed.
-    bootstrap_cis_per_pair : dict[tuple[int, int], tuple[float, float]] | None
-        Bootstrap CI per pair. Always stored if bootstrap was performed,
-        regardless of n_pairs. None if bootstrap was not performed.
+    bootstrap_cis_per_pair : dict[tuple[int, int], BootstrapCIResult] | None
+        Bootstrap CI per pair, one interval object each. Pairs do not fail
+        alike -- a pair with few shared subjects can lose draws that a
+        well-covered pair never loses -- so each interval carries its own
+        counts and its own method rather than a shared summary. Always
+        stored if bootstrap was performed, regardless of n_pairs. None if
+        bootstrap was not performed.
     bootstrap_distributions_per_pair : dict[tuple[int, int], np.ndarray] | None
         Raw bootstrap draws per pair. Only stored when
         n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS. None if not stored or
@@ -130,9 +138,9 @@ class PairwisePermutationResult(PermutationResult):
 
     # Bootstrap (sampling uncertainty)
     bootstrap_mean_method: str | None
-    bootstrap_ci_of_mean: tuple[float, float] | None
+    bootstrap_ci_of_mean: BootstrapCIResult | None
     bootstrap_distribution_of_mean: np.ndarray | None
-    bootstrap_cis_per_pair: dict | None
+    bootstrap_cis_per_pair: dict | None   # values are BootstrapCIResult
     bootstrap_distributions_per_pair: dict | None
 
     # Constructor ------------------------------------------------------------ #
@@ -227,29 +235,15 @@ class PairwisePermutationResult(PermutationResult):
                 f"no mean bootstrap fields are populated"
             )
 
-        # Validate bootstrap_ci_of_mean
+        # Validate bootstrap_ci_of_mean. An interval validates its own
+        # bounds, level, counts, and method at construction, so the only
+        # thing left to check here is that it is one.
         if self.bootstrap_ci_of_mean is not None:
-            if (
-                not isinstance(self.bootstrap_ci_of_mean, tuple)
-                or len(self.bootstrap_ci_of_mean) != 2
-            ):
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_ci_of_mean must be "
-                    f"(float, float) tuple"
-                )
-            lower, upper = self.bootstrap_ci_of_mean
-            if not isinstance(lower, (int, float)) or not isinstance(
-                upper, (int, float)
-            ):
+            if not isinstance(self.bootstrap_ci_of_mean, BootstrapCIResult):
                 raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_ci_of_mean bounds must "
-                    f"be float, got ({type(lower).__name__}, "
-                    f"{type(upper).__name__})"
-                )
-            if lower > upper:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_ci_of_mean lower bound "
-                    f"{lower} > upper bound {upper}"
+                    f"{_ERROR_PREFIX}: bootstrap_ci_of_mean must be "
+                    f"BootstrapCIResult or None, got "
+                    f"{type(self.bootstrap_ci_of_mean).__name__}"
                 )
 
         # Validate bootstrap_cis_per_pair
@@ -268,10 +262,10 @@ class PairwisePermutationResult(PermutationResult):
                     f"the same keys as pairwise_values"
                 )
             for key, ci in self.bootstrap_cis_per_pair.items():
-                if not isinstance(ci, tuple) or len(ci) != 2:
-                    raise ValueError(
-                        f"{_ERROR_PREFIX}: bootstrap CI for pair {key} "
-                        f"must be (float, float) tuple"
+                if not isinstance(ci, BootstrapCIResult):
+                    raise TypeError(
+                        f"{_ERROR_PREFIX}: bootstrap CI for pair {key} must "
+                        f"be BootstrapCIResult, got {type(ci).__name__}"
                     )
 
         # Validate bootstrap_distribution_of_mean
@@ -330,29 +324,34 @@ class PairwisePermutationResult(PermutationResult):
 
         Format:
             Pairwise (cohen_kappa): mean = 0.650
-            (95% CI: [0.580, 0.720], n_bootstrap=4000, correlated)
+            [0.580, 0.720] (95% CI, bca, n=4000), correlated
             n_pairs=6; n_subjects=1617; n_raters=4; ci_method=bca
+
+        The middle line is the interval printing itself, so a fallback to
+        percentile, a count of failed draws, or a method that never ran at
+        all appears there without this class having to know about any of
+        them.
         """
-        ci_str = ""
         if self.bootstrap_ci_of_mean is not None:
-            lower, upper = self.bootstrap_ci_of_mean
-            ci_str = f" (95% CI: [{lower:.3f}, {upper:.3f}]"
-
-        bootstrap_str = ""
-        if self.bootstrap_distribution_of_mean is not None:
+            detail = str(self.bootstrap_ci_of_mean)
+        elif self.bootstrap_distribution_of_mean is not None:
             n_boot = len(self.bootstrap_distribution_of_mean)
-            bootstrap_str = f", n_bootstrap={n_boot}"
+            detail = f"no CI on the mean (n={n_boot})"
+        else:
+            detail = ""
 
-        method_str = ""
         if self.bootstrap_mean_method is not None:
-            method_str = f", {self.bootstrap_mean_method}"
+            detail = (
+                f"{detail}, {self.bootstrap_mean_method}" if detail
+                else self.bootstrap_mean_method
+            )
 
-        closing = ")" if ci_str else ""
+        ci_line = f"\n{detail}" if detail else ""
 
         return (
             f"Pairwise ({self.coefficient_name}): "
             f"mean = {self.mean_over_pairs:.3f}"
-            f"{ci_str}{bootstrap_str}{method_str}{closing}\n"
+            f"{ci_line}\n"
             f"n_pairs={self.n_pairs}; "
             f"n_subjects={self.balance_profile.n_subjects}; "
             f"n_raters={self.balance_profile.n_raters}; "
@@ -426,12 +425,13 @@ class PairwisePermutationResult(PermutationResult):
             result["bootstrap_mean_method"] = self.bootstrap_mean_method
 
         if self.bootstrap_ci_of_mean is not None:
-            result["mean_ci_lower"] = self.bootstrap_ci_of_mean[0]
-            result["mean_ci_upper"] = self.bootstrap_ci_of_mean[1]
+            result["mean_ci"] = self.bootstrap_ci_of_mean.summary()
+            result["mean_ci_lower"] = self.bootstrap_ci_of_mean.lower
+            result["mean_ci_upper"] = self.bootstrap_ci_of_mean.upper
 
         if self.bootstrap_cis_per_pair is not None:
             result["bootstrap_cis_per_pair"] = {
-                str(k): {"lower": v[0], "upper": v[1]}
+                str(k): v.summary()
                 for k, v in self.bootstrap_cis_per_pair.items()
             }
 

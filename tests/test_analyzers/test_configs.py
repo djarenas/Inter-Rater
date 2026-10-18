@@ -92,8 +92,21 @@ class TestAnalyzerConfig:
         assert cfg.ci_method == "bca"
 
     def test_ci_method_parametric_null_accepted(self):
-        cfg = AnalyzerConfig(ci_method="parametric_null")
+        """The base accepts it -- and says nothing, deliberately.
+
+        AnalyzerConfig does not know which coefficient it is configuring,
+        so it cannot know whether parametric_null is even permitted. Five
+        of the eight leaf configs reject it, and they do so *after* calling
+        super().__post_init__(). A warning here would therefore fire for
+        configs about to raise, telling someone how to read an interval
+        they are not allowed to have. The three that accept the method warn
+        from their own __post_init__ instead.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            cfg = AnalyzerConfig(ci_method="parametric_null")
         assert cfg.ci_method == "parametric_null"
+        assert len(caught) == 0
 
     def test_injection_single_normalized_to_tuple(self):
         """A single InjectorConfig should be normalized to a 1-tuple."""
@@ -327,9 +340,20 @@ class TestFleissKappaConfig:
         assert cfg.balanced_data_only is True
 
     def test_allows_parametric_null_ci(self):
-        """Fleiss has a closed-form null variance (Eq. 12)."""
-        cfg = FleissKappaConfig(ci_method="parametric_null")
+        """Fleiss has a closed-form null variance (Eq. 12).
+
+        Allowed, and warned about: the null variance is the right one for
+        a hypothesis test and the wrong one for an interval around a
+        non-zero estimate. The message has to name the alternatives, or it
+        tells someone they have a problem without telling them the fix.
+        """
+        with pytest.warns(UserWarning, match="parametric_null") as caught:
+            cfg = FleissKappaConfig(ci_method="parametric_null")
         assert cfg.ci_method == "parametric_null"
+
+        message = str(caught[0].message)
+        assert "percentile" in message
+        assert "bca" in message
 
     def test_allows_parametric_null_hypothesis(self):
         ht = HypothesisTestConfig(method="parametric_null")
@@ -346,9 +370,20 @@ class TestScottsConfig:
         assert isinstance(cfg, NoWeightGroupConfig)
 
     def test_allows_parametric_null_ci(self):
-        """Scott's pi = Fleiss' kappa at 2 raters, so parametric_null OK."""
-        cfg = ScottsConfig(ci_method="parametric_null")
+        """Scott's pi = Fleiss' kappa at 2 raters, so parametric_null OK.
+
+        Allowed, and warned about: the null variance is the right one for
+        a hypothesis test and the wrong one for an interval around a
+        non-zero estimate. The message has to name the alternatives, or it
+        tells someone they have a problem without telling them the fix.
+        """
+        with pytest.warns(UserWarning, match="parametric_null") as caught:
+            cfg = ScottsConfig(ci_method="parametric_null")
         assert cfg.ci_method == "parametric_null"
+
+        message = str(caught[0].message)
+        assert "percentile" in message
+        assert "bca" in message
 
     def test_rejects_weights(self):
         """Inherits from NoWeightGroupConfig."""
@@ -503,9 +538,20 @@ class TestCohenKappaConfig:
             assert "balanced data" in str(w[0].message).lower()
 
     def test_allows_parametric_null_ci(self):
-        """Cohen has asymptotic null variance (Fleiss, Cohen & Everitt 1969)."""
-        cfg = CohenKappaConfig(ci_method="parametric_null")
+        """Cohen has asymptotic null variance (Fleiss, Cohen & Everitt 1969).
+
+        Allowed, and warned about: the null variance is the right one for
+        a hypothesis test and the wrong one for an interval around a
+        non-zero estimate. The message has to name the alternatives, or it
+        tells someone they have a problem without telling them the fix.
+        """
+        with pytest.warns(UserWarning, match="parametric_null") as caught:
+            cfg = CohenKappaConfig(ci_method="parametric_null")
         assert cfg.ci_method == "parametric_null"
+
+        message = str(caught[0].message)
+        assert "percentile" in message
+        assert "bca" in message
 
     def test_accepts_linear_weights(self):
         cfg = CohenKappaConfig(weights_type="linear")
@@ -810,3 +856,91 @@ class TestCustomWeightsInput:
         s = cfg.summary()
         assert "matrix_shape" not in s
         assert s["file_path"] == "/path.yaml"
+
+
+# ============================================================== #
+#  parametric_null: who warns, who raises, who stays silent      #
+# ============================================================== #
+
+
+# The three coefficients with a published closed-form null variance.
+_PARAMETRIC_OK = [FleissKappaConfig, CohenKappaConfig, ScottsConfig]
+
+# The five without one. Each rejects parametric_null with its own message.
+_PARAMETRIC_REJECTED = [
+    BrennanPredigerConfig,
+    GwetAC1Config,
+    KrippendorffAlphaConfig,
+    CongerKappaConfig,
+    LightKappaConfig,
+]
+
+
+class TestParametricNullWarningBoundary:
+    """
+    Where the parametric_null warning fires, and where it must not.
+
+    The warning lives on AnalyzerConfig as a helper that AnalyzerConfig
+    never calls. That is unusual enough to look like an oversight, and
+    "fixing" it by wiring it into the base __post_init__ would break the
+    five configs below: they call super() first and raise second, so they
+    would be warned about a method they are about to refuse.
+
+    These tests exist to make that refactor fail loudly instead of quietly
+    producing a warning-then-error for five of eight coefficients.
+    """
+
+    @pytest.mark.parametrize("config_cls", _PARAMETRIC_OK)
+    def test_accepting_configs_warn_exactly_once(self, config_cls):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config_cls(ci_method="parametric_null")
+
+        parametric = [
+            w for w in caught if "parametric_null" in str(w.message)
+        ]
+        assert len(parametric) == 1
+        assert issubclass(parametric[0].category, UserWarning)
+
+    @pytest.mark.parametrize("config_cls", _PARAMETRIC_OK)
+    @pytest.mark.parametrize("ci_method", ["percentile", "bca"])
+    def test_accepting_configs_silent_on_other_methods(
+        self, config_cls, ci_method
+    ):
+        """The warning is about the method, not about the config."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config_cls(ci_method=ci_method)
+
+        assert not [w for w in caught if "parametric_null" in str(w.message)]
+
+    @pytest.mark.parametrize("config_cls", _PARAMETRIC_REJECTED)
+    def test_rejecting_configs_raise_without_warning_first(self, config_cls):
+        """Raise, and say nothing before raising.
+
+        A warning here would be actively misleading -- it would explain
+        how to interpret an interval that this coefficient cannot produce.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(ValueError, match="parametric_null"):
+                config_cls(ci_method="parametric_null")
+
+        assert len(caught) == 0
+
+    @pytest.mark.parametrize("config_cls", _PARAMETRIC_REJECTED)
+    def test_rejecting_configs_keep_their_own_message(self, config_cls):
+        """Each refusal explains itself in its own terms.
+
+        These messages are coefficient-specific on purpose -- Krippendorff's
+        says alpha has no published closed-form null variance. Collapsing
+        them into one generic message would lose that, which is the usual
+        cost of centralising validation.
+        """
+        with pytest.raises(ValueError) as exc_info:
+            config_cls(ci_method="parametric_null")
+
+        message = str(exc_info.value)
+        assert config_cls.__name__.replace("Config", "") in message or (
+            "not available" in message
+        )

@@ -90,11 +90,19 @@ class CohenKappaConfig(WeightableIndividualConfig):
             # Bypass the frozen dataclass and warn
             object.__setattr__(self, "balanced_data_only", True)
             warnings.warn(
-                f"{_WARNING_PREFIX}: Cohen's kappa can only be calculated "
-                f"with balanced data. Ignoring balanced_data_only=False.",
+                f"{_WARNING_PREFIX}: Cohen's kappa requires balanced data. "
+                f"balanced_data_only has been set to True.",
                 UserWarning,
                 stacklevel=2,
             )
+
+        # Cohen has a published closed-form null variance (Fleiss, Cohen &
+        # Everitt 1969), so parametric_null is permitted here -- and warned
+        # about, since that variance is the right one for a test and the
+        # wrong one for an interval. Called last, and from here rather than
+        # from the base class -- see AnalyzerConfig._warn_parametric_null.
+        if self.ci_method == "parametric_null":
+            self._warn_parametric_null()
 
     # Public API ------------------------------------------------------------- #
 

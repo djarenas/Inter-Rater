@@ -18,6 +18,7 @@ import numpy as np
 from ...data_objects.ratings import Ratings
 from ...intermediates.data_profiles.balance_profile import BalanceProfile
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
+from ...intermediates.results.ci_results import BootstrapCIResult
 
 if TYPE_CHECKING:
     from ...intermediates.estimator_parts.weights import Weights
@@ -346,7 +347,8 @@ class PermutationAnalysis:
         point: float,
         ci_method: str,
         alpha: float,
-    ) -> tuple[float, float]:
+        jackknife_fn: Callable[[], np.ndarray] | None = None,
+    ) -> BootstrapCIResult:
         """
         Compute confidence interval from a bootstrap distribution.
 
@@ -365,23 +367,55 @@ class PermutationAnalysis:
             so there is no closed-form null variance.
         alpha : float
             Significance level (e.g., 0.05 for 95% CI).
+        jackknife_fn : Callable[[], np.ndarray] | None
+            Produces leave-one-out estimates when called. A callable rather
+            than an array because only BCa needs them, and here they are
+            expensive -- per pair, one coefficient evaluation per subject.
+
+            **Which subjects to leave out depends on what was resampled.**
+            A per-pair interval bootstraps the subjects that pair shares, so
+            its jackknife leaves those out rather than all subjects: a
+            subject the pair never rated cannot influence the pair's
+            coefficient, so including it would contribute a deviation
+            representing no influence at all. A correlated mean bootstraps
+            subjects globally, so its jackknife is global too. The caller
+            knows which it did, so the caller supplies the function.
+
+            None means no jackknife exists for this quantity, which is the
+            case for the independent mean: it resamples from per-pair
+            distributions and never touches a subject, so there is nothing
+            to leave out.
 
         Returns
         -------
-        tuple[float, float]
-            (lower, upper) confidence interval bounds.
+        BootstrapCIResult
+            Bounds, the method asked for against the one that ran, and how
+            many resamples failed.
 
         Raises
         ------
         ValueError
-            If ci_method is unknown.
+            If ci_method is unknown, or if BCa is requested for a quantity
+            that has no jackknife.
         """
         from ..ci_methods import bca_ci, percentile_ci
 
         if ci_method == "percentile":
             return percentile_ci(distribution, alpha)
         elif ci_method == "bca":
-            return bca_ci(distribution, point, alpha)
+            if jackknife_fn is None:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: ci_method='bca' needs leave-one-out "
+                    f"estimates to compute acceleration, and this quantity "
+                    f"has none. The independent mean resamples from per-pair "
+                    f"distributions rather than from subjects, so no subject "
+                    f"can be left out of it. Use ci_method='percentile', or "
+                    f"the correlated mean."
+                )
+            return bca_ci(
+                distribution, point, alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method '{ci_method}'. "

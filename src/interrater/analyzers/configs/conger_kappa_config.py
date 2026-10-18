@@ -88,8 +88,8 @@ class CongerKappaConfig(NoWeightIndividualConfig):
             # Bypass the frozen dataclass and warn
             object.__setattr__(self, "balanced_data_only", True)
             warnings.warn(
-                f"{_WARNING_PREFIX}: Conger's kappa can only be calculated "
-                f"with balanced data. Ignoring balanced_data_only=False.",
+                f"{_WARNING_PREFIX}: Conger's kappa requires balanced data. "
+                f"balanced_data_only has been set to True.",
                 UserWarning,
                 stacklevel=2,
             )

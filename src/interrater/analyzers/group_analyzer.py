@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from .analyzer import Analyzer
 
 if TYPE_CHECKING:
@@ -195,7 +197,110 @@ class GroupAnalyzer(Analyzer, ABC):
             f"got {type(self).__name__}"
         )
 
+    # Resampling ------------------------------------------------------------- #
+
+    @abstractmethod
+    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+        """
+        Compute my coefficient from a counts matrix, and nothing else.
+
+        This is the one step that differs between group coefficients. My
+        subclasses implement this and nothing else about resampling: the
+        bootstrap and the jackknife, over either entry path, are written once
+        in terms of it.
+
+        Parameters
+        ----------
+        nij_array : np.ndarray
+            Shape (n_subjects, n_categories). Entry (i, j) is how many raters
+            assigned category j to subject i.
+
+        Returns
+        -------
+        float
+            The coefficient, or NaN when this matrix cannot define it.
+        """
+        raise NotImplementedError(
+            f"{_ERROR_PREFIX}: _estimate_from_nij() must be implemented "
+            f"by subclass"
+        )
+
+    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+        """
+        Satisfy Analyzer's contract by counting, then deferring to nij.
+
+        A group coefficient reads a counts matrix, so the ratings path is the
+        nij path with one step in front of it. Writing that step here means
+        the five group analyzers implement one method rather than two, and
+        the two paths cannot drift apart.
+        """
+        from ..array_utils import category_counts
+
+        return self._estimate_from_nij(
+            category_counts(category_index, self._n_categories())
+        )
+
+    def _bootstrap_distribution_from_nij(
+        self, nij_array: np.ndarray
+    ) -> np.ndarray:
+        """
+        Resample subjects (rows) with replacement and recompute my coefficient.
+
+        The nij counterpart of ``Analyzer._bootstrap_distribution``, for the
+        path that was built from a counts matrix and has no Ratings to draw
+        from.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (n_resamples,). NaN entries mark resamples whose coefficient
+            was undefined, and are kept so they can be counted.
+        """
+        from .resampling_functions import subject_bootstrap_from_nij_matrix
+
+        return np.array([
+            self._estimate_from_nij(resampled)
+            for resampled in subject_bootstrap_from_nij_matrix(
+                nij_array,
+                n_resamples=self.config.n_resamples,
+                random_state=self.config.random_state,
+            )
+        ], dtype=np.float64)
+
+    def _jackknife_estimates_from_nij(
+        self, nij_array: np.ndarray
+    ) -> np.ndarray:
+        """
+        Recompute my coefficient with each subject (row) left out in turn.
+
+        The nij counterpart of ``Analyzer._jackknife_estimates``. BCa's
+        acceleration is computed from values like these.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (n_subjects,). NaN entries mark leave-one-out subsets whose
+            coefficient was undefined.
+        """
+        from .resampling_functions import subject_jackknife_from_nij_matrix
+
+        return np.array([
+            self._estimate_from_nij(subset)
+            for subset in subject_jackknife_from_nij_matrix(nij_array)
+        ], dtype=np.float64)
+
     # Private helpers -------------------------------------------------------- #
+
+    def _n_categories(self) -> int:
+        """
+        K, from whichever source I was built from.
+
+        Never inferred from the values: a matrix whose largest observed
+        category is 2 may still have been declared over five.
+        """
+        if self.ratings is not None:
+            return self.ratings.semantics.n_categories
+        return self.nij_matrix.n_categories
 
     def _validate_group_config(self) -> None:
         """

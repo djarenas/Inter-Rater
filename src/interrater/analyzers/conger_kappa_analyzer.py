@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import numpy as np
 
 from .individual_marginal_analyzer import IndividualMarginalAnalyzer
 
 from ..data_objects.ratings import Ratings
-from ..intermediates.analysis_results import CongerKappaResult, HypothesisTestResult
+from ..intermediates.results import CongerKappaResult, HypothesisTestResult
 from ..intermediates.data_profiles.balance_profile import BalanceProfile
 from .configs import CongerKappaConfig
 
 from ..intermediates.estimator_parts.estimator_input import EstimatorInput
 from .agreement_functions.individual_marginals import conger_kappa
 from .resampling_functions.subject_resampling import subject_bootstrap
-from .ci_methods import percentile_ci, bca_ci, scipy_bca_ci
+from .ci_methods import percentile_ci, bca_ci
+from ..intermediates.results.ci_results import BootstrapCIResult
 
 _ERROR_PREFIX = "[CongerKappaAnalyzer] Error"
 
@@ -114,19 +117,13 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self, use_scipy_bca: bool = False) -> CongerKappaResult:
+    def estimate(self) -> CongerKappaResult:
         """
         Compute Conger's kappa and return the result.
 
         Performs point estimation and bootstrap confidence interval computation.
         Only "percentile" and "bca" CI methods are supported -- there is no
         closed-form null variance for Conger's kappa.
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa
-            computation (for testing/validation only).
 
         Returns
         -------
@@ -138,28 +135,13 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
                 f"{_ERROR_PREFIX}: convergence_test not yet implemented"
             )
 
-        n_categories = self.ratings.semantics.n_categories
-
         # Compute point estimate from original data
         point = conger_kappa(self.estimator_input)
 
-        # Bootstrap CI: resample subjects, recompute kappa each time
-        bootstrap_values = []
-
-        for resampled_array in subject_bootstrap(
-            self.ratings.category_index,
-            n_resamples=self.config.n_resamples,
-            random_state=self.config.random_state,
-        ):
-            ei = EstimatorInput(
-                category_index=resampled_array,
-                n_categories=n_categories,
-            )
-            kappa_resample = conger_kappa(ei)
-            bootstrap_values.append(kappa_resample)
-
-        bootstrap_distribution = np.array(bootstrap_values)
-        ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+        bootstrap_distribution = self._bootstrap_distribution()
+        ci = self._compute_ci(
+            bootstrap_distribution, point, self._jackknife_estimates
+        )
 
         # Build and return result
         return CongerKappaResult(
@@ -281,12 +263,29 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
+    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+        """
+        Conger's kappa from a ratings array.
+
+        The only coefficient-specific step in my resampling. Everything that
+        draws samples is written once on Analyzer in terms of this.
+
+        I build my own EstimatorInput because the array I am handed is a
+        resample, not the original data: Conger's chance term is computed
+        from each rater's own marginals, so the column positions matter.
+        """
+        ei = EstimatorInput(
+            category_index=category_index,
+            n_categories=self.ratings.semantics.n_categories,
+        )
+        return conger_kappa(ei)
+
     def _compute_ci(
         self,
         bootstrap_distribution: np.ndarray,
         point: float,
-        use_scipy_bca: bool = False,
-    ) -> tuple[float, float]:
+        jackknife_fn: Callable[[], np.ndarray],
+    ) -> BootstrapCIResult:
         """
         Compute confidence interval from bootstrap distribution.
 
@@ -300,13 +299,16 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             Array of bootstrap kappa values.
         point : float
             The point estimate of kappa.
-        use_scipy_bca : bool, default False
-            If True and ci_method == "bca", use scipy for BCa.
+        jackknife_fn : Callable[[], np.ndarray]
+            Produces leave-one-subject-out estimates when called. A callable
+            rather than an array because only BCa needs them, and producing
+            them costs one coefficient evaluation per subject.
 
         Returns
         -------
-        tuple[float, float]
-            (lower, upper) confidence interval bounds.
+        BootstrapCIResult
+            Bounds, the method asked for against the one that ran, and how
+            many resamples failed.
 
         Raises
         ------
@@ -316,14 +318,12 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         if self.config.ci_method == "percentile":
             return percentile_ci(bootstrap_distribution, self.config.alpha)
         elif self.config.ci_method == "bca":
-            if use_scipy_bca:
-                return scipy_bca_ci(
-                    bootstrap_distribution, point, self.config.alpha
-                )
-            else:
-                return bca_ci(
-                    bootstrap_distribution, point, self.config.alpha
-                )
+            return bca_ci(
+                bootstrap_distribution,
+                point,
+                self.config.alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method "

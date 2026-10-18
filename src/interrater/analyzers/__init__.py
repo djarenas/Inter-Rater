@@ -13,7 +13,7 @@ from .conger_kappa_analyzer import CongerKappaAnalyzer
 from .light_kappa_analyzer import LightKappaAnalyzer
 from .permutation_analysis.pairwise_permutation_analysis import PairwisePermutationAnalysis
 from .permutation_analysis.subset_permutation_analysis import SubsetPermutationAnalysis
-from .ci_methods import percentile_ci, bca_ci, scipy_bca_ci
+from .ci_methods import percentile_ci, bca_ci
 
 __all__ = [
     "Analyzer",
@@ -30,6 +30,5 @@ __all__ = [
     "PairwisePermutationAnalysis",
     "SubsetPermutationAnalysis",
     "percentile_ci",
-    "bca_ci",
-    "scipy_bca_ci",
+    "bca_ci"
 ]

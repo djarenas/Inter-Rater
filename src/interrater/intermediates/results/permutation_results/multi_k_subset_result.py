@@ -9,7 +9,7 @@ from .permutation_result import PermutationResult
 from .subset_permutation_result import SubsetPermutationResult
 
 if TYPE_CHECKING:
-    from ..data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.balance_profile import BalanceProfile
 
 _ERROR_PREFIX = "[MultiKSubsetResult] Error"
 
@@ -202,8 +202,14 @@ class MultiKSubsetResult(PermutationResult):
             MultiK Subset (fleiss_kappa, ks=[2, 3, 4]):
               k=2: mean=0.720 (10 subsets)
               k=3: mean=0.650 (10 subsets, 95% CI: [0.580, 0.720])
-              k=4: mean=0.610 (5 subsets)
+              k=4: mean=0.610 (5 subsets, no CI: every draw failed)
             n_subjects=100; n_raters=5; ci_method=percentile
+
+        A k whose bootstrap ran and produced nothing says so, rather than
+        printing like a k that was never bootstrapped. Failed draws are
+        named when there are any, since a mean interval computed from a
+        fraction of its draws is not the same claim as one computed from
+        all of them.
         """
         lines = [
             f"MultiK Subset ({self.coefficient_name}, ks={self.ks}):"
@@ -212,9 +218,17 @@ class MultiKSubsetResult(PermutationResult):
         for k in self.ks:
             r = self.per_k_results[k]
             line = f"  k={k}: mean={r.mean_over_subsets:.3f} ({r.n_subsets} subsets"
-            if r.bootstrap_ci_of_mean is not None:
-                lower, upper = r.bootstrap_ci_of_mean
-                line += f", 95% CI: [{lower:.3f}, {upper:.3f}]"
+            mean_ci = r.bootstrap_ci_of_mean
+            if mean_ci is not None:
+                if mean_ci.is_defined:
+                    line += (
+                        f", {mean_ci.confidence_level:.0%} CI: "
+                        f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
+                    )
+                    if mean_ci.n_failed:
+                        line += f", {mean_ci.n_failed} failed"
+                else:
+                    line += ", no CI: every draw failed"
             if r.bootstrap_mean_method is not None:
                 line += f", {r.bootstrap_mean_method}"
             line += ")"

@@ -1,0 +1,40 @@
+# Efron, B. & Tibshirani, R. (1986). "Bootstrap Methods for Standard Errors,
+# Confidence Intervals, and Other Measures of Statistical Accuracy."
+# Statistical Science 1(1): 54-77.
+#
+# Data: Fig. 1, p. 55 -- a random sample of 15 American law schools.
+# Point estimate: p. 56. Everything else: Example 3, p. 71.
+#
+# Two traps when reproducing this. The published interval is CENTRAL 90%,
+# so alpha = 0.10; comparing a 95% interval against it looks like a failure
+# and is not one. And the acceleration is computed from the infinitesimal
+# jackknife of eq. (10.11), listed below as empirical_influence_values,
+# which is NOT the delete-one jackknife this package uses -- the delete-one
+# form gives -0.0757 on the same data. Both are standard. Feeding the values
+# below into eq. (8.5) reproduces -0.0817 exactly.
+source: Efron & Tibshirani (1986), Statistical Science 1(1):54-77, Example 3, p. 71
+
+statistic: pearson_correlation
+alpha: 0.10
+point: 0.776
+bias_correction_z0: -0.0927
+acceleration: -0.0817
+ci_bca: [0.43, 0.92]
+n_resamples_published: 100000
+n_resamples_suggested: 4000
+empirical_influence_values:
+  - -1.507
+  -  0.168
+  -  0.273
+  -  0.004
+  -  0.525
+  - -0.049
+  - -0.100
+  -  0.477
+  -  0.310
+  -  0.004
+  - -0.526
+  - -0.091
+  -  0.434
+  -  0.125
+  - -0.048

@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import numpy as np
 
 from .weightable_group_analyzer import WeightableGroupAnalyzer
 
 from ..data_objects.ratings import Ratings
-from ..intermediates.analysis_results import FleissKappaResult, HypothesisTestResult
+from ..intermediates.results import FleissKappaResult, HypothesisTestResult
+from ..intermediates.results.ci_results import (
+    BootstrapCIResult,
+    ParametricCIResult,
+)
 from .configs import FleissKappaConfig
 
 from .agreement_functions.group_agreement import fleiss_kappa
-from .resampling_functions.subject_resampling import subject_bootstrap
-from .ci_methods import percentile_ci, bca_ci, scipy_bca_ci
+from .ci_methods import percentile_ci, bca_ci
 from ..array_utils import category_counts
 
 from ..intermediates.estimator_parts import NijMatrix, Weights
@@ -167,7 +172,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self, use_scipy_bca: bool = False) -> FleissKappaResult:
+    def estimate(self) -> FleissKappaResult:
         """
         Compute Fleiss' kappa and return the result.
         Performs point estimation and confidence interval computation.
@@ -175,13 +180,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         When ci_method is "percentile" or "bca", runs the bootstrap loop.
         When ci_method is "parametric_null", uses Fleiss (1979) null variance
         -- no bootstrap is performed and bootstrap_distribution is None.
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa
-            computation (for testing/validation only).
-            If False, use custom BCa implementation.
 
         Returns
         -------
@@ -201,36 +199,23 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
                 f"{_ERROR_PREFIX}: convergence_test not yet implemented"
             )
 
-        # Get number of categories
-        n_categories = self.ratings.semantics.n_categories
-
         # Compute point estimate from original data
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        nij = NijMatrix(matrix=nij_array)
-        point = fleiss_kappa(nij, weights=self.weights)
+        nij_array = category_counts(
+            self.ratings.category_index, self._n_categories()
+        )
+        point = self._estimate_from_nij(nij_array)
 
         # CI path depends on ci_method
         if self.config.ci_method == "parametric_null":
             # Parametric null CI: no bootstrap needed
-            pj = self._compute_pj(nij)
+            pj = self._compute_pj(NijMatrix(matrix=nij_array))
             ci = self._parametric_null_ci(point, pj)
             bootstrap_distribution = None
         else:
-            # Bootstrap CI: run the loop
-            bootstrap_values = []
-
-            for resampled_array in subject_bootstrap(
-                self.ratings.category_index,
-                n_resamples=self.config.n_resamples,
-                random_state=self.config.random_state,
-            ):
-                nij_array_resamp = category_counts(resampled_array, n_categories)
-                nij_resampled = NijMatrix(matrix=nij_array_resamp)
-                kappa_resample = fleiss_kappa(nij_resampled, weights=self.weights)
-                bootstrap_values.append(kappa_resample)
-
-            bootstrap_distribution = np.array(bootstrap_values)
-            ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+            bootstrap_distribution = self._bootstrap_distribution()
+            ci = self._compute_ci(
+                bootstrap_distribution, point, self._jackknife_estimates
+            )
 
         # Build and return result
         return FleissKappaResult(
@@ -242,7 +227,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             weights_type=self.config.weights_type,
         )
 
-    def estimate_from_nij_matrix(self, use_scipy_bca: bool = False) -> FleissKappaResult:
+    def estimate_from_nij_matrix(self) -> FleissKappaResult:
         """
         Compute Fleiss' kappa from nij_matrix (NijMatrix-based path).
 
@@ -253,13 +238,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         When ci_method is "percentile" or "bca", runs the bootstrap loop.
         When ci_method is "parametric_null", uses Fleiss (1979) null variance
         -- no bootstrap is performed and bootstrap_distribution is None.
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa
-            computation (for testing/validation only).
-            If False, use custom BCa implementation.
 
         Returns
         -------
@@ -273,8 +251,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         NotImplementedError
             If config.convergence_test is set.
         """
-        from .resampling_functions import subject_bootstrap_from_nij_matrix
-
         # Guard: nij_matrix must be available for this path
         if self.nij_matrix is None:
             raise ValueError(
@@ -289,7 +265,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             )
 
         # Compute point estimate from original nij_matrix
-        point = fleiss_kappa(self.nij_matrix, weights=self.weights)
+        point = self._estimate_from_nij(self.nij_matrix.matrix)
 
         # CI path depends on ci_method
         if self.config.ci_method == "parametric_null":
@@ -298,20 +274,15 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             ci = self._parametric_null_ci(point, pj)
             bootstrap_distribution = None
         else:
-            # Bootstrap CI: run the loop
-            bootstrap_values = []
-
-            for resampled_nij_array in subject_bootstrap_from_nij_matrix(
-                self.nij_matrix.matrix,
-                n_resamples=self.config.n_resamples,
-                random_state=self.config.random_state,
-            ):
-                nij_resampled = NijMatrix(matrix=resampled_nij_array)
-                kappa_resample = fleiss_kappa(nij_resampled, weights=self.weights)
-                bootstrap_values.append(kappa_resample)
-
-            bootstrap_distribution = np.array(bootstrap_values)
-            ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+            nij_array = self.nij_matrix.matrix
+            bootstrap_distribution = self._bootstrap_distribution_from_nij(
+                nij_array
+            )
+            ci = self._compute_ci(
+                bootstrap_distribution,
+                point,
+                lambda: self._jackknife_estimates_from_nij(nij_array),
+            )
 
         # Build and return result
         return FleissKappaResult(
@@ -345,7 +316,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             If method="permutation" but ratings is None.
         """
         from scipy import stats
-        from ..intermediates.analysis_results import HypothesisTestResult
+        from ..intermediates.results import HypothesisTestResult
 
         # Guard: hypothesis_test_config must be set
         if self.config.hypothesis_test_config is None:
@@ -514,11 +485,26 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
         return np.mean(proportions_per_subject, axis=0)
 
+    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+        """
+        Fleiss' kappa from a counts matrix.
+
+        The only coefficient-specific step in my resampling. Everything that
+        draws samples -- bootstrap or jackknife, from ratings or from counts
+        -- is written once on my base classes in terms of this.
+        """
+        return fleiss_kappa(NijMatrix(matrix=nij_array), weights=self.weights)
+
     def _parametric_null_ci(
         self, point: float, pj: np.ndarray
-    ) -> tuple[float, float]:
+    ) -> ParametricCIResult:
         """
         Compute confidence interval using Fleiss (1979) null variance.
+
+        The half-width comes from the variance of kappa under H0: kappa = 0,
+        so the interval is centred on the observed estimate but scaled as
+        though the estimate were zero. The returned ParametricCIResult says
+        so whenever it is printed -- see its docstring for why that matters.
 
         Parameters
         ----------
@@ -529,8 +515,8 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
 
         Returns
         -------
-        tuple[float, float]
-            (lower, upper) confidence interval bounds.
+        ParametricCIResult
+            Bounds, the level, and the variance they were built from.
         """
         from scipy import stats
         from .variance_functions import fleiss_null_variance
@@ -543,30 +529,41 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
-        return (point - z_crit * se_null, point + z_crit * se_null)
+        return ParametricCIResult(
+            lower=point - z_crit * se_null,
+            upper=point + z_crit * se_null,
+            alpha=self.config.alpha,
+            variance_source="null",
+        )
 
     def _compute_ci(
         self,
         bootstrap_distribution: np.ndarray,
         point: float,
-        use_scipy_bca: bool = False,
-    ) -> tuple[float, float]:
+        jackknife_fn: Callable[[], np.ndarray],
+    ) -> BootstrapCIResult:
         """
         Compute confidence interval from bootstrap distribution.
 
         Parameters
         ----------
         bootstrap_distribution : np.ndarray
-            Array of bootstrap coefficient values.
+            Array of bootstrap coefficient values. NaN entries mark resamples
+            whose coefficient was undefined; the CI method counts them.
         point : float
             The point estimate of the coefficient.
-        use_scipy_bca : bool, default False
-            If True and ci_method == "bca", use scipy for BCa.
+        jackknife_fn : Callable[[], np.ndarray]
+            Produces leave-one-subject-out estimates when called. Taken as a
+            callable rather than an array because only BCa needs them, and
+            computing them costs one coefficient evaluation per subject. I am
+            the only place that knows which methods need a jackknife, so I am
+            the only place that decides whether to pay for one.
 
         Returns
         -------
-        tuple[float, float]
-            (lower, upper) confidence interval bounds.
+        BootstrapCIResult
+            Which carries the bounds, the method that was asked for against
+            the one that ran, and how many resamples failed.
 
         Raises
         ------
@@ -576,10 +573,12 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         if self.config.ci_method == "percentile":
             return percentile_ci(bootstrap_distribution, self.config.alpha)
         elif self.config.ci_method == "bca":
-            if use_scipy_bca:
-                return scipy_bca_ci(bootstrap_distribution, point, self.config.alpha)
-            else:
-                return bca_ci(bootstrap_distribution, point, self.config.alpha)
+            return bca_ci(
+                bootstrap_distribution,
+                point,
+                self.config.alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}'. "

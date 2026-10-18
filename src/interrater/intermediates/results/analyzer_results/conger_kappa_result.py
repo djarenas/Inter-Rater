@@ -10,7 +10,7 @@ import numpy as np
 from .individual_marginal_result import IndividualMarginalResult
 
 if TYPE_CHECKING:
-    from ..data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.balance_profile import BalanceProfile
 
 _ERROR_PREFIX = "[CongerKappaResult] Error"
 

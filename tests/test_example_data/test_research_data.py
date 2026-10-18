@@ -5,8 +5,12 @@ Each SR gets one or two coefficients chosen to exercise a different
 analyzer and avoid redundancy with test_reference_data.py.
 
 Point estimates are asserted to 3 decimal places (abs=5e-4) and CI
-structure (lower < point < upper) is checked as a sanity guard with
-n_resamples=50.
+structure (lower < point < upper) is checked as a sanity guard, using the
+percentile method at B=250.
+
+Containment is a real check under percentile and not an invariant under
+BCa -- see the module docstring of test_reference_data.py, which also
+holds the one end-to-end BCa test.
 
 Datasets:
     SR1 prelim  -- ratings, 4 raters, K=3, balanced, ~83% skew
@@ -27,10 +31,27 @@ from interrater import (
     CongerKappaAnalyzer,
     LightKappaAnalyzer,
 )
-from interrater.analyzers.configs import FleissKappaConfig
 
 # Tolerance: 3 decimal places.
 TOL = 5e-4
+
+
+def _assert_brackets_point(result) -> None:
+    """
+    Assert the point estimate falls strictly inside its own interval.
+
+    An interval is a BootstrapCIResult, not a pair of floats, so this reads
+    ``.lower`` and ``.upper`` rather than ``[0]`` and ``[1]``. It also checks
+    the interval has bounds at all: an interval whose every draw failed
+    carries NaN, and ``nan < point`` is False, so the comparison alone would
+    fail with an unhelpful message instead of naming the real problem.
+    """
+    ci = result.confidence_interval
+    assert ci is not None, "no interval was computed"
+    assert ci.is_defined, f"interval has no bounds: {ci}"
+    assert ci.lower < result.point < ci.upper, (
+        f"point {result.point:.4f} outside its own interval {ci}"
+    )
 
 
 # ── SR1 prelim (ratings, 4 raters, K=3, balanced) ─────────────────────── #
@@ -49,7 +70,7 @@ class TestSR1Prelim:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.493, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
     def test_conger_kappa(self, sr1_prelim_ratings, fast_conger_config):
         """Conger's kappa = 0.494 (group-level, individual marginals).
@@ -62,7 +83,7 @@ class TestSR1Prelim:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.494, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
     def test_light_kappa(self, sr1_prelim_ratings, fast_light_config):
         """Light's kappa = 0.496 (mean of C(4,2)=6 pairwise Cohens).
@@ -74,7 +95,7 @@ class TestSR1Prelim:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.496, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
         assert result.n_pairs == 6  # C(4, 2)
 
 
@@ -88,22 +109,19 @@ class TestSR1Prelim:
 class TestSR1Main:
     """SR1 main data (1617 subjects, 4 raters, K=3, unbalanced)."""
 
-    def test_fleiss_kappa(self, sr1_main_ratings):
+    def test_fleiss_kappa(self, sr1_main_ratings, fleiss_unbalanced_config):
         """Fleiss' kappa = 0.619 (unbalanced approximation).
 
         FleissKappaConfig defaults to balanced_data_only=True, which
-        rejects unbalanced data.  This test explicitly sets it to False
-        to exercise the unbalanced-data approximation path.
+        rejects unbalanced data.  The fixture sets it to False to exercise
+        the unbalanced-data approximation path, and is otherwise identical
+        to every other config here.
         """
-        config = FleissKappaConfig(
-            n_resamples=50, random_state=42, ci_method="bca",
-            balanced_data_only=False,
-        )
-        analyzer = FleissKappaAnalyzer(sr1_main_ratings, config)
+        analyzer = FleissKappaAnalyzer(sr1_main_ratings, fleiss_unbalanced_config)
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.619, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
     def test_krippendorff_alpha(self, sr1_main_ratings, fast_krippendorff_config):
         """Krippendorff alpha = 0.618 (exact on unbalanced data)."""
@@ -111,7 +129,7 @@ class TestSR1Main:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.618, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
 
 # ── SR2 (ratings, 4 raters, K=3, nearly balanced) ─────────────────────── #
@@ -128,7 +146,7 @@ class TestSR2:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.782, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
 
 # ── SR3 FIS Psych (ratings, 3 raters, K=2, balanced) ──────────────────── #
@@ -146,7 +164,7 @@ class TestSR3:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.886, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
 
 # ── SR4 FIS CVD (ratings, 4 raters, K=2, balanced) ────────────────────── #
@@ -164,7 +182,7 @@ class TestSR4:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.879, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)
 
 
 # ── SR5 Cocaine Cardio (ratings, 3 raters, K=2, balanced) ─────────────── #
@@ -182,4 +200,4 @@ class TestSR5:
         result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.788, abs=TOL)
-        assert result.confidence_interval[0] < result.point < result.confidence_interval[1]
+        _assert_brackets_point(result)

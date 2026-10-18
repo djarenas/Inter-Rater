@@ -44,17 +44,18 @@ from interrater.analyzers.configs.permutation_bootstrap_mean_config import (
 )
 from interrater.contracts import EMPTY
 from interrater.data_objects.ratings import Ratings
-from interrater.intermediates.analysis_results.pairwise_permutation_result import (
+from interrater.intermediates.results.permutation_results.pairwise_permutation_result import (
     MAX_PAIRS_FOR_DISTRIBUTIONS,
     PairwisePermutationResult,
 )
-from interrater.intermediates.analysis_results.subset_permutation_result import (
+from interrater.intermediates.results.permutation_results.subset_permutation_result import (
     MAX_SUBSETS_FOR_DISTRIBUTIONS,
     SubsetPermutationResult,
 )
-from interrater.intermediates.analysis_results.multi_k_subset_result import (
+from interrater.intermediates.results.permutation_results.multi_k_subset_result import (
     MultiKSubsetResult,
 )
+from interrater.intermediates.results.ci_results import BootstrapCIResult
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.estimator_parts.estimator_input import EstimatorInput
 from interrater.semantics.ratings_semantics import RatingsSemantics
@@ -274,20 +275,73 @@ class TestComputeCI:
         analysis = PairwisePermutationAnalysis(ratings, config)
 
         dist = np.linspace(0.0, 1.0, 1000)
-        lo, hi = analysis._compute_ci(dist, 0.5, "percentile", 0.05)
-        assert lo < hi
-        assert lo >= 0.0
-        assert hi <= 1.0
+        ci = analysis._compute_ci(dist, 0.5, "percentile", 0.05)
+        assert ci.lower < ci.upper
+        assert ci.lower >= 0.0
+        assert ci.upper <= 1.0
+        assert ci.method_intended == "percentile"
+        assert ci.method_used == "percentile"
+
+    def test_percentile_needs_no_jackknife(self):
+        """Percentile does not estimate acceleration, so it asks for nothing."""
+        ratings = _make_ratings(20, 3)
+        analysis = PairwisePermutationAnalysis(ratings, _pairwise_config())
+
+        ci = analysis._compute_ci(
+            np.linspace(0.0, 1.0, 1000), 0.5, "percentile", 0.05,
+            jackknife_fn=None,
+        )
+        assert ci.is_defined
 
     def test_bca_ci(self):
-        """BCa CI should produce sensible bounds."""
+        """BCa CI should produce sensible bounds, given a jackknife."""
         ratings = _make_ratings(20, 3)
         config = _pairwise_config()
         analysis = PairwisePermutationAnalysis(ratings, config)
 
         dist = np.linspace(0.0, 1.0, 1000)
-        lo, hi = analysis._compute_ci(dist, 0.5, "bca", 0.05)
-        assert lo < hi
+        ci = analysis._compute_ci(
+            dist, 0.5, "bca", 0.05,
+            jackknife_fn=lambda: np.linspace(0.45, 0.55, 20),
+        )
+        assert ci.lower < ci.upper
+        assert ci.method_intended == "bca"
+        assert ci.method_used == "bca"
+        assert ci.acceleration is not None
+
+    def test_bca_without_jackknife_raises(self):
+        """Asking for BCa with no way to compute acceleration is a caller bug.
+
+        It used to fall through to percentile silently. The quantity BCa
+        needs is a property of the data, not of the bootstrap distribution,
+        so a caller that supplies no jackknife has not asked for a weaker
+        interval -- it has asked for one that cannot be built.
+        """
+        ratings = _make_ratings(20, 3)
+        analysis = PairwisePermutationAnalysis(ratings, _pairwise_config())
+
+        with pytest.raises(ValueError, match="leave-one-out estimates"):
+            analysis._compute_ci(
+                np.linspace(0.0, 1.0, 1000), 0.5, "bca", 0.05,
+                jackknife_fn=None,
+            )
+
+    def test_bca_jackknife_is_not_called_for_percentile(self):
+        """The jackknife costs one estimator call per subject -- don't pay it."""
+        calls = []
+
+        def _jackknife():
+            calls.append(1)
+            return np.linspace(0.45, 0.55, 20)
+
+        ratings = _make_ratings(20, 3)
+        analysis = PairwisePermutationAnalysis(ratings, _pairwise_config())
+
+        analysis._compute_ci(
+            np.linspace(0.0, 1.0, 1000), 0.5, "percentile", 0.05,
+            jackknife_fn=_jackknife,
+        )
+        assert calls == []
 
     def test_parametric_null_rejected(self):
         """parametric_null should be rejected for permutation results."""
@@ -411,11 +465,15 @@ class TestPairwiseComputationB:
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.bootstrap_cis_per_pair is not None
         for pair, ci in result.bootstrap_cis_per_pair.items():
-            assert isinstance(ci, tuple)
-            assert len(ci) == 2
-            # lower <= upper (with NaN tolerance)
-            if not (math.isnan(ci[0]) or math.isnan(ci[1])):
-                assert ci[0] <= ci[1] + TOL
+            assert isinstance(ci, BootstrapCIResult)
+            assert ci.n_resamples == 100
+            assert ci.method_intended == "percentile"
+            # An interval either has ordered bounds or has none at all --
+            # it cannot be half-defined, and it validated that itself.
+            if ci.is_defined:
+                assert ci.lower <= ci.upper + TOL
+            else:
+                assert ci.method_used is None
 
     def test_per_pair_distributions_stored_when_few_pairs(self):
         """Distributions stored when n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS."""
@@ -512,9 +570,10 @@ class TestPairwiseComputationC:
         assert result.bootstrap_mean_method == "correlated"
         assert result.bootstrap_distribution_of_mean is not None
         assert result.bootstrap_distribution_of_mean.shape == (100,)
-        assert result.bootstrap_ci_of_mean is not None
-        lo, hi = result.bootstrap_ci_of_mean
-        assert lo <= hi + TOL
+        ci = result.bootstrap_ci_of_mean
+        assert ci is not None
+        assert ci.lower <= ci.upper + TOL
+        assert ci.n_resamples == 100
 
     def test_independent_mean_bootstrap(self):
         """Independent method should produce mean distribution and CI."""
@@ -557,10 +616,10 @@ class TestPairwiseComputationC:
             ),
         ).run()
 
-        corr_width = r_corr.bootstrap_ci_of_mean[1] - r_corr.bootstrap_ci_of_mean[0]
-        indep_width = (
-            r_indep.bootstrap_ci_of_mean[1] - r_indep.bootstrap_ci_of_mean[0]
-        )
+        corr_ci = r_corr.bootstrap_ci_of_mean
+        indep_ci = r_indep.bootstrap_ci_of_mean
+        corr_width = corr_ci.upper - corr_ci.lower
+        indep_width = indep_ci.upper - indep_ci.lower
         # Correlated should be wider (accounts for shared-rater correlation)
         # Allow some slack -- it's a statistical property
         assert corr_width > indep_width * 0.5, (
@@ -803,8 +862,35 @@ class TestSubsetComputationB:
         r = result.per_k_results[3]
         assert r.bootstrap_cis_per_subset is not None
         for subset, ci in r.bootstrap_cis_per_subset.items():
-            assert isinstance(ci, tuple)
-            assert len(ci) == 2
+            assert isinstance(ci, BootstrapCIResult)
+            assert ci.n_resamples == 100
+            if ci.is_defined:
+                assert ci.lower <= ci.upper + TOL
+            else:
+                assert ci.method_used is None
+
+    def test_per_subset_intervals_bracket_their_own_estimates(self):
+        """The regression test for the measurable-pool bug.
+
+        A 3-rater subset is measured on every subject at least two of
+        those three rated. When the bootstrap drew from the complete
+        cases instead, it was resampling a different quantity, and the
+        interval could land nowhere near the point estimate it belonged
+        to. On balanced data the two pools coincide, so this guards the
+        general path rather than reproducing the original failure.
+        """
+        ratings = _make_ratings(20, 4)
+        config = _subset_config(n_resamples=200, subset_k=3)
+        result = SubsetPermutationAnalysis(ratings, config).run()
+        r = result.per_k_results[3]
+
+        for subset, ci in r.bootstrap_cis_per_subset.items():
+            point = r.subset_values[subset]
+            if ci.is_defined and not math.isnan(point):
+                assert ci.lower - TOL <= point <= ci.upper + TOL, (
+                    f"subset {subset}: point {point:.4f} outside its own "
+                    f"interval {ci}"
+                )
 
     def test_distributions_stored_when_few_subsets(self):
         """Distributions stored when n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS."""

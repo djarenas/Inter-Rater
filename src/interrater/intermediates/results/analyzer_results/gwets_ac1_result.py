@@ -1,4 +1,4 @@
-"""Result for Scott's pi analysis."""
+"""Result for Gwet's AC1 analysis."""
 
 from __future__ import annotations
 
@@ -10,33 +10,32 @@ import numpy as np
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
-    from ..data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.balance_profile import BalanceProfile
 
-_ERROR_PREFIX = "[ScottsPiResult] Error"
+_ERROR_PREFIX = "[GwetsAC1Result] Error"
 
 
 @dataclass(frozen=True)
-class ScottsPiResult(PointEstimateResult):
+class GwetsAC1Result(PointEstimateResult):
     """
-    I am Scott's pi, exact or approximate, with data context.
+    I am Gwet's AC1, exact or approximate, with data context.
 
     I inherit point, confidence_interval, bootstrap_distribution, and
     balance_profile from PointEstimateResult. balance_profile tells users
-    and visualizers whether this is the exact coefficient from Scott 1955
-    or a generalization applied to unbalanced data.
+    and visualizers whether this is the exact coefficient or a generalization
+    applied to unbalanced data.
 
     When is_exact is True, I am the exact formula (balanced data, constant
     raters per subject). When False, I am a valid generalization using
     per-subject averaging of p_j, but not the original coefficient.
 
     I exist as a separate class (rather than just using PointEstimateResult)
-    for type clarity. Downstream code can see `result: ScottsPiResult` and
-    know the coefficient and that metadata about balance is available.
+    for type clarity. This is especially useful for error chaining.
 
     Attributes
     ----------
     point : float
-        Scott's pi (inherited from PointEstimateResult).
+        Gwet's AC1 (inherited from PointEstimateResult).
     confidence_interval : tuple[float, float] | None
         Bootstrap confidence interval (lower, upper) (inherited).
     bootstrap_distribution : np.ndarray | None
@@ -45,7 +44,7 @@ class ScottsPiResult(PointEstimateResult):
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
     ci_method : str
-        Method used: "percentile", "bca", or "parametric_null".
+        Method used: "percentile" or "bca".
     """
 
     # Attribute declaration
@@ -62,12 +61,12 @@ class ScottsPiResult(PointEstimateResult):
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
-        """Validate Scott's pi result attributes."""
+        """Validate Gwet's AC1 result attributes."""
 
-        # Scott's pi always requires a balance_profile
+        # Gwet's AC1 always requires a balance_profile
         if self.balance_profile is None:
             raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None for Scott's pi"
+                f"{_ERROR_PREFIX}: balance_profile must not be None for Gwet's AC1"
             )
 
         # Validate ci_method
@@ -76,10 +75,15 @@ class ScottsPiResult(PointEstimateResult):
                 f"{_ERROR_PREFIX}: ci_method must be str, "
                 f"got {type(self.ci_method).__name__}"
             )
-        if self.ci_method not in {"percentile", "bca", "parametric_null"}:
+        if self.ci_method == "parametric_null":
             raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile', 'bca', "
-                f"or 'parametric_null', got '{self.ci_method}'"
+                f"{_ERROR_PREFIX}: ci_method 'parametric_null' is not implemented "
+                f"for Gwet's AC1"
+            )
+        if self.ci_method not in {"percentile", "bca"}:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: ci_method must be 'percentile' or 'bca', "
+                f"got '{self.ci_method}'"
             )
 
         # Call parent validation (validates point, confidence_interval,
@@ -96,13 +100,13 @@ class ScottsPiResult(PointEstimateResult):
         Return a compact string representation with coefficient name and context.
 
         Format:
-            Scott's π = 0.523 (95% CI: [0.481, 0.565], n_bootstrap=1000)
+            Gwet's AC1 = 0.523 (95% CI: [0.481, 0.565], n_bootstrap=1000)
             n_subjects=100; n_raters=5; ci_method=bca; exact formula
         """
         parent_str = super().__str__()
         exact_str = "exact formula" if self.is_exact else "approximation (unbalanced data)"
         return (
-            f"Scott's π {parent_str}\n"
+            f"Gwet's AC1 {parent_str}\n"
             f"n_subjects={self.balance_profile.n_subjects}; "
             f"{self.balance_profile.n_raters_display}; "
             f"ci_method={self.ci_method}; {exact_str}"
@@ -110,7 +114,7 @@ class ScottsPiResult(PointEstimateResult):
 
     def summary(self) -> dict:
         """
-        Return point, CI, bootstrap diagnostics, and Scott-specific metadata.
+        Return point, CI, bootstrap diagnostics, and AC1-specific metadata.
 
         Returns
         -------
@@ -127,7 +131,7 @@ class ScottsPiResult(PointEstimateResult):
     @property
     def is_exact(self) -> bool:
         """
-        Whether this is the exact Scott formula or an approximation.
+        Whether this is the exact AC1 formula or an approximation.
 
         Returns True if data was balanced (constant raters per subject).
         Returns False if an approximation was used for unbalanced data.

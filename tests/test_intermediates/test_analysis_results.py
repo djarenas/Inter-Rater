@@ -1,5 +1,5 @@
 """
-Tests for the analysis_results sub-package.
+Tests for the results sub-package.
 
 One test file for one sub-package. Replaces the four previous test files
 (test_point_estimate_result.py, test_hypothesis_test_result.py,
@@ -20,10 +20,12 @@ Each class section: Construction → Validation → __str__ → summary().
 Hand-verifiable values throughout. No randomness.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
-from interrater.intermediates.analysis_results import (
+from interrater.intermediates.results import (
     AnalysisResult,
     PointEstimateResult,
     HypothesisTestResult,
@@ -35,23 +37,27 @@ from interrater.intermediates.analysis_results import (
     CohenKappaResult,
     CongerKappaResult,
 )
-from interrater.intermediates.analysis_results.individual_marginal_result import (
+from interrater.intermediates.results.analyzer_results.individual_marginal_result import (
     IndividualMarginalResult,
 )
-from interrater.intermediates.analysis_results.light_kappa_result import (
+from interrater.intermediates.results.analyzer_results.light_kappa_result import (
     LightKappaResult,
 )
-from interrater.intermediates.analysis_results.permutation_result import (
+from interrater.intermediates.results.permutation_results.permutation_result import (
     PermutationResult,
 )
-from interrater.intermediates.analysis_results.pairwise_permutation_result import (
+from interrater.intermediates.results.permutation_results.pairwise_permutation_result import (
     PairwisePermutationResult,
 )
-from interrater.intermediates.analysis_results.subset_permutation_result import (
+from interrater.intermediates.results.permutation_results.subset_permutation_result import (
     SubsetPermutationResult,
 )
-from interrater.intermediates.analysis_results.multi_k_subset_result import (
+from interrater.intermediates.results.permutation_results.multi_k_subset_result import (
     MultiKSubsetResult,
+)
+from interrater.intermediates.results.ci_results import (
+    BootstrapCIResult,
+    ParametricCIResult,
 )
 from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
@@ -60,6 +66,43 @@ from .conftest import BALANCED_NIJ, UNBALANCED_NIJ
 
 
 # -- Helpers ----------------------------------------------------------------- #
+
+
+def _ci(lower: float = 0.45, upper: float = 0.55, **overrides) -> BootstrapCIResult:
+    """
+    A plain percentile interval, for tests that need one but are not about it.
+
+    Intervals validate themselves, so the results that hold them no longer
+    re-check bounds, ordering or types. Tests that used to pass a tuple of two
+    floats pass one of these instead; tests that are *about* the interval build
+    their own with the fields they care about.
+    """
+    base = dict(
+        lower=lower,
+        upper=upper,
+        alpha=0.05,
+        n_resamples=1000,
+        n_failed=0,
+        method_intended="percentile",
+        method_used="percentile",
+    )
+    base.update(overrides)
+    return BootstrapCIResult(**base)
+
+
+def _undefined_ci(**overrides) -> BootstrapCIResult:
+    """An interval that was attempted and produced nothing: every draw failed."""
+    base = dict(
+        lower=float("nan"),
+        upper=float("nan"),
+        alpha=0.05,
+        n_resamples=200,
+        n_failed=200,
+        method_intended="bca",
+        method_used=None,
+    )
+    base.update(overrides)
+    return BootstrapCIResult(**base)
 
 
 def _bp() -> BalanceProfile:
@@ -125,12 +168,12 @@ def _pairwise_with_bootstrap(**overrides):
     boot_dist = np.array([0.48, 0.50, 0.52])
     base = _pairwise_kwargs(
         bootstrap_mean_method="correlated",
-        bootstrap_ci_of_mean=(0.45, 0.55),
+        bootstrap_ci_of_mean=_ci(0.45, 0.55),
         bootstrap_distribution_of_mean=boot_dist,
         bootstrap_cis_per_pair={
-            (0, 1): (0.50, 0.70),
-            (0, 2): (0.30, 0.50),
-            (1, 2): (0.40, 0.60),
+            (0, 1): _ci(0.50, 0.70),
+            (0, 2): _ci(0.30, 0.50),
+            (1, 2): _ci(0.40, 0.60),
         },
         bootstrap_distributions_per_pair=None,
     )
@@ -175,12 +218,12 @@ def _subset_with_bootstrap(**overrides):
     boot_dist = np.array([0.48, 0.50, 0.52])
     base = _subset_kwargs(
         bootstrap_mean_method="correlated",
-        bootstrap_ci_of_mean=(0.45, 0.55),
+        bootstrap_ci_of_mean=_ci(0.45, 0.55),
         bootstrap_distribution_of_mean=boot_dist,
         bootstrap_cis_per_subset={
-            (0, 1): (0.50, 0.70),
-            (0, 2): (0.30, 0.50),
-            (1, 2): (0.40, 0.60),
+            (0, 1): _ci(0.50, 0.70),
+            (0, 2): _ci(0.30, 0.50),
+            (1, 2): _ci(0.40, 0.60),
         },
         bootstrap_distributions_per_subset=None,
     )
@@ -259,13 +302,15 @@ class TestPointEstimateResultConstruction:
 
     def test_with_ci(self):
         """Point estimate with confidence interval."""
+        ci = _ci(0.3, 0.7)
         r = PointEstimateResult(
             point=0.5,
-            confidence_interval=(0.3, 0.7),
+            confidence_interval=ci,
             bootstrap_distribution=None,
             balance_profile=None,
         )
-        assert r.confidence_interval == (0.3, 0.7)
+        assert r.confidence_interval is ci
+        assert r.confidence_interval.as_tuple() == (0.3, 0.7)
 
     def test_with_bootstrap(self):
         """Point estimate with bootstrap distribution."""
@@ -295,14 +340,34 @@ class TestPointEstimateResultConstruction:
         bp = _bp()
         r = PointEstimateResult(
             point=0.5,
-            confidence_interval=(0.3, 0.7),
+            confidence_interval=_ci(0.3, 0.7),
             bootstrap_distribution=boot,
             balance_profile=bp,
         )
         assert r.point == 0.5
-        assert r.confidence_interval == (0.3, 0.7)
+        assert r.confidence_interval.as_tuple() == (0.3, 0.7)
         assert len(r.bootstrap_distribution) == 5
         assert r.balance_profile is bp
+
+    def test_with_parametric_ci(self):
+        """Any CIResult is accepted, not only a bootstrap one."""
+        # The null-variance warning is the interval's own business, and it is
+        # pinned in test_analyzer_classes.py. Here the interval is scaffolding,
+        # so the filter is suppressed for these three lines only --
+        # catch_warnings restores the previous filters on exit.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            ci = ParametricCIResult(
+                lower=0.401, upper=0.639, alpha=0.05, variance_source="null",
+            )
+        r = PointEstimateResult(0.52, ci, None, None)
+        assert r.confidence_interval is ci
+
+    def test_with_undefined_ci(self):
+        """An interval that produced no bounds is still an interval."""
+        r = PointEstimateResult(0.5, _undefined_ci(), None, None)
+        assert r.confidence_interval.is_defined is False
+        assert r.point_outside_interval is False
 
     def test_is_analysis_result(self):
         """PointEstimateResult is a subclass of AnalysisResult."""
@@ -329,35 +394,19 @@ class TestPointEstimateResultValidationRejects:
         with pytest.raises(TypeError, match="point must be float"):
             PointEstimateResult("0.5", None, None, None)
 
-    def test_ci_not_tuple(self):
-        """Confidence interval must be a tuple, not list."""
-        with pytest.raises(ValueError, match="confidence_interval must be"):
+    def test_ci_tuple_rejected(self):
+        """A bare pair of floats is no longer an interval."""
+        with pytest.raises(TypeError, match="confidence_interval must be"):
+            PointEstimateResult(0.5, (0.3, 0.7), None, None)
+
+    def test_ci_list_rejected(self):
+        with pytest.raises(TypeError, match="confidence_interval must be"):
             PointEstimateResult(0.5, [0.3, 0.7], None, None)
 
-    def test_ci_wrong_length(self):
-        """Confidence interval must have exactly 2 elements."""
-        with pytest.raises(ValueError, match="confidence_interval must be"):
-            PointEstimateResult(0.5, (0.3, 0.5, 0.7), None, None)
-
-    def test_ci_bounds_not_numeric(self):
-        """CI bounds must be numeric."""
-        with pytest.raises(TypeError, match="CI bounds must be float"):
-            PointEstimateResult(0.5, ("lo", "hi"), None, None)
-
-    def test_ci_lower_exceeds_upper(self):
-        """Lower bound must not exceed upper bound."""
-        with pytest.raises(ValueError, match="lower bound .* > upper bound"):
-            PointEstimateResult(0.5, (0.7, 0.3), None, None)
-
-    def test_point_below_ci(self):
-        """Point must fall within CI."""
-        with pytest.raises(ValueError, match="point estimate .* outside CI"):
-            PointEstimateResult(0.2, (0.3, 0.7), None, None)
-
-    def test_point_above_ci(self):
-        """Point must fall within CI."""
-        with pytest.raises(ValueError, match="point estimate .* outside CI"):
-            PointEstimateResult(0.8, (0.3, 0.7), None, None)
+    # Bounds ordering, bounds types and interval length are no longer checked
+    # here. An interval validates those when it is built, so a result that
+    # re-checked them would be asserting something already guaranteed, in a
+    # second place that could drift from the first. See the CIResult tests.
 
     def test_bootstrap_not_ndarray(self):
         """Bootstrap distribution must be np.ndarray."""
@@ -385,6 +434,83 @@ class TestPointEstimateResultValidationRejects:
             PointEstimateResult("bad", None, None, None)
 
 
+class TestPointEstimateResultPointOutsideInterval:
+    """
+    A point estimate outside its own interval is allowed, and is never silent.
+
+    It used to raise. Strong bias correction puts a BCa interval entirely to
+    one side of the point legitimately, so refusing to exist was the wrong
+    response -- but it is also the signature of a degenerate bootstrap, and of
+    a bootstrap that resampled a different pool than the point estimate was
+    computed from. So it is permitted and disclosed three ways.
+    """
+
+    def test_point_below_interval_is_allowed(self):
+        with pytest.warns(UserWarning, match="falls outside its own interval"):
+            r = PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+        assert r.point == 0.2
+        assert r.point_outside_interval is True
+
+    def test_point_above_interval_is_allowed(self):
+        with pytest.warns(UserWarning, match="falls outside its own interval"):
+            r = PointEstimateResult(0.8, _ci(0.3, 0.7), None, None)
+        assert r.point_outside_interval is True
+
+    def test_point_inside_does_not_warn(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            r = PointEstimateResult(0.5, _ci(0.3, 0.7), None, None)
+        assert r.point_outside_interval is False
+
+    def test_boundary_counts_as_inside(self):
+        """A point exactly on a bound is in, not out."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert (
+                PointEstimateResult(0.3, _ci(0.3, 0.7), None, None)
+                .point_outside_interval
+                is False
+            )
+            assert (
+                PointEstimateResult(0.7, _ci(0.3, 0.7), None, None)
+                .point_outside_interval
+                is False
+            )
+
+    def test_undefined_interval_is_not_outside(self):
+        """No bounds means no comparison to make -- not a violation."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            r = PointEstimateResult(0.5, _undefined_ci(), None, None)
+        assert r.point_outside_interval is False
+
+    def test_no_interval_is_not_outside(self):
+        assert (
+            PointEstimateResult(0.5, None, None, None).point_outside_interval
+            is False
+        )
+
+    def test_marker_appears_in_str(self):
+        """Channel two: visible to anyone who prints the result."""
+        with pytest.warns(UserWarning):
+            r = PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+        assert "POINT OUTSIDE INTERVAL" in str(r)
+
+    def test_flag_appears_in_summary(self):
+        """Channel three: visible to anyone who serializes it."""
+        with pytest.warns(UserWarning):
+            r = PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+        assert r.summary()["point_outside_interval"] is True
+
+    def test_warning_names_the_two_explanations(self):
+        """The warning has to be actionable, not just alarming."""
+        with pytest.warns(UserWarning) as caught:
+            PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+        message = str(caught[0].message)
+        assert "bias correction" in message
+        assert "degenerate" in message
+
+
 class TestPointEstimateResultStr:
     """The compact display string under different field combinations."""
 
@@ -394,23 +520,37 @@ class TestPointEstimateResultStr:
         assert s == "= 0.523"
 
     def test_with_ci(self):
-        """Point + CI, no bootstrap."""
-        s = str(PointEstimateResult(0.523, (0.481, 0.565), None, None))
-        assert "95% CI" in s
-        assert "0.481" in s
-        assert "0.565" in s
+        """Point + CI. The interval renders itself."""
+        s = str(PointEstimateResult(0.523, _ci(0.481, 0.565), None, None))
+        assert s == "= 0.523 [0.481, 0.565] (95% CI, percentile, n=1000)"
+
+    def test_ci_qualifiers_travel_with_the_interval(self):
+        """A fallback and a failure count appear without this class's help."""
+        fallen = _ci(
+            0.481, 0.565,
+            method_intended="bca", method_used="percentile", n_failed=12,
+        )
+        s = str(PointEstimateResult(0.523, fallen, None, None))
+        assert "percentile [bca requested]" in s
+        assert "12 failed" in s
 
     def test_with_ci_and_bootstrap(self):
-        """Point + CI + bootstrap count."""
+        """The bootstrap count is dropped once an interval says n= itself."""
         boot = np.ones(1000)
-        s = str(PointEstimateResult(1.0, (1.0, 1.0), boot, None))
-        assert "n_bootstrap=1000" in s
+        s = str(PointEstimateResult(1.0, _ci(1.0, 1.0), boot, None))
+        assert "n=1000" in s
+        assert "n_bootstrap" not in s
 
     def test_bootstrap_without_ci(self):
-        """Bootstrap count shown even without CI."""
+        """Bootstrap count shown when no interval came of it."""
         boot = np.array([0.5])
         s = str(PointEstimateResult(0.5, None, boot, None))
         assert "n_bootstrap=1" in s
+
+    def test_undefined_ci_says_so(self):
+        s = str(PointEstimateResult(0.5, _undefined_ci(), None, None))
+        assert "[undefined]" in s
+        assert "no method ran" in s
 
 
 class TestPointEstimateResultSummary:
@@ -422,16 +562,19 @@ class TestPointEstimateResultSummary:
         assert d == {"point": 0.75}
 
     def test_with_ci(self):
-        """CI adds ci_lower and ci_upper."""
-        d = PointEstimateResult(0.5, (0.3, 0.7), None, None).summary()
+        """CI adds the interval's own summary plus hoisted bounds."""
+        d = PointEstimateResult(0.5, _ci(0.3, 0.7), None, None).summary()
         assert d["point"] == 0.5
         assert d["ci_lower"] == 0.3
         assert d["ci_upper"] == 0.7
+        assert d["point_outside_interval"] is False
+        assert d["ci"]["method_used"] == "percentile"
+        assert d["ci"]["n_failed"] == 0
 
     def test_with_bootstrap(self):
         """Bootstrap adds n, mean, std."""
         boot = np.array([1.0, 2.0, 3.0])
-        d = PointEstimateResult(2.0, (1.0, 3.0), boot, None).summary()
+        d = PointEstimateResult(2.0, _ci(1.0, 3.0), boot, None).summary()
         assert d["bootstrap_n"] == 3
         assert abs(d["bootstrap_mean"] - 2.0) < 1e-12
         assert abs(d["bootstrap_std"] - np.std(boot)) < 1e-12
@@ -447,9 +590,9 @@ class TestPointEstimateResultSummary:
         """Full summary has all keys."""
         boot = np.array([0.4, 0.5, 0.6])
         bp = _bp()
-        d = PointEstimateResult(0.5, (0.4, 0.6), boot, bp).summary()
+        d = PointEstimateResult(0.5, _ci(0.4, 0.6), boot, bp).summary()
         expected_keys = {
-            "point", "ci_lower", "ci_upper",
+            "point", "ci", "ci_lower", "ci_upper", "point_outside_interval",
             "bootstrap_n", "bootstrap_mean", "bootstrap_std",
             "balance",
         }
@@ -886,7 +1029,7 @@ class TestPairwisePermutationResultConstruction:
     def test_with_bootstrap(self):
         r = PairwisePermutationResult(**_pairwise_with_bootstrap())
         assert r.bootstrap_mean_method == "correlated"
-        assert r.bootstrap_ci_of_mean == (0.45, 0.55)
+        assert r.bootstrap_ci_of_mean.as_tuple() == (0.45, 0.55)
         assert len(r.bootstrap_distribution_of_mean) == 3
 
     def test_independent_method(self):
@@ -966,11 +1109,42 @@ class TestPairwisePermutationResultValidation:
                 bootstrap_mean_method="correlated",
             ))
 
-    def test_bootstrap_ci_lower_exceeds_upper(self):
-        with pytest.raises(ValueError, match="lower bound .* > upper bound"):
+    def test_bootstrap_ci_of_mean_must_be_an_interval(self):
+        """Bounds ordering is the interval's business; its type is ours."""
+        with pytest.raises(TypeError, match="must be BootstrapCIResult"):
             PairwisePermutationResult(**_pairwise_with_bootstrap(
                 bootstrap_ci_of_mean=(0.7, 0.3),
             ))
+
+    def test_per_pair_ci_must_be_an_interval(self):
+        with pytest.raises(TypeError, match="bootstrap CI for pair"):
+            PairwisePermutationResult(**_pairwise_with_bootstrap(
+                bootstrap_cis_per_pair={
+                    (0, 1): (0.50, 0.70),
+                    (0, 2): _ci(0.30, 0.50),
+                    (1, 2): _ci(0.40, 0.60),
+                },
+            ))
+
+    def test_pairs_may_fail_independently(self):
+        """The reason each pair carries its own interval object.
+
+        One pair with few shared subjects can lose draws, or lose all of
+        them, while its neighbours return ordinary intervals. A single
+        shared summary could not say that.
+        """
+        r = PairwisePermutationResult(**_pairwise_with_bootstrap(
+            bootstrap_cis_per_pair={
+                (0, 1): _ci(0.50, 0.70),
+                (0, 2): _ci(0.30, 0.50, n_failed=137),
+                (1, 2): _undefined_ci(),
+            },
+        ))
+        cis = r.bootstrap_cis_per_pair
+        assert cis[(0, 1)].n_failed == 0
+        assert cis[(0, 2)].n_failed == 137
+        assert cis[(1, 2)].method_used is None
+        assert cis[(1, 2)].is_defined is False
 
     def test_bootstrap_dist_wrong_ndim(self):
         with pytest.raises(ValueError, match="must be 1-dimensional"):
@@ -1110,7 +1284,7 @@ class TestSubsetPermutationResultConstruction:
     def test_with_bootstrap(self):
         r = SubsetPermutationResult(**_subset_with_bootstrap())
         assert r.bootstrap_mean_method == "correlated"
-        assert r.bootstrap_ci_of_mean == (0.45, 0.55)
+        assert r.bootstrap_ci_of_mean.as_tuple() == (0.45, 0.55)
         assert len(r.bootstrap_distribution_of_mean) == 3
 
     def test_independent_method(self):
@@ -1208,11 +1382,42 @@ class TestSubsetPermutationResultValidation:
                 bootstrap_mean_method="correlated",
             ))
 
-    def test_bootstrap_ci_lower_exceeds_upper(self):
-        with pytest.raises(ValueError, match="lower bound .* > upper bound"):
+    def test_bootstrap_ci_of_mean_must_be_an_interval(self):
+        """Bounds ordering is the interval's business; its type is ours."""
+        with pytest.raises(TypeError, match="must be BootstrapCIResult"):
             SubsetPermutationResult(**_subset_with_bootstrap(
                 bootstrap_ci_of_mean=(0.7, 0.3),
             ))
+
+    def test_per_subset_ci_must_be_an_interval(self):
+        with pytest.raises(TypeError, match="bootstrap CI for subset"):
+            SubsetPermutationResult(**_subset_with_bootstrap(
+                bootstrap_cis_per_subset={
+                    (0, 1): (0.50, 0.70),
+                    (0, 2): _ci(0.30, 0.50),
+                    (1, 2): _ci(0.40, 0.60),
+                },
+            ))
+
+    def test_subsets_may_fail_independently(self):
+        """Routine here rather than exceptional.
+
+        A subset with fewer than two measurable subjects has nothing to
+        resample and gets an interval that ran no method, while its
+        siblings on the same data come back normally.
+        """
+        r = SubsetPermutationResult(**_subset_with_bootstrap(
+            bootstrap_cis_per_subset={
+                (0, 1): _ci(0.50, 0.70),
+                (0, 2): _ci(0.30, 0.50, n_failed=137),
+                (1, 2): _undefined_ci(),
+            },
+        ))
+        cis = r.bootstrap_cis_per_subset
+        assert cis[(0, 1)].n_failed == 0
+        assert cis[(0, 2)].n_failed == 137
+        assert cis[(1, 2)].method_used is None
+        assert cis[(1, 2)].is_defined is False
 
     def test_bootstrap_dist_wrong_ndim(self):
         with pytest.raises(ValueError, match="must be 1-dimensional"):
@@ -1561,12 +1766,12 @@ class TestMultiKSubsetResultStr:
             subset_k=2,
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method="correlated",
-            bootstrap_ci_of_mean=(0.45, 0.55),
+            bootstrap_ci_of_mean=_ci(0.45, 0.55),
             bootstrap_distribution_of_mean=boot_dist,
             bootstrap_cis_per_subset={
-                (0, 1): (0.50, 0.70),
-                (0, 2): (0.30, 0.50),
-                (1, 2): (0.40, 0.60),
+                (0, 1): _ci(0.50, 0.70),
+                (0, 2): _ci(0.30, 0.50),
+                (1, 2): _ci(0.40, 0.60),
             },
             bootstrap_distributions_per_subset=None,
         )
@@ -1595,6 +1800,45 @@ class TestMultiKSubsetResultStr:
         s = str(r)
         assert "95% CI: [0.450, 0.550]" in s
         assert "correlated" in s
+        # k=3 was never bootstrapped, so it says nothing about an interval
+        assert "k=3: mean=0.550 (1 subsets)" in s
+
+    def test_undefined_interval_is_named_not_omitted(self):
+        """A k that bootstrapped and got nothing must not print like a k
+        that was never bootstrapped at all."""
+        bp = _bp()
+        result_k2 = SubsetPermutationResult(**_subset_kwargs(
+            balance_profile=bp,
+            bootstrap_mean_method="correlated",
+            bootstrap_ci_of_mean=_undefined_ci(),
+            bootstrap_distribution_of_mean=np.full(200, np.nan),
+        ))
+        r = MultiKSubsetResult(
+            coefficient_name="fleiss_kappa",
+            ci_method="percentile",
+            balance_profile=bp,
+            per_k_results={2: result_k2},
+            ks=[2],
+        )
+        assert "no CI: every draw failed" in str(r)
+
+    def test_failed_draws_are_named(self):
+        """An interval resting on a fraction of its draws says so."""
+        bp = _bp()
+        result_k2 = SubsetPermutationResult(**_subset_kwargs(
+            balance_profile=bp,
+            bootstrap_mean_method="correlated",
+            bootstrap_ci_of_mean=_ci(0.45, 0.55, n_failed=312),
+            bootstrap_distribution_of_mean=np.array([0.48, 0.50, 0.52]),
+        ))
+        r = MultiKSubsetResult(
+            coefficient_name="fleiss_kappa",
+            ci_method="percentile",
+            balance_profile=bp,
+            per_k_results={2: result_k2},
+            ks=[2],
+        )
+        assert "312 failed" in str(r)
 
 
 class TestMultiKSubsetResultSummary:

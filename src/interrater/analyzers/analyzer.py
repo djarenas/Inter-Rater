@@ -5,10 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates import AnalysisResult
-    from ..intermediates.analysis_results import HypothesisTestResult
+    from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile
     from .configs.analyzer_config import AnalyzerConfig
 
@@ -208,7 +210,121 @@ class Analyzer(ABC):
                     f"injection step {type(step).__name__} failed: {e}"
                 ) from e
 
+    # Resampling ------------------------------------------------------------- #
+
+    @abstractmethod
+    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+        """
+        Compute my coefficient from a ratings array, and nothing else.
+
+        This is the one step that differs between coefficients. Everything
+        that resamples -- the bootstrap, the jackknife, anything added later
+        -- is expressed in terms of it, so each of them exists once here
+        rather than once per analyzer.
+
+        I take a bare array rather than a Ratings because my callers hand me
+        resampled arrays, which are not Ratings and should not have to
+        pretend to be. Semantics (how many categories, which weights) come
+        from the analyzer, not from the array.
+
+        Parameters
+        ----------
+        category_index : np.ndarray
+            Shape (n_subjects, n_raters), dtype int8. A resample, a
+            leave-one-out subset, or the original data.
+
+        Returns
+        -------
+        float
+            The coefficient, or NaN when this array cannot define it -- an
+            array holding a single category drives chance agreement to 1,
+            and the coefficient is then 0/0.
+        """
+        raise NotImplementedError(
+            f"{_ERROR_PREFIX}: _estimate_from_array() must be implemented "
+            f"by subclass"
+        )
+
+    def _bootstrap_distribution(self) -> np.ndarray:
+        """
+        Resample subjects with replacement and recompute my coefficient.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (n_resamples,). NaN entries mark resamples whose
+            coefficient was undefined; they are kept rather than dropped, so
+            that whatever computes an interval can count them.
+        """
+        from .resampling_functions import subject_bootstrap
+
+        self._require_ratings("_bootstrap_distribution")
+        return np.array([
+            self._estimate_from_array(resampled)
+            for resampled in subject_bootstrap(
+                self.ratings.category_index,
+                n_resamples=self.config.n_resamples,
+                random_state=self.config.random_state,
+            )
+        ], dtype=np.float64)
+
+    def _jackknife_estimates(self) -> np.ndarray:
+        """
+        Recompute my coefficient with each subject left out in turn.
+
+        BCa's acceleration is the standardised skewness of these values. It
+        measures how much each individual subject moves the coefficient,
+        which is a property of the data and cannot be recovered from a
+        bootstrap distribution.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (n_subjects,). NaN entries mark leave-one-out subsets whose
+            coefficient was undefined, for the same reason a resample can be.
+
+        References
+        ----------
+        Efron, B., & Tibshirani, R. 1986. *Statistical Science*, 1(1), 54-77.
+        Equation (8.5), p. 71.
+        """
+        from .resampling_functions import subject_jackknife
+
+        self._require_ratings("_jackknife_estimates")
+        return np.array([
+            self._estimate_from_array(subset)
+            for subset in subject_jackknife(self.ratings.category_index)
+        ], dtype=np.float64)
+
     # Private helpers -------------------------------------------------------- #
+
+    def _require_ratings(self, caller: str) -> None:
+        """
+        Guard: resampling over subjects requires Ratings.
+
+        My subject-level resamplers read ``self.ratings.category_index``,
+        which is absent when I was built from a counts matrix. The public
+        entry points already check this, so reaching here means a caller took
+        the ratings path on an analyzer that has no ratings -- which is a
+        mistake about which method to call, not about the data.
+
+        Parameters
+        ----------
+        caller : str
+            The method that needs ratings, named in the message so the error
+            points at the call rather than at me.
+
+        Raises
+        ------
+        ValueError
+            If self.ratings is None.
+        """
+        if self.ratings is None:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: {caller}() requires Ratings data, but this "
+                f"analyzer was built from an NijMatrix. Use the "
+                f"_from_nij_matrix variant instead."
+            )
 
     def _check_permutation_available(self) -> None:
         """

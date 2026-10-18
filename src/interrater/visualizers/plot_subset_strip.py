@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..intermediates.analysis_results import MultiKSubsetResult
+    from ..intermediates.results import MultiKSubsetResult
 
 _ERROR_PREFIX = "[plot_subset_strip] Error"
 
@@ -31,6 +31,14 @@ def plot_subset_strip(
     When n_subsets at a given k is small (<=15), subset dots can be
     individually distinguished. When large, dots become semi-transparent
     to show density without overplotting.
+
+    A k can be bootstrapped and still have no interval on its mean: every
+    draw failed, so no method ran. That k gets no whisker, which alone
+    would look like a k that was never bootstrapped, so its mean diamond
+    is drawn hollow and the legend says so. Large k is where this is
+    likeliest -- the more raters a subset demands, the fewer subjects
+    reach two of them -- which is exactly the end of the trend line a
+    reader is drawing conclusions from.
 
     Parameters
     ----------
@@ -57,7 +65,7 @@ def plot_subset_strip(
         If rater_names length does not match the number of raters.
     """
     # Lazy import to avoid circular dependency at module level
-    from ..intermediates.analysis_results import MultiKSubsetResult
+    from ..intermediates.results import MultiKSubsetResult
 
     if not isinstance(result, MultiKSubsetResult):
         raise TypeError(
@@ -111,12 +119,21 @@ def plot_subset_strip(
     ci_uppers = []
     has_any_ci = False
 
+    # True where a bootstrap ran for that k and produced no interval, as
+    # distinct from no bootstrap at all. Both leave NaN bounds and so draw
+    # no whisker; only this tells them apart afterwards.
+    mean_ci_undefined = []
+
     for k in result.ks:
         per_k = result[k]
         means.append(per_k.mean_over_subsets)
-        if per_k.bootstrap_ci_of_mean is not None:
-            ci_lowers.append(per_k.bootstrap_ci_of_mean[0])
-            ci_uppers.append(per_k.bootstrap_ci_of_mean[1])
+        mean_ci = per_k.bootstrap_ci_of_mean
+        mean_ci_undefined.append(
+            mean_ci is not None and not mean_ci.is_defined
+        )
+        if mean_ci is not None and mean_ci.is_defined:
+            ci_lowers.append(mean_ci.lower)
+            ci_uppers.append(mean_ci.upper)
             has_any_ci = True
         else:
             ci_lowers.append(np.nan)
@@ -243,11 +260,24 @@ def plot_subset_strip(
             zorder=4, alpha=0.5,
         )
 
-    # Diamond markers for means
+    # Diamond markers for means. A hollow diamond is a mean whose interval
+    # was attempted and came back undefined -- the mean itself is still a
+    # real number, so the marker stays on the trend line rather than
+    # vanishing from it.
+    mean_faces = [
+        "none" if undefined else "black" for undefined in mean_ci_undefined
+    ]
+    mean_edges = [
+        "black" if undefined else "white" for undefined in mean_ci_undefined
+    ]
+    mean_widths = [
+        1.2 if undefined else 0.8 for undefined in mean_ci_undefined
+    ]
+
     ax.scatter(
         x_positions, means,
-        s=80, color="black", marker="D",
-        edgecolors="white", linewidths=0.8,
+        s=80, c=mean_faces, marker="D",
+        edgecolors=mean_edges, linewidths=mean_widths,
         zorder=5,
         label=f"Mean (n={n_ks} k values)",
     )
@@ -313,6 +343,14 @@ def plot_subset_strip(
         if data_max > 1:
             y_max = data_max + 0.05
     ax.set_ylim(y_min, y_max)
+
+    # Proxy entry so a hollow diamond is readable without the docstring
+    if any(mean_ci_undefined):
+        ax.scatter(
+            [], [], s=80, marker="D", facecolors="none",
+            edgecolors="black", linewidths=1.2,
+            label="Hollow: no CI (every draw failed)",
+        )
 
     ax.legend(fontsize=8, loc="best")
     ax.grid(axis="y", alpha=0.3)

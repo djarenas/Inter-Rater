@@ -14,7 +14,21 @@ Published variance formulas for kappa exist, but they have problems:
 
 **Resampling gives one procedure for all coefficients.** Subject bootstrap works the same way for every coefficient. The cost is computation; the benefit is correctness, and one framework that applies to all of them.
 
-## The eight functions
+## The rule that governs every function here
+
+**Resample the subjects the estimate was computed from, and leave out from that same set.**
+
+Stated that plainly it sounds like a tautology. It is not: "the subjects the estimate was computed from" is a narrower set than it looks, and a resampler pointed at the wrong set returns a plausible-looking number rather than an error. Therefore some rules must be enforced when resampling:
+
+- **Which subjects a coefficient is computed from depends on the raters involved.** A subject contributes to agreement only if at least two of the raters in question rated it -- fewer than two ratings is not disagreement, it is absence. Fleiss makes this explicit: the per-subject term `(sum_j n_ij^2 - n_i) / (n_i (n_i - 1))` is 0/0 at `n_i = 1`.
+
+- **So a rater subset's pool is "at least two of the k".** At k=2 that means both raters, which is the complete-case pairing Cohen's kappa requires. Above k=2 it permits unbalanced subsets rather than demanding a complete rectangle. One rule at every k, not a special case for pairs.
+
+- **The bootstrap must draw from that pool**, because an interval has to be around the thing the point estimate measured. Draw from the complete cases of a 3-rater subset instead and you have quietly switched estimands; on partially crossed data the mistake surfaces as an interval that does not contain its own point estimate.
+
+- **The jackknife must leave out from that same pool.** A subject that contributes nothing to the coefficient cannot influence it, so including it in the jackknife contributes a deviation representing no influence at all -- and acceleration is a function of those deviations.
+
+## The nine functions
 
 ### Subject-Level Resampling
 
@@ -34,7 +48,17 @@ Leave-one-subject-out. Yields n_subjects modified arrays, each with one subject 
 
 **Supports:** All coefficients.
 
-**Use for:** Bias diagnostics, stability analysis. How much does the estimate change when we drop each subject?
+**Use for:** BCa acceleration, first and foremost. Also bias diagnostics and stability analysis -- how much does the estimate change when we drop each subject?
+
+**Why BCa needs it:** acceleration is the standardised skewness of these leave-one-out values (Efron & Tibshirani 1986, eq. 8.5). It measures how fast the coefficient's standard error changes as the coefficient itself changes, which is a property of the data and cannot be recovered from a bootstrap distribution -- that describes the spread at one value only.
+
+#### `subject_jackknife_from_nij_matrix(nij_matrix)`
+
+Leave-one-subject-out over a counts matrix. Yields n_subjects matrices, each with one row removed.
+
+**Supports:** Group coefficients that operate on nij matrices.
+
+**Use for:** BCa acceleration on the nij pathway. The counterpart of `subject_jackknife`, for analyzers built from a counts matrix rather than from Ratings.
 
 #### `subject_bootstrap_from_nij_matrix(nij_matrix, n_resamples=1000, random_state=42)`
 

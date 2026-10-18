@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..intermediates.analysis_results import PairwisePermutationResult
+    from ..intermediates.results import PairwisePermutationResult
 
 _ERROR_PREFIX = "[plot_pairwise_permutation] Error"
 
@@ -29,6 +29,13 @@ def plot_pairwise_permutation(
     The overall mean is drawn as a horizontal reference line, and its
     bootstrap CI (if available) as a shaded band. Per-pair bootstrap CIs
     appear as vertical whiskers when present.
+
+    A pair can be bootstrapped and still have no interval: every draw
+    failed, so no method ran. Those get no whisker, which on its own would
+    look exactly like a pair that was never bootstrapped, so their marker
+    is drawn unfilled and the legend says what that means. A plot that
+    silently omits an interval is the visual form of the same mistake the
+    result object was built to stop.
 
     Parameters
     ----------
@@ -54,7 +61,7 @@ def plot_pairwise_permutation(
         If rater_names length does not match the number of raters.
     """
     # Lazy import to avoid circular dependency at module level
-    from ..intermediates.analysis_results import PairwisePermutationResult
+    from ..intermediates.results import PairwisePermutationResult
 
     if not isinstance(result, PairwisePermutationResult):
         raise TypeError(
@@ -116,11 +123,14 @@ def plot_pairwise_permutation(
         label=f"Mean = {mean_val:.3f}", zorder=1,
     )
 
-    if result.bootstrap_ci_of_mean is not None:
-        ci_lower, ci_upper = result.bootstrap_ci_of_mean
+    mean_ci = result.bootstrap_ci_of_mean
+    if mean_ci is not None and mean_ci.is_defined:
         ax.axhspan(
-            ci_lower, ci_upper, alpha=0.15, color="steelblue",
-            label=f"Mean 95% CI [{ci_lower:.3f}, {ci_upper:.3f}]",
+            mean_ci.lower, mean_ci.upper, alpha=0.15, color="steelblue",
+            label=(
+                f"Mean {mean_ci.confidence_level:.0%} CI "
+                f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
+            ),
             zorder=0,
         )
 
@@ -152,6 +162,9 @@ def plot_pairwise_permutation(
     # Jitter spread within a column
     jitter_width = 0.15  # total half-width of jitter
 
+    # Set when some pair was bootstrapped but produced no interval
+    any_undefined_ci = False
+
     for rater_idx in all_rater_indices:
         partners = rater_pairs[rater_idx]
         n_pts = len(partners)
@@ -173,11 +186,19 @@ def plot_pairwise_permutation(
             # Style from partner rater
             style = rater_style[partner_idx]
 
-            # Per-pair CI whisker
+            # Per-pair CI whisker. An interval can exist and still have no
+            # bounds -- every draw failed, so no method ran. There is
+            # nothing to draw for one, so the marker carries the news
+            # instead.
+            has_interval = True
             if result.bootstrap_cis_per_pair is not None:
                 pair_ci = result.bootstrap_cis_per_pair.get(pair_key)
                 if pair_ci is not None:
-                    ci_lo, ci_hi = pair_ci
+                    has_interval = pair_ci.is_defined
+                    if not has_interval:
+                        any_undefined_ci = True
+                if pair_ci is not None and has_interval:
+                    ci_lo, ci_hi = pair_ci.lower, pair_ci.upper
                     ax.plot(
                         [x_pos, x_pos], [ci_lo, ci_hi],
                         color="gray", linewidth=1.0, zorder=2,
@@ -193,10 +214,13 @@ def plot_pairwise_permutation(
                         color="gray", linewidth=1.0, zorder=2,
                     )
 
-            # Point — color and marker identify the partner rater
+            # Point — color and marker identify the partner rater, and an
+            # unfilled face says the interval was attempted and came back
+            # undefined.
             ax.plot(
                 x_pos, value,
                 marker=style["marker"], color=style["color"],
+                markerfacecolor=style["color"] if has_interval else "none",
                 markersize=7, linestyle="None",
                 zorder=3,
             )
@@ -241,19 +265,30 @@ def plot_pairwise_permutation(
     if all_values:
         data_min = min(all_values)
         data_max = max(all_values)
-        # Include CI bounds if present
+        # Include CI bounds if present. Undefined intervals are skipped --
+        # min() against a NaN returns whichever argument came first, so one
+        # of them would set the axis limits at random.
         if result.bootstrap_cis_per_pair is not None:
-            for ci_lo, ci_hi in result.bootstrap_cis_per_pair.values():
-                data_min = min(data_min, ci_lo)
-                data_max = max(data_max, ci_hi)
-        if result.bootstrap_ci_of_mean is not None:
-            data_min = min(data_min, result.bootstrap_ci_of_mean[0])
-            data_max = max(data_max, result.bootstrap_ci_of_mean[1])
+            for pair_ci in result.bootstrap_cis_per_pair.values():
+                if pair_ci.is_defined:
+                    data_min = min(data_min, pair_ci.lower)
+                    data_max = max(data_max, pair_ci.upper)
+        if mean_ci is not None and mean_ci.is_defined:
+            data_min = min(data_min, mean_ci.lower)
+            data_max = max(data_max, mean_ci.upper)
         if data_min < 0:
             y_min = data_min - 0.05
         if data_max > 1:
             y_max = data_max + 0.05
     ax.set_ylim(y_min, y_max)
+
+    # Proxy entry so an unfilled marker is readable without the docstring
+    if any_undefined_ci:
+        ax.plot(
+            [], [], marker="o", color="dimgray", markerfacecolor="none",
+            linestyle="None", markersize=7,
+            label="Open marker: no CI (every draw failed)",
+        )
 
     ax.legend(fontsize=8, loc="best")
     ax.grid(axis="y", alpha=0.3)

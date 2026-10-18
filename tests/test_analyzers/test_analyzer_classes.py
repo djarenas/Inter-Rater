@@ -9,6 +9,8 @@ constraints, hypothesis-test guards, and result propagation.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -20,6 +22,44 @@ from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.estimator_parts import NijMatrix
+from interrater.intermediates.results.ci_results import (
+    BootstrapCIResult,
+    ParametricCIResult,
+)
+
+
+def _assert_bootstrap_interval(
+    result, n_resamples: int, method: str = "percentile"
+) -> None:
+    """
+    Assert the interval is a real one, not merely present.
+
+    These smoke tests used to check ``isinstance(ci, tuple)``, which a pair
+    of NaNs passed as happily as a working interval. An interval now states
+    what it is, so the smoke test states what it expects: the method that
+    was asked for, the number of draws it saw, and that bounds exist at all.
+
+    Containment of the point estimate is deliberately not asserted. It is
+    not an invariant -- strong bias correction can legitimately break it --
+    and with n_resamples=10 it would be flaky besides.
+    """
+    ci = result.confidence_interval
+    assert isinstance(ci, BootstrapCIResult)
+    assert ci.method_intended == method
+    assert ci.n_resamples == n_resamples
+    assert 0 <= ci.n_failed <= n_resamples
+    assert ci.is_defined
+    assert ci.lower <= ci.upper
+
+
+def _assert_parametric_interval(result) -> None:
+    """The parametric path returns a different kind of interval entirely."""
+    ci = result.confidence_interval
+    assert isinstance(ci, ParametricCIResult)
+    assert not isinstance(ci, BootstrapCIResult)
+    assert ci.variance_source == "null"
+    assert ci.is_defined
+    assert ci.lower <= ci.upper
 
 
 def _make_ratings(n_raters: int = 3) -> Ratings:
@@ -651,8 +691,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
-        assert len(result.confidence_interval) == 2
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
         assert len(result.bootstrap_distribution) == 10
 
@@ -665,7 +704,7 @@ class TestSmokeEstimates:
         result = a.estimate_from_nij_matrix()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
         assert len(result.bootstrap_distribution) == 10
 
@@ -678,7 +717,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
         assert len(result.bootstrap_distribution) == 10
 
@@ -704,7 +743,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
 
     def test_brennan_prediger_estimate_from_nij_matrix(self):
@@ -733,7 +772,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
 
     def test_krippendorff_estimate_from_nij_matrix(self):
@@ -760,7 +799,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
 
     def test_scott_estimate_from_nij_matrix(self):
@@ -783,7 +822,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
         assert len(result.bootstrap_distribution) == 10
 
@@ -796,7 +835,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
 
     def test_light_estimate(self):
@@ -808,7 +847,7 @@ class TestSmokeEstimates:
         result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
         assert hasattr(result, "n_pairs")
 
@@ -817,12 +856,16 @@ class TestSmokeEstimates:
         from interrater.analyzers.cohen_kappa_analyzer import CohenKappaAnalyzer
         from interrater.analyzers.configs import CohenKappaConfig
 
-        config = CohenKappaConfig(ci_method="parametric_null", random_state=42)
-        a = CohenKappaAnalyzer(_make_ratings(2), config)
-        result = a.estimate()
+        # Two warnings now travel with this path -- the config names the
+        # parameter, the interval names how far off its width is. Both are
+        # asserted properly in TestParametricNullDisclosure below.
+        with pytest.warns(UserWarning):
+            config = CohenKappaConfig(ci_method="parametric_null", random_state=42)
+            a = CohenKappaAnalyzer(_make_ratings(2), config)
+            result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_parametric_interval(result)
         assert result.bootstrap_distribution is None
 
     def test_fleiss_parametric_null_ci(self):
@@ -830,12 +873,16 @@ class TestSmokeEstimates:
         from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
         from interrater.analyzers.configs import FleissKappaConfig
 
-        config = FleissKappaConfig(ci_method="parametric_null", random_state=42)
-        a = FleissKappaAnalyzer(_make_ratings(3), config)
-        result = a.estimate()
+        # Two warnings now travel with this path -- the config names the
+        # parameter, the interval names how far off its width is. Both are
+        # asserted properly in TestParametricNullDisclosure below.
+        with pytest.warns(UserWarning):
+            config = FleissKappaConfig(ci_method="parametric_null", random_state=42)
+            a = FleissKappaAnalyzer(_make_ratings(3), config)
+            result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_parametric_interval(result)
         assert result.bootstrap_distribution is None
 
     def test_scott_parametric_null_ci(self):
@@ -843,12 +890,16 @@ class TestSmokeEstimates:
         from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
         from interrater.analyzers.configs import ScottsConfig
 
-        config = ScottsConfig(ci_method="parametric_null", random_state=42)
-        a = ScottsAnalyzer(_make_ratings(2), config)
-        result = a.estimate()
+        # Two warnings now travel with this path -- the config names the
+        # parameter, the interval names how far off its width is. Both are
+        # asserted properly in TestParametricNullDisclosure below.
+        with pytest.warns(UserWarning):
+            config = ScottsConfig(ci_method="parametric_null", random_state=42)
+            a = ScottsAnalyzer(_make_ratings(2), config)
+            result = a.estimate()
 
         assert isinstance(result.point, float)
-        assert isinstance(result.confidence_interval, tuple)
+        _assert_parametric_interval(result)
         assert result.bootstrap_distribution is None
 
 
@@ -956,9 +1007,135 @@ class TestCiMethodInResult:
         from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
         from interrater.analyzers.configs import FleissKappaConfig
 
-        config = FleissKappaConfig(
-            ci_method="parametric_null", random_state=42
-        )
-        a = FleissKappaAnalyzer(_make_ratings(3), config)
-        result = a.estimate()
+        with pytest.warns(UserWarning):
+            config = FleissKappaConfig(
+                ci_method="parametric_null", random_state=42
+            )
+            a = FleissKappaAnalyzer(_make_ratings(3), config)
+            result = a.estimate()
         assert result.ci_method == "parametric_null"
+
+
+# ------------------------------------------------------------------ #
+# parametric_null: the two disclosure channels                        #
+# ------------------------------------------------------------------ #
+
+
+class TestParametricNullDisclosure:
+    """
+    Choosing parametric_null is disclosed twice, saying different things.
+
+    The method is kept because it reproduces published analyses, and it is
+    wrong for reporting uncertainty: the null variance is the spread of the
+    coefficient at zero, not at the value observed. Keeping a thing that is
+    easy to misuse means the disclosure is load-bearing, so it is tested
+    rather than assumed.
+
+    The two warnings are deliberately different, and must stay different:
+
+    - the **config** warning names the parameter and its alternatives,
+      firing at the moment the caller still knows where the knob is
+    - the **interval** warning names how far off the width is, which only
+      becomes a useful thing to say once a number exists
+
+    If someone later consolidates them into one message, the test below
+    that asserts they differ is what should stop them.
+    """
+
+    def _estimate_with_parametric_ci(self):
+        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        config = FleissKappaConfig(ci_method="parametric_null", random_state=42)
+        return FleissKappaAnalyzer(_make_ratings(3), config).estimate()
+
+    def test_both_channels_fire(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self._estimate_with_parametric_ci()
+
+        sources = [str(w.message).split(":")[0] for w in caught]
+        assert "[AnalyzerConfig] Warning" in sources
+        assert "[ParametricCIResult] Warning" in sources
+
+    def test_the_two_messages_say_different_things(self):
+        """One points at the knob, the other at the magnitude.
+
+        Two identical warnings for one call is how people learn to filter
+        warnings, which would cost us both.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self._estimate_with_parametric_ci()
+
+        by_source = {str(w.message).split(":")[0]: str(w.message) for w in caught}
+        config_msg = by_source["[AnalyzerConfig] Warning"]
+        interval_msg = by_source["[ParametricCIResult] Warning"]
+
+        assert config_msg != interval_msg
+        # The config names the alternatives; the interval does not.
+        assert "percentile" in config_msg and "bca" in config_msg
+        # The interval names the magnitude; the config does not.
+        assert "%" in interval_msg
+        assert "%" not in config_msg
+
+    def test_interval_says_so_when_printed(self):
+        """Channel three: visible to anyone who prints the result.
+
+        A warning reaches whoever runs the analysis. The string reaches
+        whoever reads the output afterwards, which is often not the same
+        person -- and the number is what gets copied into a table.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = self._estimate_with_parametric_ci()
+
+        rendered = str(result)
+        assert "null variance" in rendered
+        assert "kappa = 0" in rendered
+        assert "reproduction only" in rendered
+
+    def test_direct_construction_warns_too(self):
+        """The reproduction recipe is still disclosed.
+
+        A user rebuilding a published interval from variance_functions
+        never touches a config, so the config warning never fires for
+        them. The interval still tells them what they are holding.
+        """
+        from interrater.intermediates.results import ParametricCIResult
+
+        with pytest.warns(UserWarning, match="reproduction of the published"):
+            ci = ParametricCIResult(
+                lower=0.383, upper=0.478, alpha=0.05, variance_source="null",
+            )
+        assert ci.variance_source == "null"
+
+    def test_invalid_interval_raises_before_warning(self):
+        """Validation first, disclosure second.
+
+        An interval that cannot exist should not first be explained.
+        """
+        from interrater.intermediates.results import ParametricCIResult
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(ValueError):
+                ParametricCIResult(
+                    lower=0.9, upper=0.1, alpha=0.05, variance_source="null",
+                )
+
+        assert len(caught) == 0
+
+    def test_bootstrap_path_is_silent(self):
+        """The warnings belong to the method, not to running an analysis."""
+        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = FleissKappaConfig(
+                n_resamples=250, random_state=42, ci_method="percentile",
+            )
+            FleissKappaAnalyzer(_make_ratings(3), config).estimate()
+
+        assert not [w for w in caught if "parametric" in str(w.message).lower()]

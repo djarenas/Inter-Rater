@@ -1,252 +1,398 @@
-# test_example_data/
+# Example Data
 
-Integration tests that run analyzers on the shipped example datasets and assert
-point estimates against the validated reference values in `example_data/README.md`.
+Validation and test datasets for the interrater v2 package.
 
-These sit above the unit test suite: a unit test checks that `FleissKappaAnalyzer`
-handles a 4x3 NijMatrix correctly; an integration test checks that the full
-pipeline -- load file, clean, build Ratings/NijMatrix, configure analyzer,
-estimate -- reproduces a published result end-to-end.
+**All V2 bootstrap results use:** `n_resamples=4000`, `random_state=32`, `ci_method="bca"` unless otherwise noted. These are reference runs, not the settings the test suite uses -- `tests/test_example_data/` runs percentile at B=250 for speed, and asserts point estimates rather than CI bounds.
 
+## Folder layout
 
-## Design decisions
+Every dataset lives in its own folder with the YAML it needs to load. The
+ratings pathway needs three files, the nij pathway needs one.
 
-**Point estimates only (deterministic).** Each test asserts the point estimate
-to 3 decimal places. This is deterministic -- no bootstrap needed, runs in
-milliseconds. CI structure (lower < point < upper, both floats) is checked as
-a sanity guard with `n_resamples=50` to keep runtime low.
+```
+example_data/
+  Fleiss1971/          nij only (the original data is counts)
+  Gwet_example/        both pathways, for cross-validating them against each other
+  Synthetic_2raters/   both pathways
+  SR1_OSF2018/         prelim + main, plus permutation configs
+  SR2_JSRC2019/        ratings
+  SR3_JGIM2019/        ratings
+  SR4_FIS_CVD/         ratings
+  SR5_CocCardio/       ratings
+  Unbalanced_nij/      nij only, the one unbalanced counts matrix
+```
 
-**One conftest, flat test files.** `conftest.py` provides dataset-loading
-fixtures. Each test file covers one logical group (reference data, research
-data, permutations).
+**File conventions.** `.csv` files have a header row; `.txt` files do not.
+That is a property of the file, not of `CleanerConfig.frame_layout.use_column_names`
+-- that flag controls whether DataFrame column labels must match declared
+rater names. The Gwet CSV shows the two are independent: it has headers
+(`Subject,Rater1,Rater2`) and `use_column_names: false`, because its raters
+are positional.
 
-**Tolerance.** `pytest.approx(expected, abs=5e-4)` for 3-decimal-place
-agreement. This is looser than the unit test tolerance (1e-12) because these
-are end-to-end checks, not formula-level assertions.
+## Original Research Data
 
-**No slow marks for now.** Everything uses low `n_resamples`. A future
-`@pytest.mark.slow` tier could run full `n_resamples=4000` assertions against
-the README's CI bounds.
+### SR1_OSF2018/SR1_prelim_data.csv
 
+Preliminary screening data from Systematic Review 1.
 
-## Test matrix
+| Property | Value |
+|---|---|
+| Subjects | 199 |
+| Raters | 4 (rater0, rater1, rater2, rater3) |
+| Categories | 3: -1 (exclude), 0 (uncertain), 1 (include) |
+| Balance | Balanced (all subjects rated by all 4 raters) |
+| Prevalence | Highly skewed toward exclude (~83% of ratings are -1) |
 
-### Coverage goals
+**Validation results (Fleiss' kappa):**
 
-1. All 8 leaf analyzers appear at least once
-2. All 5 systematic review datasets represented
-3. Both data pathways exercised (ratings and nij)
-4. Both balance conditions covered (balanced and unbalanced)
-5. Both pairwise bootstrap methods tested (correlated and independent)
-6. Weighted analysis (linear and quadratic) tested on multiple datasets
-   across both WeightableGroupConfig and WeightableIndividualConfig
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| V1 published (buggy CI) | ~0.49 | [0.32, 0.66] | 0.34 | Wrong CI implementation |
+| V2 parametric null | 0.493 | [0.446, 0.540] | 0.094 | Correct null variance (Fleiss 1979 Eq. 12), but too narrow |
+| V2 bootstrap | 0.493 | [0.380, 0.604] | 0.224 | Empirical bootstrap CI, realistic width |
+| Gwet AC1 | 0.828 | [0.776, 0.871] | 0.095 | BCa bootstrap |
+| Brennan-Prediger | 0.779 | [0.719, 0.832] | 0.113 | BCa bootstrap |
+| Krippendorff's alpha | 0.493 | [0.381, 0.605] | 0.224 | BCa bootstrap, exact formula |
 
-### Analyzer coverage map
+The parametric null CI is ~43% the width of the bootstrap CI, illustrating that Fleiss's null variance underestimates uncertainty around the point estimate. Under heavy prevalence skew (~83% exclude), Fleiss' κ (0.493) is dragged down by inflated marginal-based chance, while B-P (0.779) and AC1 (0.828) remain high. Krippendorff's α (0.493) matches Fleiss κ exactly on this balanced dataset -- the two use different units and chance models but converge when every subject has the same number of raters.
 
-| Analyzer | Unweighted | Weighted | Total |
+---
+
+### SR1_OSF2018/SR1_main_data.txt
+
+Main screening data from Systematic Review 1 (FIS + Psych combined).
+
+| Property | Value |
+|---|---|
+| Subjects | 1617 |
+| Raters | 4 (rater0, rater1, rater2, rater3) |
+| Categories | 3: -1 (exclude), 0 (uncertain), 1 (include) |
+| Format | Tab-separated, no header |
+| Missing marker | `o` (rater did not rate this subject) |
+| Balance | Partially crossed -- each subject rated by exactly 2 of the 4 raters (3 subjects have 3). 50% fill |
+| Prevalence | Highly skewed toward exclude (~90.2% of ratings are -1) |
+| Rater workloads | rater0: 652, rater1: 861, rater2: 860, rater3: 864 |
+
+**Validation results (Fleiss' kappa):**
+
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| V1 published | 0.62 | [0.55, 0.69] | 0.14 | |
+| V2 parametric null | 0.619 | [0.574, 0.663] | 0.089 | Fleiss 1979 Eq. 12, but too narrow |
+| V2 bootstrap | 0.619 | [0.551, 0.681] | 0.130 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.926 | [0.911, 0.939] | 0.028 | BCa bootstrap, approximation (unbalanced) |
+| Brennan-Prediger | 0.898 | [0.879, 0.916] | 0.037 | BCa bootstrap, approximation (unbalanced) |
+| Krippendorff's alpha | 0.618 | [0.552, 0.681] | 0.129 | BCa bootstrap, exact formula (unbalanced data) |
+
+**This is the only shipped dataset where a rater subset's measurable pool and
+its complete cases differ**, and it is what the subset permutation tests exist
+for. A subject contributes to a subset's agreement if at least two of that
+subset's raters rated it; before 2.0.1 the bootstrap used only subjects *all*
+k raters rated. On every other dataset here the two sets are identical, so
+nothing caught it. At k=3 on this one:
+
+| subset | measurable (>=2 of 3) | complete case (all 3) |
+|---|---|---|
+| (0, 1, 2) | 756 | 0 |
+| (0, 1, 3) | 760 | 0 |
+| (0, 2, 3) | 757 | 2 |
+| (1, 2, 3) | 967 | 1 |
+
+Three of the four had nothing to resample at all under the old rule. At k=2
+the two pools coincide on all six pairs, as they must -- "at least two of the
+k" is one rule, and at k=2 it means both.
+
+The parametric null CI is ~67% the width of the bootstrap CI, again illustrating that Fleiss's null variance underestimates uncertainty around the point estimate. Fleiss κ, B-P, and AC1 all use the unbalanced-data approximation on this dataset. Krippendorff's α (0.618) handles the unbalanced data exactly via pair-pooling -- no approximation needed. It is nearly identical to Fleiss κ (0.619) because only 3 of 1617 subjects deviate from 2 raters, so the data is barely unbalanced. Under extreme skew (~90% exclude), Fleiss' κ (0.619) and α (0.618) are much lower than B-P (0.898) and AC1 (0.926).
+
+---
+
+### SR2_JSRC2019/SR2_data.txt
+
+Screening data from Systematic Review 2.
+
+| Property | Value |
+|---|---|
+| Subjects | 81 |
+| Raters | 4 (rater0, rater1, rater2, rater3) |
+| Categories | 3: -1 (exclude), 0 (uncertain), 1 (include) |
+| Format | Tab-separated, no header |
+| Missing marker | `o` (rater did not rate this subject) |
+| Balance | Nearly balanced -- 80 subjects rated by all 4 raters, 1 subject rated by 2 raters |
+| Prevalence | Highly skewed toward exclude (~80.4% of ratings are -1) |
+
+**Validation results (Fleiss' kappa):**
+
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| V1 published | 0.42 | [0.34, 0.52] | 0.18 | |
+| V2 parametric null | 0.431 | [0.344, 0.519] | 0.175 | Fleiss 1979 Eq. 12, but too narrow |
+| V2 bootstrap | 0.431 | [0.278, 0.601] | 0.323 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.782 | [0.698, 0.853] | 0.155 | BCa bootstrap, approximation (unbalanced) |
+| Brennan-Prediger | 0.725 | [0.636, 0.812] | 0.176 | BCa bootstrap, approximation (unbalanced) |
+
+The parametric null CI is ~56% the width of the bootstrap CI. Under skew (~80% exclude), Fleiss' κ (0.431) is much lower than B-P (0.725) and AC1 (0.782).
+
+---
+
+### SR3_JGIM2019/SR_FIS_Psych_data.txt
+
+Full-text screening data from SR1, FIS + Psych databases combined.
+
+| Property | Value |
+|---|---|
+| Subjects | 770 |
+| Raters | 3 (rater0, rater1, rater2) |
+| Categories | 2: -1 (exclude), 1 (include) |
+| Format | Tab-separated, no header |
+| Balance | Balanced (all subjects rated by all 3 raters) |
+| Prevalence | Highly skewed toward exclude (~90.3% of ratings are -1) |
+| Notes | No uncertain (0) ratings -- binary include/exclude only |
+
+**Validation results (Fleiss' kappa):**
+
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| V1 published | 0.68 | [0.63, 0.72] | 0.09 | |
+| V2 parametric null | 0.675 | [0.634, 0.716] | 0.082 | Fleiss 1979 Eq. 12, but too narrow |
+| V2 bootstrap | 0.675 | [0.602, 0.743] | 0.141 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.931 | [0.912, 0.946] | 0.034 | BCa bootstrap |
+| Brennan-Prediger | 0.886 | [0.860, 0.912] | 0.052 | BCa bootstrap |
+
+The parametric null CI is ~60% the width of the bootstrap CI. With binary categories and ~90% exclude, Fleiss' κ (0.675) is again much lower than B-P (0.886) and AC1 (0.931).
+
+---
+
+### SR4_FIS_CVD/SR_FIS_CVD_data.txt
+
+Full-text screening data from SR1, FIS CVD database.
+
+| Property | Value |
+|---|---|
+| Subjects | 787 |
+| Raters | 4 (rater0, rater1, rater2, rater3) |
+| Categories | 2: -1 (exclude), 1 (include) |
+| Format | Tab-separated, no header |
+| Balance | Balanced (all subjects rated by all 4 raters) |
+| Prevalence | Highly skewed toward exclude (~82.1% of ratings are -1) |
+| Notes | No uncertain (0) ratings -- binary include/exclude only |
+
+**Validation results (Fleiss' kappa):**
+
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| V1 published | 0.68 | [0.66, 0.71] | 0.05 | |
+| V2 parametric null | 0.708 | [0.679, 0.737] | 0.058 | Fleiss 1979 Eq. 12, but too narrow |
+| V2 bootstrap | 0.708 | [0.662, 0.751] | 0.089 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.879 | [0.854, 0.900] | 0.046 | BCa bootstrap |
+| Brennan-Prediger | 0.828 | [0.800, 0.856] | 0.056 | BCa bootstrap |
+
+The parametric null CI is ~67% the width of the bootstrap CI. Under ~82% exclude skew, Fleiss' κ (0.708) is lower than B-P (0.828) and AC1 (0.879).
+
+---
+
+### SR5_CocCardio/SR_cocaine_cardio_data.txt
+
+Full-text screening data from SR2, Cocaine-Cardio database.
+
+| Property | Value |
+|---|---|
+| Subjects | 881 |
+| Raters | 3 (rater0, rater1, rater2) |
+| Categories | 2: -1 (exclude), 1 (include) |
+| Format | Tab-separated, no header |
+| Balance | Balanced (all subjects rated by all 3 raters) |
+| Prevalence | Highly skewed toward exclude (~87.7% of ratings are -1) |
+| Notes | No uncertain (0) ratings -- binary include/exclude only |
+
+**Validation results (Fleiss' kappa):**
+
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| V1 published | 0.51 | [0.47, 0.55] | 0.08 | |
+| V2 parametric null | 0.509 | [0.471, 0.547] | 0.076 | Fleiss 1979 Eq. 12, but too narrow |
+| V2 bootstrap | 0.509 | [0.442, 0.576] | 0.134 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.865 | [0.840, 0.887] | 0.047 | BCa bootstrap |
+| Brennan-Prediger | 0.788 | [0.756, 0.820] | 0.064 | BCa bootstrap |
+
+The parametric null CI is ~58% the width of the bootstrap CI. Under ~88% exclude skew, Fleiss' κ (0.509) is much lower than B-P (0.788) and AC1 (0.865).
+
+---
+
+### Fleiss1971/Fleiss1971_psychiatric_data_nij.csv
+
+Nij (counts matrix) format of the classic Fleiss (1971) psychiatric diagnosis dataset.
+
+| Property | Value |
+|---|---|
+| Subjects | 30 |
+| Raters | 6 (psychiatrists) |
+| Categories | 5: Depression, Personality_disorder, Schizophrenia, Neurosis, Other |
+| Format | CSV with header |
+| Columns | (index), Depression, Personality_disorder, Schizophrenia, Neurosis, Other |
+| Row sums | All equal 6 (number of raters) |
+| Source | Fleiss, J. L. (1971). Measuring nominal scale agreement among many raters. *Psychological Bulletin*, 76(5), 378--382. |
+| Notes | Nij format only -- no ratings format (original data is counts, not individual rater assignments) |
+
+**Reference values:**
+
+| Method | kappa | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| Fleiss (1971) original | 0.430 | | | Variance formula in this paper is known to be wrong |
+| V2 parametric null | 0.430 | [0.382, 0.478] | 0.096 | Fleiss 1979 Eq. 12, but too narrow |
+| V2 bootstrap | 0.430 | [0.336, 0.550] | 0.214 | BCa bootstrap (n_bootstrap=4000), realistic width |
+| Gwet AC1 | 0.448 | [0.346, 0.565] | 0.219 | BCa bootstrap (n_bootstrap=4000) |
+| Brennan-Prediger | 0.444 | [0.344, 0.564] | 0.220 | BCa bootstrap (n_bootstrap=4000), Pe = 1/5 = 0.2 |
+
+The parametric null CI is ~45% the width of the bootstrap CI. With 5 categories and no extreme skew toward any single category, all three coefficients are remarkably close: Fleiss κ (0.430), B-P (0.444), and AC1 (0.448) -- the chance terms diverge little when prevalence is spread across categories.
+
+Note: irrCAC's built-in `distrib_6raters()` contains only the first 15 of the 30 subjects (κ = 0.414). This file contains all 30 subjects from the original paper.
+
+---
+
+### Synthetic_2raters/synthetic_2raters_data.txt
+
+Synthetic dataset for testing 2-rater agreement coefficients.
+
+| Property | Value |
+|---|---|
+| Subjects | 100 |
+| Raters | 2 (rater0, rater1) |
+| Categories | 3: -1 (exclude), 0 (uncertain), 1 (include) |
+| Format | Tab-separated, no header |
+| Balance | Balanced (all subjects rated by both raters) |
+| Prevalence | Moderate: 1 (include) ~48.0%, -1 (exclude) ~36.5%, 0 (uncertain) ~15.5% |
+| Notes | Synthetic data -- not from a real study |
+
+**Validation results (V2):**
+
+| Coefficient | Method | Value | 95% CI | CI Width |
+|---|---|---|---|---|
+| Cohen's kappa | bootstrap | 0.641 | [0.507, 0.767] | 0.260 |
+| Fleiss' kappa | parametric null | 0.641 | [0.493, 0.788] | 0.295 |
+| Fleiss' kappa | bootstrap | 0.641 | [0.507, 0.767] | 0.260 |
+| Scott's pi | parametric null | 0.641 | [0.493, 0.788] | 0.295 |
+| Scott's pi | bootstrap | 0.641 | [0.507, 0.767] | 0.260 |
+| Gwet AC1 (ratings) | bootstrap | 0.683 | [0.562, 0.800] | 0.238 |
+| Gwet AC1 (nij) | bootstrap | 0.683 | [0.553, 0.791] | 0.238 |
+| Brennan-Prediger | bootstrap | 0.670 | [0.565, 0.805] | 0.240 |
+
+Cohen's κ (0.641) matches Fleiss' κ and Scott's π to 3 decimal places on this balanced 2-rater data -- the individual marginals (p_a = [0.36, 0.15, 0.49], p_b = [0.37, 0.16, 0.47]) are close enough that Pe_Cohen ≈ Pe_Fleiss, so the coefficients converge. They differ at the 4th decimal place. Fleiss' kappa and Scott's pi are identical for balanced 2-rater data, as expected. With only 2 raters, the parametric null CI is actually *wider* than the bootstrap CI here -- the opposite of the pattern seen with more raters. Gwet AC1 from both pathways (ratings and nij matrix) gives the same point estimate; the slight CI difference is expected from bootstrap resampling. With moderate prevalence (no extreme skew), all four chance-corrected coefficients are close: Cohen κ / Fleiss κ (0.641), B-P (0.670), and AC1 (0.683).
+
+---
+
+## Gwet Handbook Data
+
+Source: Gwet, K. L. (2014). *Handbook of Inter-Rater Reliability* (4th ed.). Advanced Analytics, LLC.
+
+These datasets are provided in two formats to validate both analyzer pathways:
+the ratings format (subject x rater) for `estimate()`, and the nij format
+(subject x category counts) for `estimate_from_nij_matrix()`.
+
+### Gwet_example/gwet_cont3x3_data.csv
+
+Ratings format of the cont3x3abstractors dataset.
+
+| Property | Value |
+|---|---|
+| Subjects | 100 |
+| Raters | 2 (Rater1, Rater2) |
+| Categories | 3: Ectopic, AIU, NIU |
+| Balance | Balanced (all subjects rated by both raters) |
+| Source table | Gwet Handbook Table 4.1 (cont3x3abstractors) |
+| Domain | Emergency room pregnancy classification |
+
+### Gwet_example/gwet_cont3x3_data_nij.csv
+
+Nij (counts matrix) format of the same dataset.
+
+| Property | Value |
+|---|---|
+| Subjects | 100 |
+| Columns | Subject, Ectopic, AIU, NIU |
+| Row sums | All equal 2 (number of raters) |
+
+**Original contingency table:**
+
+|  | Ectopic | AIU | NIU |
 |---|---|---|---|
-| FleissKappaAnalyzer | Fleiss 1971, SR1 prelim, SR1 main | SR1 prelim (quadratic) | 4 |
-| GwetAC1Analyzer | Fleiss 1971, SR2, SR4 | — (not weightable) | 3 |
-| BrennanPredigerAnalyzer | Fleiss 1971, SR3, SR5 | Synthetic 2-rater (linear) | 4 |
-| KrippendorffAlphaAnalyzer | Gwet cont3x3, SR1 main | SR1 prelim (linear) | 3 |
-| CohenKappaAnalyzer | Gwet cont3x3, Synthetic 2-rater | Gwet cont3x3 (quadratic) | 3 |
-| ScottsAnalyzer | Synthetic 2-rater | — (not weightable) | 1 |
-| CongerKappaAnalyzer | SR1 prelim | — (not weightable) | 1 |
-| LightKappaAnalyzer | SR1 prelim | — (not weightable) | 1 |
-| PairwisePermutationAnalysis | SR1 prelim (corr. + indep.) | — | 2 |
+| Ectopic | 13 | 0 | 0 |
+| AIU | 0 | 20 | 7 |
+| NIU | 0 | 4 | 56 |
 
+**Reference values (irrCAC, asymptotic CI):**
 
-## Files
+| Coefficient | Value | 95% CI | Pa | Pe |
+|---|---|---|---|---|
+| Gwet AC1 | 0.84933 | [0.764, 0.935] | 0.890 | 0.270 |
+| Cohen kappa | 0.79641 | | | |
+| Scott pi | 0.79624 | | | |
+| Brennan-Prediger | 0.83500 | | | |
 
-| File | What it tests | Tests |
-|------|---------------|-------|
-| test_reference_data.py | Datasets with published reference values (textbook / external validation) | ~8 |
-| test_research_data.py | Original systematic review datasets (internal validation against README) | ~9 |
-| test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches | ~4 |
-| test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | ~4 |
-| conftest.py | Dataset-loading fixtures, shared analyzer config builder | -- |
+**V2 results (bootstrap CI):**
 
+| Coefficient | Value | 95% CI | CI Width | Notes |
+|---|---|---|---|---|
+| Cohen's kappa | 0.796 | [0.669, 0.895] | 0.226 | BCa bootstrap (n_bootstrap=4000) |
+| Gwet AC1 | 0.849 | [0.754, 0.919] | 0.165 | BCa bootstrap (n_bootstrap=4000) |
+| Fleiss' kappa | 0.796 | [0.669, 0.895] | 0.226 | BCa bootstrap (n_bootstrap=4000) |
+| Scott's pi | 0.796 | [0.669, 0.895] | 0.226 | BCa bootstrap (n_bootstrap=4000) |
+| Brennan-Prediger | 0.835 | [0.745, 0.925] | 0.180 | BCa bootstrap (n_bootstrap=4000) |
+| Krippendorff's alpha | 0.797 | [0.670, 0.896] | 0.226 | BCa bootstrap (n_bootstrap=4000), exact formula |
 
-## test_reference_data.py (~9 tests)
+V2 point estimates match irrCAC: Cohen κ 0.796 vs 0.79641, AC1 0.849 vs 0.84933, Fleiss κ 0.796 vs Scott π 0.79624 (equivalent for 2 balanced raters), B-P 0.835 vs 0.83500. Cohen's κ (0.796) matches Fleiss' κ (0.796) to 3 decimal places -- on this 2-rater data the individual marginals are close, so Pe_Cohen ≈ Pe_Fleiss. Krippendorff's α (0.797) is nearly identical to Fleiss κ (0.796) on this balanced 2-rater data, as expected -- the two use different units and chance models but converge when every subject has the same number of raters and the dataset is large enough. The irrCAC asymptotic CI [0.764, 0.935] (width 0.171) is close to the V2 bootstrap CI [0.754, 0.919] (width 0.165) for AC1.
 
-Tests against datasets with externally published reference values.
+---
 
-### Fleiss 1971 (nij pathway, 6 raters, 5 categories, balanced)
+## Alternate-format and derived files
 
-| Test | Analyzer | Expected | Source |
-|------|----------|----------|--------|
-| test_fleiss_kappa | FleissKappaAnalyzer | 0.430 | Fleiss (1971) original |
-| test_gwet_ac1 | GwetAC1Analyzer | 0.448 | V2 validated |
-| test_brennan_prediger | BrennanPredigerAnalyzer | 0.444 | V2 validated, Pe = 1/5 |
+Datasets above that ship in a second format, plus one derived file. These
+exist so the two analyzer pathways can be validated against each other: the
+same data through `estimate()` and `estimate_from_nij_matrix()` must give the
+same point estimate.
 
-### Gwet cont3x3 (ratings + nij pathways, 2 raters, 3 categories, balanced)
+### Fleiss1971/Fleiss1971_psychiatric_data_nij.txt
 
-| Test | Analyzer | Expected | Source |
-|------|----------|----------|--------|
-| test_cohen_kappa_ratings | CohenKappaAnalyzer | 0.796 | irrCAC: 0.79641 |
-| test_gwet_ac1_ratings | GwetAC1Analyzer | 0.849 | irrCAC: 0.84933 |
-| test_krippendorff_alpha_nij | KrippendorffAlphaAnalyzer | 0.797 | V2 validated |
+Tab-separated twin of the CSV, with a header row and no subject-ID column.
+Same 30 x 5 counts. The CSV is what the tests load.
 
-### Synthetic 2-rater (ratings pathway, 2 raters, 3 categories, balanced)
+### Synthetic_2raters/synthetic_2raters_data_nij.csv
 
-| Test | Analyzer | Expected | Source |
-|------|----------|----------|--------|
-| test_cohen_kappa | CohenKappaAnalyzer | 0.641 | V2 validated |
-| test_scotts_pi | ScottsAnalyzer | 0.641 | V2 validated, = Fleiss at n=2 |
+Nij form of the synthetic 2-rater data: 100 subjects x 3 categories, all row
+sums 2. Columns are `0, 1, 2` -- category *indices*, not the `-1 / 0 / 1`
+labels of the ratings file.
 
+### SR1_OSF2018/SR1_prelim_data_with_consensus.csv
 
-## test_research_data.py (~9 tests)
+SR1 prelim plus a sixth column, `consensus`, holding the adjudicated decision
+for each subject. Columns: `(internal) id, rater0..rater3, consensus`.
 
-Tests against the original systematic review datasets. Each SR gets one
-coefficient chosen to exercise a different analyzer and avoid redundancy.
+Not used by any test, and not an agreement dataset as it stands -- consensus
+is an outcome, not a fifth rater, and treating it as one would double-count
+the raters that produced it. It is here for work on how agreement relates to
+the decision finally reached.
 
-### SR1 prelim (ratings, 4 raters, K=3, balanced, ~83% skew)
+---
 
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_fleiss_kappa | FleissKappaAnalyzer | 0.493 | Group coefficient on balanced |
-| test_conger_kappa | CongerKappaAnalyzer | 0.496* | Individual marginals, multi-rater |
-| test_light_kappa | LightKappaAnalyzer | 0.496* | n_pairs = C(4,2) = 6 |
+## Unbalanced_nij/unbalanced_data_nij.txt
 
-*Conger and Light values are the pairwise mean from the README (0.496). The
-group-level Conger/Light estimates on the full 4-rater data need to be
-established -- these may differ slightly from the pairwise mean. The test
-will establish the reference value on first run.
+Synthetic unbalanced counts matrix. The only dataset here where an nij row
+sum varies.
 
-### SR1 main (ratings, 4 raters, K=3, unbalanced, ~90% skew)
+| Property | Value |
+|---|---|
+| Subjects | 50 |
+| Categories | 3 |
+| Format | Tab-separated, no header |
+| Row sums | 2, 3 or 4 -- subjects rated by different numbers of raters |
+| Balance | Unbalanced |
+| Notes | Synthetic -- not from a real study |
 
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_fleiss_kappa | FleissKappaAnalyzer | 0.619 | Unbalanced approximation |
-| test_krippendorff_alpha | KrippendorffAlphaAnalyzer | 0.618 | Exact on unbalanced |
+**No reference values yet.** This dataset has no published or internally
+validated coefficient values, and no test uses it. The `unbalanced_nij`
+fixture in `tests/test_example_data/conftest.py` loads it and nothing
+consumes the fixture.
 
-### SR2 (ratings, 4 raters, K=3, nearly balanced 80/81)
-
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_gwet_ac1 | GwetAC1Analyzer | 0.782 | AC1 on near-balanced, 3 categories |
-
-### SR3 FIS Psych (ratings, 3 raters, K=2, balanced, ~90% skew)
-
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_brennan_prediger | BrennanPredigerAnalyzer | 0.886 | B-P on binary, 3 raters |
-
-### SR4 FIS CVD (ratings, 4 raters, K=2, balanced, ~82% skew)
-
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_gwet_ac1 | GwetAC1Analyzer | 0.879 | AC1 on binary, 4 raters |
-
-### SR5 Cocaine Cardio (ratings, 3 raters, K=2, balanced, ~88% skew)
-
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_brennan_prediger | BrennanPredigerAnalyzer | 0.788 | B-P on binary, 3 raters |
-
-
-## test_pairwise_permutation.py (~4 tests)
-
-Pairwise permutation analysis on SR1 prelim (4 raters, balanced).
-Tests both bootstrap methods to verify the CI width relationship.
-
-### SR1 prelim pairwise (C(4,2) = 6 pairs)
-
-| Test | Coefficient | Bootstrap | Mean | CI | Notes |
-|------|-------------|-----------|------|-----|-------|
-| test_cohen_correlated | Cohen κ | correlated | 0.496 | ~[0.382, 0.605] | Correct uncertainty |
-| test_cohen_independent | Cohen κ | independent | 0.496 | ~[0.436, 0.555] | ~53% width of correlated |
-| test_correlated_wider_than_independent | -- | -- | -- | -- | Structural: correlated CI width > independent CI width |
-| test_n_pairs | -- | -- | -- | -- | Result has n_pairs = 6 |
-
-
-## test_weighted.py (~4 tests)
-
-Weighted analysis across multiple datasets. Tests that distance-based weighting
-changes the point estimate (weighted != unweighted) and exercises both
-WeightableGroupConfig (Fleiss, B-P, Krippendorff) and WeightableIndividualConfig
-(Cohen).
-
-Weights only matter when K >= 3 -- with binary categories, linear and quadratic
-collapse to identity (there is only one distance). All datasets below have K=3.
-
-### SR1 prelim (ratings, 4 raters, K=3, balanced, ordinal -1/0/1)
-
-| Test | Analyzer | Weights | Expected | Notes |
-|------|----------|---------|----------|-------|
-| test_fleiss_kappa_quadratic | FleissKappaAnalyzer | quadratic | TBD | -1/0 closer than -1/1; WeightableGroupConfig |
-| test_krippendorff_alpha_linear | KrippendorffAlphaAnalyzer | linear | TBD | Different weight type on same data |
-
-### Gwet cont3x3 (ratings, 2 raters, K=3, balanced)
-
-| Test | Analyzer | Weights | Expected | Notes |
-|------|----------|---------|----------|-------|
-| test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | TBD | WeightableIndividualConfig; irrCAC cross-check possible |
-
-### Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal -1/0/1)
-
-| Test | Analyzer | Weights | Expected | Notes |
-|------|----------|---------|----------|-------|
-| test_brennan_prediger_linear | BrennanPredigerAnalyzer | linear | TBD | Second WeightableGroup analyzer with weights |
-
-*All weighted expected values are TBD -- no reference values in example_data/README.md
-yet. The first run will establish them, and they should be added to both
-example_data/README.md and this file. For Gwet cont3x3 weighted Cohen, irrCAC
-may provide an external cross-check.*
-
-### Structural assertions (all weighted tests)
-
-Each weighted test also checks:
-- `result.point != unweighted_point` (weights changed the estimate)
-- CI structure (lower < point < upper)
-- `result.weights_type` matches the requested type
-
-
-## Unbalanced nij (nij pathway, variable raters, K=3, unbalanced)
-
-*Note: This dataset has no reference values in the README yet. The first run
-will establish them. Once established, the values should be added to both
-example_data/README.md and this file.*
-
-| Test | Analyzer | Expected | Notes |
-|------|----------|----------|-------|
-| test_fleiss_kappa | FleissKappaAnalyzer | TBD | Unbalanced nij pathway |
-| test_gwet_ac1 | GwetAC1Analyzer | TBD | Unbalanced nij pathway |
-
-
-## conftest.py
-
-### Fixtures
-
-| Fixture | Scope | What it provides |
-|---------|-------|------------------|
-| fleiss1971_nij | module | NijMatrix from Fleiss1971_psychiatric_data_nij.csv |
-| gwet_ratings | module | Ratings from gwet_cont3x3_data.csv (via cleaner) |
-| gwet_nij | module | NijMatrix from gwet_cont3x3_data_nij.csv |
-| synthetic_ratings | module | Ratings from synthetic_2raters_data.txt (via cleaner) |
-| sr1_prelim_ratings | module | Ratings from SR1_prelim_data.csv (via cleaner) |
-| sr1_main_ratings | module | Ratings from SR1_main_data.txt (via cleaner) |
-| sr2_ratings | module | Ratings from SR2_data.txt (via cleaner) |
-| sr3_ratings | module | Ratings from SR_FIS_Psych_data.txt (via cleaner) |
-| sr4_ratings | module | Ratings from SR_FIS_CVD_data.txt (via cleaner) |
-| sr5_ratings | module | Ratings from SR_cocaine_cardio_data.txt (via cleaner) |
-| unbalanced_nij | module | NijMatrix from unbalanced_data_nij.txt |
-| fast_config | session | AnalyzerConfig factory with n_resamples=50 |
-
-
-## Datasets used
-
-| Dataset | Source | Format | Raters | K | Balance | Tests |
-|---------|--------|--------|--------|---|---------|-------|
-| Fleiss 1971 | Fleiss (1971) | nij (csv) | 6 | 5 | Balanced | 3 |
-| Gwet cont3x3 | Gwet (2014) Table 4.1 | ratings (csv) + nij (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
-| Synthetic 2-rater | Synthetic | ratings (txt) | 2 | 3 | Balanced | 2 + 1 weighted |
-| SR1 prelim | OSF 2018 | ratings (csv) | 4 | 3 | Balanced | 3 + 2 weighted + 4 pairwise |
-| SR1 main | OSF 2018 | ratings (txt) | 4 | 3 | Unbalanced | 2 |
-| SR2 | JSRC 2019 | ratings (txt) | 4 | 3 | Nearly balanced | 1 |
-| SR3 FIS Psych | JGIM 2019 | ratings (txt) | 3 | 2 | Balanced | 1 |
-| SR4 FIS CVD | -- | ratings (txt) | 4 | 2 | Balanced | 1 |
-| SR5 CocCardio | -- | ratings (txt) | 3 | 2 | Balanced | 1 |
-| Unbalanced nij | Synthetic | nij (txt) | variable | 3 | Unbalanced | 2 |
-
-**Total: ~28 tests** (8 reference + 9 research + 4 weighted + 4 pairwise + 2 unbalanced + 1 structural)
+It covers a real gap -- the nij pathway on unbalanced data, where Fleiss, B-P
+and AC1 all fall back to an approximation and Krippendorff does not. Closing
+it means establishing reference values first, which for synthetic data means
+deciding what they should be validated *against*.

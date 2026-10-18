@@ -252,3 +252,79 @@ def subject_bootstrap_from_nij_matrix(
         resampled_indices = rng.choice(n_subjects, size=n_subjects, replace=True)
         # Yield the resampled nij_matrix (rows in new order)
         yield nij_matrix[resampled_indices]
+
+
+def subject_jackknife_from_nij_matrix(nij_matrix: np.ndarray) -> Iterator[np.ndarray]:
+    """
+    Leave-one-subject-out over a counts matrix: yield it with each row removed.
+
+    The nij counterpart of :func:`subject_jackknife`. A row of an nij_matrix is
+    a subject, so leaving one out is the same operation here as it is on a
+    ratings array -- rater identity is already gone, and this does not need it.
+
+    BCa's acceleration is computed from values like these. It measures how much
+    each individual subject moves the coefficient, which is a property of the
+    data and cannot be recovered from a bootstrap distribution.
+
+    Parameters
+    ----------
+    nij_matrix : np.ndarray
+        Shape (n_subjects, n_categories), dtype int. Entry (i, j) is how many
+        raters assigned category j to subject i.
+
+    Yields
+    ------
+    np.ndarray
+        Each iteration yields the matrix with one subject removed. Shape is
+        (n_subjects - 1, n_categories).
+
+    Raises
+    ------
+    TypeError
+        If nij_matrix is not np.ndarray.
+    ValueError
+        If nij_matrix is not 2D or has fewer than 2 subjects.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> nij = np.array([[2, 0], [1, 1], [0, 2]], dtype=np.int64)
+    >>> for i, draw in enumerate(subject_jackknife_from_nij_matrix(nij)):
+    ...     print(f"Omit subject {i}: shape {draw.shape}")
+    Omit subject 0: shape (2, 2)
+    Omit subject 1: shape (2, 2)
+    Omit subject 2: shape (2, 2)
+
+    References
+    ----------
+    Efron, B., & Tibshirani, R. 1986. "Bootstrap Methods for Standard Errors,
+    Confidence Intervals, and Other Measures of Statistical Accuracy."
+    *Statistical Science*, 1(1), 54-77. Equation (8.5), p. 71.
+    """
+    # Type checks
+    if not isinstance(nij_matrix, np.ndarray):
+        raise TypeError(
+            f"{_ERROR_PREFIX}: nij_matrix must be np.ndarray, "
+            f"got {type(nij_matrix).__name__}"
+        )
+
+    # Value checks
+    if nij_matrix.ndim != 2:
+        raise ValueError(
+            f"{_ERROR_PREFIX}: nij_matrix must be 2D, got {nij_matrix.ndim}D"
+        )
+    if nij_matrix.shape[0] < 2:
+        raise ValueError(
+            f"{_ERROR_PREFIX}: subject_jackknife_from_nij_matrix requires >= 2 "
+            f"subjects, got {nij_matrix.shape[0]}"
+        )
+
+    n_subjects = nij_matrix.shape[0]
+
+    for omit_idx in range(n_subjects):
+        # Keep all subjects except omit_idx
+        keep_idx = np.concatenate([
+            np.arange(0, omit_idx),
+            np.arange(omit_idx + 1, n_subjects)
+        ])
+        yield nij_matrix[keep_idx]

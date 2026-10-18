@@ -90,6 +90,13 @@ class ScottsConfig(NoWeightGroupConfig):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        # Scott's pi equals Fleiss' kappa at two raters, so it inherits the
+        # same closed-form null variance and the same caveat about using it
+        # for an interval. Called last, and from here rather than from the
+        # base class -- see AnalyzerConfig._warn_parametric_null.
+        if self.ci_method == "parametric_null":
+            self._warn_parametric_null()
+
     # Public API ------------------------------------------------------------- #
 
     def summary(self) -> dict:

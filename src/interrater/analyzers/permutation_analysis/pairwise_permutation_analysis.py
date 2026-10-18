@@ -20,14 +20,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...contracts import EMPTY
-from ...intermediates.analysis_results.pairwise_permutation_result import (
+from ...intermediates.results.permutation_results.pairwise_permutation_result import (
     MAX_PAIRS_FOR_DISTRIBUTIONS,
 )
+from ...intermediates.results.ci_results import BootstrapCIResult
 from .permutation_analysis import PermutationAnalysis
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
-    from ...intermediates.analysis_results.pairwise_permutation_result import (
+    from ...intermediates.results.permutation_results.pairwise_permutation_result import (
         PairwisePermutationResult,
     )
     from ..configs.pairwise_permutation_config import PairwisePermutationConfig
@@ -102,7 +103,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             Observed values, optional per-pair bootstrap, optional mean
             bootstrap.
         """
-        from ...intermediates.analysis_results.pairwise_permutation_result import (
+        from ...intermediates.results.permutation_results.pairwise_permutation_result import (
             PairwisePermutationResult,
         )
 
@@ -246,8 +247,20 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             shared = np.flatnonzero(present[:, 0] & present[:, 1])
 
             if shared.size < 2:
+                # Two raters with fewer than two subjects in common have no
+                # coefficient to resample. Every draw fails, so no method
+                # runs -- which the result states rather than implying with
+                # a pair of NaNs.
                 distributions[pair] = np.full(n_resamples, np.nan)
-                cis[pair] = (float("nan"), float("nan"))
+                cis[pair] = BootstrapCIResult(
+                    lower=float("nan"),
+                    upper=float("nan"),
+                    alpha=alpha,
+                    n_resamples=n_resamples,
+                    n_failed=n_resamples,
+                    method_intended=ci_method,
+                    method_used=None,
+                )
                 continue
 
             # Bootstrap loop: resample shared subjects with replacement
@@ -262,7 +275,20 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
             distributions[pair] = draws
             point = pairwise_values[pair]
-            cis[pair] = self._compute_ci(draws, point, ci_method, alpha)
+
+            # The jackknife leaves out the subjects this pair was computed
+            # from -- `shared`, not every subject. A subject the pair never
+            # rated cannot influence the pair's coefficient, so including it
+            # would contribute a deviation representing no influence at all.
+            def _jackknife(pd=pair_data, sh=shared) -> np.ndarray:
+                return np.array([
+                    self.estimator(pd.take_subjects(np.delete(sh, i)))
+                    for i in range(sh.size)
+                ], dtype=np.float64)
+
+            cis[pair] = self._compute_ci(
+                draws, point, ci_method, alpha, jackknife_fn=_jackknife
+            )
 
         return distributions, cis
 
@@ -321,14 +347,60 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 f"'independent'."
             )
 
+        # Only the correlated mean has a jackknife. It resamples subjects, so
+        # leaving one subject out is meaningful. The independent mean
+        # resamples from the per-pair distributions and never touches a
+        # subject, so there is nothing to leave out.
+        jackknife_fn = (
+            self._mean_jackknife_correlated
+            if bmc.method == "correlated" else None
+        )
+
         mean_ci = self._compute_ci(
             mean_distribution,
             mean_over_pairs,
             bmc.ci_method,
             bmc.alpha,
+            jackknife_fn=jackknife_fn,
         )
 
         return mean_distribution, mean_ci
+
+    def _mean_jackknife_correlated(self) -> np.ndarray:
+        """
+        Leave-one-subject-out means, for the correlated mean's acceleration.
+
+        The counterpart of ``_mean_bootstrap_correlated``: that one resamples
+        all subjects with replacement and averages every pair's coefficient
+        on each draw, so this one drops a single subject and does the same.
+        The unit left out matches the unit resampled, which is what makes the
+        acceleration describe the right quantity.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (n_subjects,). NaN entries mark subsets whose mean was
+            undefined.
+        """
+        from ..agreement_functions.rater_combinations import (
+            mean_over_subsets,
+            over_pairs,
+        )
+
+        n_subjects = self.estimator_input.n_subjects
+        all_rows = np.arange(n_subjects)
+
+        return np.array([
+            mean_over_subsets(
+                over_pairs(
+                    self.estimator_input.take_subjects(
+                        np.delete(all_rows, i)
+                    ),
+                    self.estimator,
+                )
+            )
+            for i in range(n_subjects)
+        ], dtype=np.float64)
 
     def _mean_bootstrap_correlated(
         self,

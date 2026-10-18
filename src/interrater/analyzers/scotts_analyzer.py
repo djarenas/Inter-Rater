@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
@@ -10,13 +10,17 @@ from .group_analyzer import GroupAnalyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.analysis_results import ScottsPiResult, HypothesisTestResult
+    from ..intermediates.results import ScottsPiResult, HypothesisTestResult
     from .configs import ScottsConfig
     from ..intermediates.data_profiles.balance_profile import BalanceProfile
 
 from ..intermediates.estimator_parts import NijMatrix
 from .agreement_functions.group_agreement import scotts_pi
-from .ci_methods import percentile_ci, bca_ci, scipy_bca_ci
+from .ci_methods import percentile_ci, bca_ci
+from ..intermediates.results.ci_results import (
+    BootstrapCIResult,
+    ParametricCIResult,
+)
 from ..array_utils import category_counts
 
 _ERROR_PREFIX = "[ScottsAnalyzer] Error"
@@ -157,7 +161,7 @@ class ScottsAnalyzer(GroupAnalyzer):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self, use_scipy_bca: bool = False) -> ScottsPiResult:
+    def estimate(self) -> ScottsPiResult:
         """
         Compute Scott's pi and return the result.
 
@@ -165,18 +169,11 @@ class ScottsAnalyzer(GroupAnalyzer):
         When ci_method is "parametric_null", uses Fleiss (1979) null variance
         -- no bootstrap is performed and bootstrap_distribution is None.
 
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa
-            computation (for testing/validation only).
-
         Returns
         -------
         ScottsPiResult
         """
-        from .resampling_functions.subject_resampling import subject_bootstrap
-        from ..intermediates.analysis_results import ScottsPiResult
+        from ..intermediates.results import ScottsPiResult
 
         # Guard: ratings must be available for this path
         if self.ratings is None:
@@ -191,35 +188,22 @@ class ScottsAnalyzer(GroupAnalyzer):
                 f"{_ERROR_PREFIX}: convergence_test not yet implemented"
             )
 
-        # Get number of categories
-        n_categories = self.ratings.semantics.n_categories
-
         # Compute point estimate from original data
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        nij = NijMatrix(matrix=nij_array)
-        point = scotts_pi(nij, weights=None)
+        nij_array = category_counts(
+            self.ratings.category_index, self._n_categories()
+        )
+        point = self._estimate_from_nij(nij_array)
 
         # CI path depends on ci_method
         if self.config.ci_method == "parametric_null":
-            pj = self._compute_pj(nij)
+            pj = self._compute_pj(NijMatrix(matrix=nij_array))
             ci = self._parametric_null_ci(point, pj)
             bootstrap_distribution = None
         else:
-            # Bootstrap CI
-            bootstrap_values = []
-
-            for resampled_array in subject_bootstrap(
-                self.ratings.category_index,
-                n_resamples=self.config.n_resamples,
-                random_state=self.config.random_state,
-            ):
-                nij_array_resamp = category_counts(resampled_array, n_categories)
-                nij_resampled = NijMatrix(matrix=nij_array_resamp)
-                pi_resample = scotts_pi(nij_resampled, weights=None)
-                bootstrap_values.append(pi_resample)
-
-            bootstrap_distribution = np.array(bootstrap_values)
-            ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+            bootstrap_distribution = self._bootstrap_distribution()
+            ci = self._compute_ci(
+                bootstrap_distribution, point, self._jackknife_estimates
+            )
 
         return ScottsPiResult(
             point=point,
@@ -229,21 +213,16 @@ class ScottsAnalyzer(GroupAnalyzer):
             ci_method=self.config.ci_method
         )
 
-    def estimate_from_nij_matrix(self, use_scipy_bca: bool = False) -> ScottsPiResult:
+    def estimate_from_nij_matrix(self) -> ScottsPiResult:
         """
         Compute Scott's pi from nij_matrix (NijMatrix-based path).
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa.
 
         Returns
         -------
         ScottsPiResult
         """
         from .resampling_functions import subject_bootstrap_from_nij_matrix
-        from ..intermediates.analysis_results import ScottsPiResult
+        from ..intermediates.results import ScottsPiResult
 
         # Guard: nij_matrix must be available for this path
         if self.nij_matrix is None:
@@ -259,7 +238,7 @@ class ScottsAnalyzer(GroupAnalyzer):
             )
 
         # Compute point estimate from original nij_matrix
-        point = scotts_pi(self.nij_matrix, weights=None)
+        point = self._estimate_from_nij(self.nij_matrix.matrix)
 
         # CI path depends on ci_method
         if self.config.ci_method == "parametric_null":
@@ -267,20 +246,15 @@ class ScottsAnalyzer(GroupAnalyzer):
             ci = self._parametric_null_ci(point, pj)
             bootstrap_distribution = None
         else:
-            # Bootstrap CI
-            bootstrap_values = []
-
-            for resampled_nij_array in subject_bootstrap_from_nij_matrix(
-                self.nij_matrix.matrix,
-                n_resamples=self.config.n_resamples,
-                random_state=self.config.random_state,
-            ):
-                nij_resampled = NijMatrix(matrix=resampled_nij_array)
-                pi_resample = scotts_pi(nij_resampled, weights=None)
-                bootstrap_values.append(pi_resample)
-
-            bootstrap_distribution = np.array(bootstrap_values)
-            ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+            nij_array = self.nij_matrix.matrix
+            bootstrap_distribution = self._bootstrap_distribution_from_nij(
+                nij_array
+            )
+            ci = self._compute_ci(
+                bootstrap_distribution,
+                point,
+                lambda: self._jackknife_estimates_from_nij(nij_array),
+            )
 
         return ScottsPiResult(
             point=point,
@@ -303,7 +277,7 @@ class ScottsAnalyzer(GroupAnalyzer):
         HypothesisTestResult
         """
         from scipy import stats
-        from ..intermediates.analysis_results import HypothesisTestResult
+        from ..intermediates.results import HypothesisTestResult
 
         # Guard: hypothesis_test_config must be set
         if self.config.hypothesis_test_config is None:
@@ -451,6 +425,16 @@ class ScottsAnalyzer(GroupAnalyzer):
         proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
         return np.mean(proportions_per_subject, axis=0)
 
+    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+        """
+        Scott's pi from a counts matrix.
+
+        The only coefficient-specific step in my resampling. Everything that
+        draws samples -- bootstrap or jackknife, from ratings or from counts
+        -- is written once on my base classes in terms of this.
+        """
+        return scotts_pi(NijMatrix(matrix=nij_array), weights=None)
+
     def _parametric_null_ci(
         self, point: float, pj: np.ndarray
     ) -> tuple[float, float]:
@@ -466,22 +450,36 @@ class ScottsAnalyzer(GroupAnalyzer):
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
-        return (point - z_crit * se_null, point + z_crit * se_null)
+        return ParametricCIResult(
+            lower=point - z_crit * se_null,
+            upper=point + z_crit * se_null,
+            alpha=self.config.alpha,
+            variance_source="null",
+        )
 
     def _compute_ci(
         self,
         bootstrap_distribution: np.ndarray,
         point: float,
-        use_scipy_bca: bool = False,
-    ) -> tuple[float, float]:
-        """Compute CI from bootstrap distribution."""
+        jackknife_fn: Callable[[], np.ndarray],
+    ) -> BootstrapCIResult:
+        """
+        Compute CI from bootstrap distribution.
+
+        ``jackknife_fn`` is a callable rather than an array because only BCa
+        needs leave-one-out estimates, and producing them costs one
+        coefficient evaluation per subject. I am the only place that knows
+        which methods need them, so I am the only place that pays for them.
+        """
         if self.config.ci_method == "percentile":
             return percentile_ci(bootstrap_distribution, self.config.alpha)
         elif self.config.ci_method == "bca":
-            if use_scipy_bca:
-                return scipy_bca_ci(bootstrap_distribution, point, self.config.alpha)
-            else:
-                return bca_ci(bootstrap_distribution, point, self.config.alpha)
+            return bca_ci(
+                bootstrap_distribution,
+                point,
+                self.config.alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}'. "

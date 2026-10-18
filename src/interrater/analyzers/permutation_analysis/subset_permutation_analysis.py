@@ -24,17 +24,18 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...contracts import EMPTY
-from ...intermediates.analysis_results.subset_permutation_result import (
+from ...intermediates.results.permutation_results.subset_permutation_result import (
     MAX_SUBSETS_FOR_DISTRIBUTIONS,
 )
+from ...intermediates.results.ci_results import BootstrapCIResult
 from .permutation_analysis import PermutationAnalysis
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
-    from ...intermediates.analysis_results.multi_k_subset_result import (
+    from ...intermediates.results.permutation_results.multi_k_subset_result import (
         MultiKSubsetResult,
     )
-    from ...intermediates.analysis_results.subset_permutation_result import (
+    from ...intermediates.results.permutation_results.subset_permutation_result import (
         SubsetPermutationResult,
     )
     from ..configs.subset_permutation_config import SubsetPermutationConfig
@@ -126,7 +127,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         MultiKSubsetResult
             One SubsetPermutationResult per k, keyed by k.
         """
-        from ...intermediates.analysis_results.multi_k_subset_result import (
+        from ...intermediates.results.permutation_results.multi_k_subset_result import (
             MultiKSubsetResult,
         )
 
@@ -205,7 +206,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             Observed values, optional per-subset bootstrap, optional mean
             bootstrap for this k.
         """
-        from ...intermediates.analysis_results.subset_permutation_result import (
+        from ...intermediates.results.permutation_results.subset_permutation_result import (
             SubsetPermutationResult,
         )
 
@@ -304,17 +305,38 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         Computation B: per-subset bootstrap.
 
-        For each subset: select the k rater columns, find the subjects
-        all k raters rated, resample those subjects with replacement,
+        For each subset: select the k rater columns, find the subjects this
+        subset can be measured on, resample those with replacement, and
         compute the coefficient on each resample. Produces a bootstrap
-        distribution and CI per subset.
+        distribution and a confidence interval per subset.
+
+        **Which subjects a subset can be measured on.** A subject
+        contributes to agreement only if at least two of that subset's
+        raters rated it. Fewer than two ratings is not disagreement, it is
+        absence -- Fleiss makes this explicit, since the per-subject term
+        ``(sum_j n_ij^2 - n_i) / (n_i (n_i - 1))`` is 0/0 at ``n_i = 1``.
+
+        So the pool is "at least two of the k". At k=2 that means both
+        raters, which is what the pairwise analysis does; above k=2 it
+        admits unbalanced subsets rather than demanding a complete
+        rectangle. One rule, applied at every k.
+
+        That pool is also what Computation A measures: ``over_subsets``
+        hands the whole array to the estimator and lets it handle the gaps.
+        The bootstrap must resample that same pool, because an interval has
+        to be around the thing the point estimate measured. Draw from the
+        complete cases instead and you have quietly switched estimands; on
+        partially crossed data the mistake surfaces as an interval that
+        does not contain its own point estimate.
 
         Seeding: ``np.random.SeedSequence`` spawns one child seed per
         subset from ``config_of_coefficient.random_state``, so each
         subset gets a reproducible but independent RNG stream.
 
-        Subsets with fewer than 2 shared subjects cannot be bootstrapped
-        and receive NaN distributions and CIs.
+        Subsets with fewer than 2 measurable subjects have nothing to
+        resample. They receive a NaN distribution and an interval whose
+        ``method_used`` is None -- no method ran, which is a different
+        statement from an interval that could not be computed.
 
         Parameters
         ----------
@@ -328,7 +350,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         tuple[dict, dict]
             (subset_distributions, subset_cis)
             distributions: dict[subset -> np.ndarray of shape (n_resamples,)]
-            cis: dict[subset -> (lower, upper)]
+            cis: dict[subset -> BootstrapCIResult]
         """
         coc = self.config.config_of_coefficient
         n_resamples = coc.n_resamples
@@ -341,7 +363,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         child_seeds = ss.spawn(len(subsets))
 
         distributions: dict[tuple, np.ndarray] = {}
-        cis: dict[tuple, tuple[float, float]] = {}
+        cis: dict[tuple, BootstrapCIResult] = {}
 
         for subset, seed in zip(subsets, child_seeds):
             rng = np.random.default_rng(seed)
@@ -351,20 +373,33 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 np.array(subset)
             )
 
-            # Find subjects all k raters rated
+            # At least two of these k raters rated it -- see the docstring
+            # for why two, and why not all k.
             present = subset_data.category_index != EMPTY
-            shared = np.flatnonzero(present.all(axis=1))
+            measurable = np.flatnonzero(present.sum(axis=1) >= 2)
 
-            if shared.size < 2:
+            if measurable.size < 2:
+                # Fewer than two measurable subjects leaves no coefficient
+                # to resample. Every draw fails, so no method runs -- which
+                # the result states rather than implying with a pair of
+                # NaNs.
                 distributions[subset] = np.full(n_resamples, np.nan)
-                cis[subset] = (float("nan"), float("nan"))
+                cis[subset] = BootstrapCIResult(
+                    lower=float("nan"),
+                    upper=float("nan"),
+                    alpha=alpha,
+                    n_resamples=n_resamples,
+                    n_failed=n_resamples,
+                    method_intended=ci_method,
+                    method_used=None,
+                )
                 continue
 
-            # Bootstrap loop: resample shared subjects with replacement
+            # Bootstrap loop: resample measurable subjects with replacement
             draws = np.empty(n_resamples, dtype=np.float64)
             for b in range(n_resamples):
                 resampled = rng.choice(
-                    shared, size=shared.size, replace=True
+                    measurable, size=measurable.size, replace=True
                 )
                 draws[b] = self.estimator(
                     subset_data.take_subjects(resampled)
@@ -372,8 +407,20 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
             distributions[subset] = draws
             point = subset_values[subset]
+
+            # The jackknife leaves out the subjects this subset was
+            # computed from -- `measurable`, the same pool the bootstrap
+            # draws from. A subject that contributes nothing to the
+            # coefficient cannot influence it, so including it would add a
+            # deviation representing no influence at all.
+            def _jackknife(sd=subset_data, sh=measurable) -> np.ndarray:
+                return np.array([
+                    self.estimator(sd.take_subjects(np.delete(sh, i)))
+                    for i in range(sh.size)
+                ], dtype=np.float64)
+
             cis[subset] = self._compute_ci(
-                draws, point, ci_method, alpha
+                draws, point, ci_method, alpha, jackknife_fn=_jackknife
             )
 
         return distributions, cis
@@ -436,14 +483,66 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 f"'independent'."
             )
 
+        # Only the correlated mean has a jackknife. It resamples subjects, so
+        # leaving one subject out is meaningful. The independent mean
+        # resamples from the per-subset distributions and never touches a
+        # subject, so there is nothing to leave out.
+        jackknife_fn = (
+            (lambda: self._mean_jackknife_correlated(k))
+            if bmc.method == "correlated" else None
+        )
+
         mean_ci = self._compute_ci(
             mean_distribution,
             mean_over_subsets,
             bmc.ci_method,
             bmc.alpha,
+            jackknife_fn=jackknife_fn,
         )
 
         return mean_distribution, mean_ci
+
+    def _mean_jackknife_correlated(self, k: int) -> np.ndarray:
+        """
+        Leave-one-subject-out means, for the correlated mean's acceleration.
+
+        The counterpart of ``_mean_bootstrap_correlated``: that one resamples
+        all subjects with replacement and averages every k-subset's
+        coefficient on each draw, so this one drops a single subject and does
+        the same. The unit left out matches the unit resampled, which is what
+        makes the acceleration describe the right quantity.
+
+        Parameters
+        ----------
+        k : int
+            Subset size, passed through to over_subsets.
+
+        Returns
+        -------
+        np.ndarray
+            Shape (n_subjects,). NaN entries mark subsets whose mean was
+            undefined.
+        """
+        from ..agreement_functions.rater_combinations import (
+            mean_over_subsets as _mean_over,
+            over_subsets,
+        )
+
+        n_subjects = self.estimator_input.n_subjects
+        all_rows = np.arange(n_subjects)
+
+        return np.array([
+            _mean_over(
+                over_subsets(
+                    self.estimator_input.take_subjects(
+                        np.delete(all_rows, i)
+                    ),
+                    self.estimator,
+                    k,
+                )
+            )
+            for i in range(n_subjects)
+        ], dtype=np.float64)
 
     def _mean_bootstrap_correlated(
         self,

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 import numpy as np
 
 from .weightable_individual_analyzer import WeightableIndividualAnalyzer
 
 from ..data_objects.ratings import Ratings
-from ..intermediates.analysis_results import CohenKappaResult, HypothesisTestResult
+from ..intermediates.results import CohenKappaResult, HypothesisTestResult
 from ..intermediates.data_profiles.balance_profile import BalanceProfile
 from .configs import CohenKappaConfig
 
@@ -19,7 +21,11 @@ from .agreement_functions.individual_marginals import (
     shared_rows,
 )
 from .resampling_functions.subject_resampling import subject_bootstrap
-from .ci_methods import percentile_ci, bca_ci, scipy_bca_ci
+from .ci_methods import percentile_ci, bca_ci
+from ..intermediates.results.ci_results import (
+    BootstrapCIResult,
+    ParametricCIResult,
+)
 
 _ERROR_PREFIX = "[CohenKappaAnalyzer] Error"
 
@@ -122,7 +128,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self, use_scipy_bca: bool = False) -> CohenKappaResult:
+    def estimate(self) -> CohenKappaResult:
         """
         Compute Cohen's kappa and return the result.
 
@@ -132,12 +138,6 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         When ci_method is "parametric_null", uses Fleiss, Cohen & Everitt (1969)
         null variance -- no bootstrap is performed and bootstrap_distribution
         is None.
-
-        Parameters
-        ----------
-        use_scipy_bca : bool, default False
-            If True and config.ci_method == "bca", use scipy.stats for BCa
-            computation (for testing/validation only).
 
         Returns
         -------
@@ -162,24 +162,10 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             ci = self._parametric_null_ci(point, p_a, p_b, n_subjects)
             bootstrap_distribution = None
         else:
-            # Bootstrap CI: resample subjects, recompute kappa each time
-            bootstrap_values = []
-
-            for resampled_array in subject_bootstrap(
-                self.ratings.category_index,
-                n_resamples=self.config.n_resamples,
-                random_state=self.config.random_state,
-            ):
-                ei = EstimatorInput(
-                    category_index=resampled_array,
-                    n_categories=n_categories,
-                    weights=self.weights,
-                )
-                kappa_resample = cohen_kappa(ei, self.weights)
-                bootstrap_values.append(kappa_resample)
-
-            bootstrap_distribution = np.array(bootstrap_values)
-            ci = self._compute_ci(bootstrap_distribution, point, use_scipy_bca)
+            bootstrap_distribution = self._bootstrap_distribution()
+            ci = self._compute_ci(
+                bootstrap_distribution, point, self._jackknife_estimates
+            )
 
         # Build and return result
         return CohenKappaResult(
@@ -392,13 +378,31 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         marginals = rater_marginals(self.estimator_input, rows)
         return marginals[0], marginals[1]
 
+    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+        """
+        Cohen's kappa from a ratings array.
+
+        The only coefficient-specific step in my resampling. Everything that
+        draws samples is written once on Analyzer in terms of this.
+
+        I build my own EstimatorInput because the array I am handed is a
+        resample, not the original data: rater identity matters to me, and it
+        is the column positions that carry it.
+        """
+        ei = EstimatorInput(
+            category_index=category_index,
+            n_categories=self.ratings.semantics.n_categories,
+            weights=self.weights,
+        )
+        return cohen_kappa(ei, self.weights)
+
     def _parametric_null_ci(
         self,
         point: float,
         p_a: np.ndarray,
         p_b: np.ndarray,
         n_subjects: int,
-    ) -> tuple[float, float]:
+    ) -> ParametricCIResult:
         """
         Compute confidence interval using Fleiss-Cohen-Everitt (1969) null
         variance.
@@ -416,8 +420,8 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
 
         Returns
         -------
-        tuple[float, float]
-            (lower, upper) confidence interval bounds.
+        ParametricCIResult
+            Bounds, the level, and the variance they were built from.
         """
         from scipy import stats
         from .variance_functions import cohen_null_variance
@@ -430,14 +434,19 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
-        return (point - z_crit * se_null, point + z_crit * se_null)
+        return ParametricCIResult(
+            lower=point - z_crit * se_null,
+            upper=point + z_crit * se_null,
+            alpha=self.config.alpha,
+            variance_source="null",
+        )
 
     def _compute_ci(
         self,
         bootstrap_distribution: np.ndarray,
         point: float,
-        use_scipy_bca: bool = False,
-    ) -> tuple[float, float]:
+        jackknife_fn: Callable[[], np.ndarray],
+    ) -> BootstrapCIResult:
         """
         Compute confidence interval from bootstrap distribution.
 
@@ -447,13 +456,16 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             Array of bootstrap kappa values.
         point : float
             The point estimate of kappa.
-        use_scipy_bca : bool, default False
-            If True and ci_method == "bca", use scipy for BCa.
+        jackknife_fn : Callable[[], np.ndarray]
+            Produces leave-one-subject-out estimates when called. A callable
+            rather than an array because only BCa needs them, and producing
+            them costs one coefficient evaluation per subject.
 
         Returns
         -------
-        tuple[float, float]
-            (lower, upper) confidence interval bounds.
+        BootstrapCIResult
+            Bounds, the method asked for against the one that ran, and how
+            many resamples failed.
 
         Raises
         ------
@@ -463,14 +475,12 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         if self.config.ci_method == "percentile":
             return percentile_ci(bootstrap_distribution, self.config.alpha)
         elif self.config.ci_method == "bca":
-            if use_scipy_bca:
-                return scipy_bca_ci(
-                    bootstrap_distribution, point, self.config.alpha
-                )
-            else:
-                return bca_ci(
-                    bootstrap_distribution, point, self.config.alpha
-                )
+            return bca_ci(
+                bootstrap_distribution,
+                point,
+                self.config.alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method "

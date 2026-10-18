@@ -1,4 +1,4 @@
-"""Result for Fleiss' kappa analysis."""
+"""Result for Cohen's kappa analysis."""
 
 from __future__ import annotations
 
@@ -7,45 +7,55 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .point_estimate_result import PointEstimateResult
+from .individual_marginal_result import IndividualMarginalResult
 
 if TYPE_CHECKING:
-    from ..data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.balance_profile import BalanceProfile
 
-_ERROR_PREFIX = "[FleissKappaResult] Error"
+_ERROR_PREFIX = "[CohenKappaResult] Error"
 
 
 @dataclass(frozen=True)
-class FleissKappaResult(PointEstimateResult):
+class CohenKappaResult(IndividualMarginalResult):
     """
-    I am Fleiss' kappa, exact or approximate, weighted or unweighted,
-    with data context.
+    I am Cohen's kappa, weighted or unweighted, for a single pair of raters.
 
     I inherit point, confidence_interval, bootstrap_distribution, and
-    balance_profile from PointEstimateResult. balance_profile tells users
-    and visualizers whether this is the exact coefficient from Fleiss 1971
-    or a generalization applied to unbalanced data.
+    balance_profile from PointEstimateResult. I add CI method and weights_type
+    so anyone reading me knows what statistic I am.
 
-    When is_exact is True, I am the exact formula (balanced data, constant
-    raters per subject). When False, I am a valid generalization using
-    per-subject averaging of p_j, but not the original coefficient.
-
-    weights_type is on me (not just on the config) because weighted and
-    unweighted Fleiss' kappa are different statistics with different
+    weights_type is on me (not just on the config) because weighted Cohen's
+    kappa and unweighted Cohen's kappa are different statistics with different
     interpretations. A result must be self-describing.
 
+    Cohen's kappa operates on paired data (two raters, fully crossed), so
+    balance is guaranteed by construction. My balance_profile is always
+    populated and always balanced. n_subjects is available via
+    balance_profile.n_subjects.
+
+    I carry no rater names. Who the raters are is input metadata, available
+    on the Ratings object the caller passed in. I describe what the data said,
+    not who said it.
+
+    References
+    ----------
+    Cohen, J. (1960). A coefficient of agreement for nominal scales.
+        Educational and Psychological Measurement, 20(1), 37--46.
+    Cohen, J. (1968). Weighted kappa: Nominal scale agreement provision
+        for scaled disagreement or partial credit. Psychological Bulletin,
+        70(4), 213--220.
 
     Attributes
     ----------
     point : float
-        Fleiss' kappa (inherited from PointEstimateResult).
+        Cohen's kappa (inherited from PointEstimateResult).
     confidence_interval : tuple[float, float] | None
-        Bootstrap confidence interval (lower, upper) (inherited).
+        Bootstrap or parametric confidence interval (inherited).
     bootstrap_distribution : np.ndarray | None
         Bootstrap distribution (inherited).
     balance_profile : BalanceProfile
-        Balance structure of the data (inherited). Its is_balanced property
-        determines whether this result is exact or approximate.
+        Balance structure of the data (inherited). Always populated for
+        Cohen's kappa. n_subjects available via balance_profile.n_subjects.
     ci_method : str
         Method used: "percentile", "bca", or "parametric_null".
     weights_type : str
@@ -55,7 +65,8 @@ class FleissKappaResult(PointEstimateResult):
 
     # Attribute declaration
 
-    # Inherited from parent class PointEstimateResult
+    # Inherited from IndividualMarginalResult (which validates
+    # balance_profile is not None and n_raters is not None)
     point: float
     confidence_interval: tuple[float, float] | None
     bootstrap_distribution: np.ndarray | None
@@ -68,13 +79,7 @@ class FleissKappaResult(PointEstimateResult):
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
-        """Validate Fleiss' kappa result attributes."""
-
-        # Fleiss always requires a balance_profile
-        if self.balance_profile is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None for Fleiss' kappa"
-            )
+        """Validate Cohen's kappa result attributes."""
 
         # Validate ci_method
         if not isinstance(self.ci_method, str):
@@ -100,8 +105,9 @@ class FleissKappaResult(PointEstimateResult):
                 f"'quadratic', or 'custom', got '{self.weights_type}'"
             )
 
-        # Call parent validation (validates point, confidence_interval,
-        # bootstrap_distribution, balance_profile type)
+        # Call parent validation (IndividualMarginalResult validates
+        # balance_profile and n_raters; PointEstimateResult validates
+        # point, confidence_interval, bootstrap_distribution)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:
@@ -111,49 +117,35 @@ class FleissKappaResult(PointEstimateResult):
 
     def __str__(self) -> str:
         """
-        Return a compact string representation with coefficient name and context.
+        Return a compact string representation with coefficient name.
 
         Format:
-            Fleiss' κ = 0.523 (95% CI: [0.481, 0.565], n_bootstrap=1000)
-            n_subjects=100; n_raters=5; unweighted; ci_method=bca; exact formula
+            Cohen's κ = 0.723 (95% CI: [0.681, 0.765], n_bootstrap=1000)
+            n_subjects=50; unweighted; ci_method=percentile
         """
         parent_str = super().__str__()
         weight_label = (
             "unweighted" if self.weights_type == "identity"
             else f"weighted ({self.weights_type})"
         )
-        exact_str = "exact formula" if self.is_exact else "approximation (unbalanced data)"
         return (
-            f"Fleiss' κ {parent_str}\n"
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"{self.balance_profile.n_raters_display}; {weight_label}; "
-            f"ci_method={self.ci_method}; {exact_str}"
+            f"Cohen's κ {parent_str}\n"
+            f"n_subjects={self.balance_profile.n_subjects}; {weight_label}; "
+            f"ci_method={self.ci_method}"
         )
 
     def summary(self) -> dict:
         """
-        Return point, CI, bootstrap diagnostics, and Fleiss-specific metadata.
+        Return point, CI, bootstrap diagnostics, and Cohen-specific metadata.
 
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'is_exact', 'ci_method',
-            'weights_type'.
+            Keys from parent (including balance) plus 'ci_method', 'weights_type'.
         """
         result = super().summary()
         result.update({
-            "is_exact": self.is_exact,
             "ci_method": self.ci_method,
             "weights_type": self.weights_type,
         })
         return result
-
-    @property
-    def is_exact(self) -> bool:
-        """
-        Whether this is the exact Fleiss formula or an approximation.
-
-        Returns True if data was balanced (constant raters per subject).
-        Returns False if an approximation was used for unbalanced data.
-        """
-        return self.balance_profile.is_balanced

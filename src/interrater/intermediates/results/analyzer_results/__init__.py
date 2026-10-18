@@ -1,6 +1,11 @@
-"""Analysis results: point estimates, confidence intervals, and metadata."""
+"""Single-coefficient results: one point estimate, one interval, one dataset.
 
-from .analysis_result import AnalysisResult
+Every class here descends from ``PointEstimateResult``, which is the shape an
+analyzer returns when it has estimated one coefficient. ``IndividualMarginalResult``
+is deliberately absent from ``__all__``: it is an internal base carrying the
+invariant that Cohen and Conger share, not a result any analyzer produces.
+"""
+
 from .point_estimate_result import PointEstimateResult
 from .fleiss_kappa_result import FleissKappaResult
 from .scotts_pi_result import ScottsPiResult
@@ -10,14 +15,8 @@ from .krippendorff_alpha_result import KrippendorffAlphaResult
 from .cohen_kappa_result import CohenKappaResult
 from .conger_kappa_result import CongerKappaResult
 from .light_kappa_result import LightKappaResult
-from .permutation_result import PermutationResult
-from .pairwise_permutation_result import PairwisePermutationResult
-from .subset_permutation_result import SubsetPermutationResult
-from .multi_k_subset_result import MultiKSubsetResult
-from .hypothesis_test_result import HypothesisTestResult
 
 __all__ = [
-    "AnalysisResult",
     "PointEstimateResult",
     "FleissKappaResult",
     "ScottsPiResult",
@@ -27,9 +26,4 @@ __all__ = [
     "CohenKappaResult",
     "CongerKappaResult",
     "LightKappaResult",
-    "PermutationResult",
-    "PairwisePermutationResult",
-    "SubsetPermutationResult",
-    "MultiKSubsetResult",
-    "HypothesisTestResult"
 ]

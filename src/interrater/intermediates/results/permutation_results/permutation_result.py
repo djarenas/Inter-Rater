@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .analysis_result import AnalysisResult
+from ..analysis_result import AnalysisResult
 
 if TYPE_CHECKING:
-    from ..data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.balance_profile import BalanceProfile
 
 _ERROR_PREFIX = "[PermutationResult] Error"
 
@@ -99,7 +99,7 @@ class PermutationResult(AnalysisResult):
                 f"{_ERROR_PREFIX}: balance_profile must not be None"
             )
 
-        from ..data_profiles.balance_profile import BalanceProfile
+        from ...data_profiles.balance_profile import BalanceProfile
 
         if not isinstance(self.balance_profile, BalanceProfile):
             raise TypeError(
