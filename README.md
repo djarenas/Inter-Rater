@@ -68,8 +68,7 @@ than arguments, so that a reviewer can be shown them.
 This example runs on data that ships with the repository: the preliminary
 screening round of a real systematic review, 199 abstracts rated by four
 reviewers. Clone the repository, or copy
-[`example_data/SR1_OSF2018/`](example_data/SR1_OSF2018/), and run it as it
-stands.
+[`example_data/SR1_OSF2018/`](https://github.com/djarenas/Inter-Rater/tree/master/example_data/SR1_OSF2018/), and run it as it stands.
 
 `SR1_prelim_semantics.yaml` declares who rated and what the categories mean:
 
@@ -111,7 +110,7 @@ from interrater import (
     FleissKappaAnalyzer, FleissKappaConfig,
 )
 
-data = Path("example_data/SR1_OSF2018")
+data = Path(https://github.com/djarenas/Inter-Rater/tree/master/example_data/SR1_OSF2018/)
 
 semantics      = RatingsSemantics.build_from_yaml(data / "SR1_prelim_semantics.yaml")
 cleaner_config = CleanerConfig.build_from_yaml(data / "SR1_prelim_cleaner_config.yaml")
@@ -665,8 +664,7 @@ waiting on something above, saying so is the most useful way to move it up.
 
 If you use this software, please cite both the software and the paper
 describing the method it implements. Machine-readable metadata is in
-[`CITATION.cff`](CITATION.cff); GitHub renders it as a "Cite this repository"
-button.
+Citation details are in [`CITATION.cff`](https://github.com/djarenas/Inter-Rater/blob/master/CITATION.cff) (on GitHub, the "Cite this repository" button in the sidebar formats it for you).
 
 Arenas, D. J. (2018). Software for analysis of inter-rater reliability by
 permutating pairs of multiple raters.
