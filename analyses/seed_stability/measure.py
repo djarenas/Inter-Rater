@@ -143,6 +143,57 @@ def load_ratings(folder: str, data: str, semantics: str, cleaner: str):
 
 # -- Provenance ------------------------------------------------------------- #
 
+def declared_version() -> str:
+    """
+    The release number this repository declares, from pyproject.toml.
+
+    Not ``interrater.__version__``, which reports what the *install* says.
+    Those differ exactly when it matters: a source tree on sys.path has no
+    install metadata, so ``__version__`` falls back to a hard-coded string
+    that drifts from the real release. A committed results file should name
+    the release that produced it, so it is read from the one file that is
+    authoritative about that.
+
+    ``tomllib`` is standard library from 3.11; the package supports 3.10, so
+    there is a regex path for it. Either failing is not worth aborting a
+    45-minute run over -- the line says ``unknown`` and every other line of
+    provenance still gets written.
+    """
+    pyproject = REPO / "pyproject.toml"
+    try:
+        import tomllib
+        with pyproject.open("rb") as fh:
+            return str(tomllib.load(fh)["project"]["version"])
+    except Exception:
+        pass
+    try:
+        import re
+        m = re.search(
+            r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.MULTILINE
+        )
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def import_location() -> str:
+    """
+    Where the measured copy of the package was imported from.
+
+    Relative to the repository root when it sits inside it, which is the
+    normal case and the only one a reader of the committed CSV can act on --
+    an absolute path from the machine that happened to run this says nothing
+    to anyone else. When the import came from outside the repository the
+    absolute path is kept verbatim, because that is the case worth being
+    able to see after the fact.
+    """
+    imported = Path(interrater.__file__).resolve().parent
+    try:
+        return str(imported.relative_to(REPO.resolve()))
+    except ValueError:
+        return f"{imported}  (outside this repository)"
+
+
 def provenance() -> list[str]:
     """
     Lines recording what produced the numbers below them.
@@ -156,8 +207,9 @@ def provenance() -> list[str]:
     which stream produced it.
     """
     return [
-        f"# interrater {interrater.__version__}",
-        f"# imported from {Path(interrater.__file__).resolve().parent}",
+        f"# interrater {declared_version()} (declared in pyproject.toml)",
+        f"# import reported version {interrater.__version__}",
+        f"# imported from {import_location()}",
         f"# numpy {np.__version__}",
         f"# pandas {pd.__version__}",
         f"# python {platform.python_version()} on {platform.system()}",
@@ -183,11 +235,22 @@ def check_which_interrater() -> None:
     code nobody is looking at. That has happened during this project more
     than once, so the resolved path is printed every run and a mismatch is
     called out rather than left to be noticed.
+
+    The two version lines are printed separately on purpose, because they
+    can disagree and the disagreement is the warning. ``__version__`` comes
+    from ``importlib.metadata``, which reads whichever distribution is
+    *installed* under the name -- not the code that was imported. So an
+    unrelated install can supply a confident release number for a source
+    tree that never produced it. The path is the trustworthy signal here;
+    the declared version says what this tree is; ``__version__`` says only
+    what some install claims.
     """
     imported = Path(interrater.__file__).resolve().parent
     expected = (REPO / "src" / "interrater").resolve()
 
-    print(f"interrater {interrater.__version__} from {imported}")
+    print(f"interrater from {imported}")
+    print(f"  declared in pyproject.toml : {declared_version()}")
+    print(f"  reported by the import     : {interrater.__version__}")
     if imported != expected:
         print(
             f"\n  WARNING: that is not this repository's copy, which is at\n"

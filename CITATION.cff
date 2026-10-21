@@ -9,8 +9,6 @@ authors:
     given-names: Daniel J.
 repository-code: "https://github.com/djarenas/Inter-Rater"
 license: GPL-3.0-or-later
-version: 2.0.0
-date-released: 2026-10-11
 identifiers:
   - type: doi
     value: 10.5281/zenodo.1227660

@@ -40,7 +40,16 @@ from importlib.metadata import version as _version, PackageNotFoundError
 try:
     __version__ = _version("interrater")
 except PackageNotFoundError:
-    __version__ = "2.0.0"  # fallback for editable/dev installs
+    # Reached only when there is no install metadata at all -- a source tree
+    # placed on sys.path, which is how the scripts in analyses/ run. An
+    # editable install does register metadata and takes the branch above.
+    #
+    # Deliberately not a release number. A hard-coded one here drifts from
+    # pyproject.toml and then reports a release that did not produce the
+    # numbers, which has cost this project real time. pyproject.toml is the
+    # single place the release is declared; this string says only that the
+    # declaration was not available.
+    __version__ = "0.0.0+source"
 
 
 # -- Lazy plotting exports -------------------------------------------------- #

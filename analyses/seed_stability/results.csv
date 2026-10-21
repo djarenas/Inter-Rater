@@ -1,9 +1,9 @@
-# interrater 0.0.1.dev0
-# imported from /home/dan/dev/github_local/interrater/src/interrater
+# interrater 2.0.0
+# imported from /tmp/claude-0/-home-claude/93743c14-36f3-508c-a3c8-6fd001151159/scratchpad/worktree/src/interrater
 # numpy 2.5.3
 # pandas 3.0.5
-# python 3.12.3 on Linux
-# generated 2026-10-18T15:07:14+00:00
+# python 3.13.16 on Linux
+# generated 2026-10-18T13:48:38+00:00
 # coefficient fleiss_kappa, alpha 0.05
 # ci methods ['percentile', 'bca']
 # balanced_data_only False
