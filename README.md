@@ -114,7 +114,9 @@ from interrater import (
     FleissKappaAnalyzer, FleissKappaConfig,
 )
 
-data = Path(https://github.com/djarenas/Inter-Rater/tree/master/example_data/SR1_OSF2018/)
+# Download example_data/ from GitHub first (link above),
+# and change this path to where you saved it.
+data = Path("example_data/SR1_OSF2018")
 
 semantics      = RatingsSemantics.build_from_yaml(data / "SR1_prelim_semantics.yaml")
 cleaner_config = CleanerConfig.build_from_yaml(data / "SR1_prelim_cleaner_config.yaml")
@@ -202,7 +204,7 @@ can tie, and ties are broken at random.) See
 [What if one of your raters were someone else?](#what-if-one-of-your-raters-were-someone-else)
 
 Worked configurations for ten datasets, five of them real systematic reviews,
-are in [`example_data/`](example_data/), each with the reference values it
+are in [`example_data/`](https://github.com/djarenas/Inter-Rater/tree/master/example_data/), each with the reference values it
 should reproduce.
 
 ## Background
@@ -667,8 +669,7 @@ waiting on something above, saying so is the most useful way to move it up.
 ## How to cite
 
 If you use this software, please cite both the software and the paper
-describing the method it implements. Machine-readable metadata is in
-Citation details are in [`CITATION.cff`](https://github.com/djarenas/Inter-Rater/blob/master/CITATION.cff) (on GitHub, the "Cite this repository" button in the sidebar formats it for you).
+describing the method it implements. Citation details are in [`CITATION.cff`](https://github.com/djarenas/Inter-Rater/blob/master/CITATION.cff) (on GitHub, the "Cite this repository" button in the sidebar formats it for you).
 
 Arenas, D. J. (2018). Software for analysis of inter-rater reliability by
 permutating pairs of multiple raters.
