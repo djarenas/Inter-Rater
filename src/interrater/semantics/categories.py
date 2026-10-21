@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import numpy as np
 
@@ -32,6 +33,11 @@ class Categories(ABC):
     ----------
     names:
         The allowed responses, in encoding order. Position i is code i.
+        Always text: a number such as ``1`` or ``-1`` (what YAML gives for
+        unquoted ``1`` and ``-1``) is stored as ``'1'`` and ``'-1'``, because
+        ratings are matched as strings. A boolean is refused rather than
+        converted: YAML reads unquoted ``yes``/``no`` as True/False, and
+        ``'True'`` is not what anyone meant to declare.
     labels:
         Optional display names. Cosmetic; never used in arithmetic.
     """
@@ -48,8 +54,11 @@ class Categories(ABC):
         names:  object,
         labels: dict[str, str] | None = None,
     ) -> None:
-        self.names  = tuple(names)
-        self.labels = dict(labels or {})
+        self.names  = tuple(_as_name(n, type(self).__name__) for n in names)
+        self.labels = {
+            _as_name(k, type(self).__name__): v
+            for k, v in dict(labels or {}).items()
+        }
         self._validate()
 
     def _validate(self) -> None:
@@ -347,6 +356,36 @@ class WeightedCategories(DistanceCategories):
         return self.weights
 
 
+# Names -----------------------------------------------------------------------  #
+
+def _as_name(value: object, owner: str) -> str:
+    """
+    A category name as text.
+
+    Numbers become their text, so YAML's unquoted ``1`` and ``-1`` mean the
+    ``'1'`` and ``'-1'`` a ratings file holds. Booleans are refused: YAML turns
+    unquoted ``yes``, ``no``, ``on`` and ``off`` into True and False, and the
+    original word cannot be recovered from that. Anything else is refused too.
+
+    I raise ValueError, not TypeError, because ``build_categories`` reads a
+    TypeError from a constructor as a misspelt key.
+    """
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(
+            f"{owner}: category name {value!r} is a boolean. YAML reads "
+            f"unquoted yes/no/on/off as True/False; quote the names, e.g. "
+            f"['yes', 'no']."
+        )
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return str(value)
+    raise ValueError(
+        f"{owner}: category name {value!r} must be text or a number, got "
+        f"{type(value).__name__}."
+    )
+
+
 # Factory ---------------------------------------------------------------------  #
 
 _KINDS = {
@@ -356,13 +395,21 @@ _KINDS = {
 """Built from each class's own token, so ``kind`` has one definition."""
 
 
-def build_categories(spec: dict) -> Categories:
+def build_categories(
+    spec: dict, base_dir: str | Path | None = None
+) -> Categories:
     """
     Build the right Categories from a plain mapping, as parsed from YAML.
 
     ``kind`` selects the class; the remaining keys are its arguments. Kept here
     rather than with the config that calls it, because this is the module that
     knows what subclasses exist.
+
+    A ``weighted`` scheme may give its matrix inline as ``weights`` or in a
+    separate YAML file as ``weights_file``, never both. A relative
+    ``weights_file`` is read from ``base_dir``, which ``RatingsSemantics``
+    sets to the folder of the semantics file; without one, from the current
+    working directory.
 
     Examples
     --------
@@ -385,6 +432,10 @@ def build_categories(spec: dict) -> Categories:
             f"categories of kind {kind!r} needs 'names': the responses a rater "
             f"was allowed to give, in encoding order."
         )
+    if "weights_file" in spec:
+        spec["weights"] = _load_weights_file(
+            spec.pop("weights_file"), spec, kind, base_dir
+        )
     try:
         return _KINDS[kind](**spec)
     except TypeError as error:
@@ -392,3 +443,68 @@ def build_categories(spec: dict) -> Categories:
             f"categories of kind {kind!r} got unexpected keys "
             f"{sorted(set(spec) - {'names'})}. {error}"
         ) from None
+
+
+def _load_weights_file(
+    file: str | Path, spec: dict, kind: str, base_dir: str | Path | None
+) -> list:
+    """
+    Read a weighted scheme's matrix from its own YAML file.
+
+    The file holds exactly ``names`` and ``matrix``. The names are there so
+    that the matrix cannot be read against the wrong categories: a bare matrix
+    depends on row order, and reordering the categories in the semantics would
+    otherwise move every weight onto the wrong pair without a word.
+
+    I return the matrix as parsed. ``WeightedCategories`` then validates it
+    exactly as it would an inline one.
+    """
+    import yaml
+
+    if kind != "weighted":
+        raise ValueError(
+            f"categories.weights_file is only allowed with kind 'weighted', "
+            f"got kind {kind!r}. An ordered scale derives its weights from "
+            f"'weighting'; an unordered one has none."
+        )
+    if "weights" in spec:
+        raise ValueError(
+            "categories gives both 'weights' and 'weights_file'. Give the "
+            "matrix in one place only, so there is one answer to what it is."
+        )
+
+    path = Path(file)
+    if not path.is_absolute():
+        path = Path(base_dir if base_dir is not None else ".") / path
+    if path.suffix.lower() not in {".yaml", ".yml"}:
+        raise ValueError(
+            f"categories.weights_file must be a YAML file (.yaml or .yml), "
+            f"got {path.name!r}."
+        )
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+    except FileNotFoundError as error:
+        raise FileNotFoundError(
+            f"categories.weights_file not found: {path}. A relative path is "
+            f"read from the folder of the semantics file."
+        ) from error
+
+    if not isinstance(data, dict) or set(data) != {"names", "matrix"}:
+        found = sorted(data) if isinstance(data, dict) else type(data).__name__
+        raise ValueError(
+            f"categories.weights_file {path} must hold exactly 'names' and "
+            f"'matrix', got {found}."
+        )
+
+    file_names     = [str(n) for n in data["names"]]
+    declared_names = [str(n) for n in spec["names"]]
+    if file_names != declared_names:
+        raise ValueError(
+            f"categories.weights_file {path} is written for categories "
+            f"{file_names}, but the semantics declares {declared_names}. "
+            f"They must match exactly, in the same order, because row and "
+            f"column i of the matrix belong to category i."
+        )
+    return data["matrix"]

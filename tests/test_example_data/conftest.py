@@ -23,6 +23,7 @@ import pytest
 from interrater import (
     CleanerConfig,
     NijMatrix,
+    OrderedCategories,
     RatingsCleaner,
     RatingsSemantics,
 )
@@ -69,9 +70,26 @@ _INTEGRATION_RESAMPLES = 250
 # -- Helpers ---------------------------------------------------------------- #
 
 def _load_ratings(data_path: Path, semantics_path: Path,
-                  cleaner_config_path: Path) -> "Ratings":
-    """Load a ratings dataset via the RatingsCleaner pipeline."""
+                  cleaner_config_path: Path,
+                  weighting: str | None = None) -> "Ratings":
+    """
+    Load a ratings dataset via the RatingsCleaner pipeline.
+
+    With ``weighting`` ('linear' or 'quadratic'), the same file is read under
+    ordered categories instead: same names, same order, declared ordinal.
+    That is how a weighted analysis is asked for, since weights are declared
+    in the semantics and not in the analyzer config.
+    """
     semantics = RatingsSemantics.build_from_yaml(str(semantics_path))
+    if weighting is not None:
+        semantics = RatingsSemantics(
+            raters          = semantics.raters,
+            categories      = OrderedCategories(
+                semantics.categories.names, weighting=weighting
+            ),
+            n_subjects      = semantics.n_subjects,
+            unique_subjects = semantics.unique_subjects,
+        )
     config = CleanerConfig.build_from_yaml(str(cleaner_config_path))
 
     # Determine separator: .csv -> comma, .txt -> tab
@@ -400,23 +418,45 @@ def pairwise_config():
     return _make
 
 
-@pytest.fixture(scope="session")
-def weighted_config():
-    """Build an integration config carrying a weights_type.
+_ORDERED_DATASETS = {
+    "sr1_prelim": (
+        SR1_DIR / "SR1_prelim_data.csv",
+        SR1_DIR / "SR1_prelim_semantics.yaml",
+        SR1_DIR / "SR1_prelim_cleaner_config.yaml",
+    ),
+    "gwet": (
+        GWET_DIR / "gwet_cont3x3_data.csv",
+        GWET_DIR / "gwet_cont3x3_semantics.yaml",
+        GWET_DIR / "gwet_cont3x3_cleaner_config.yaml",
+    ),
+    "synthetic": (
+        SYNTHETIC_DIR / "synthetic_2raters_data.txt",
+        SYNTHETIC_DIR / "synthetic_2raters_semantics.yaml",
+        SYNTHETIC_DIR / "synthetic_2raters_cleaner_config.yaml",
+    ),
+}
 
-    Returns a callable rather than a config, because the weighted tests
-    need several different (analyzer, weights_type) combinations and one
-    fixture per combination would be eight near-identical fixtures.
 
-    Routing through _integration_config is the point: the resample count
-    and CI method stay defined in exactly one place, so these tests cannot
-    quietly keep an old setting the way the inline configs here did.
+@pytest.fixture(scope="module")
+def ordered_ratings():
+    """Load a dataset with its categories declared ordered.
+
+    Returns a callable rather than ratings, because the weighted tests need
+    several (dataset, weighting) combinations. Weights are declared in the
+    semantics, so the weighted analysis runs the ordinary config on ratings
+    whose categories are ordered; the unordered fixtures (sr1_prelim_ratings,
+    gwet_ratings, synthetic_ratings) give the unweighted numbers.
 
     Usage:
-        config = weighted_config(FleissKappaConfig, "quadratic")
+        ratings = ordered_ratings("sr1_prelim", "quadratic")
     """
-    def _make(config_cls, weights_type: str):
-        return _integration_config(config_cls, weights_type=weights_type)
+    cache: dict = {}
+
+    def _make(dataset: str, weighting: str):
+        key = (dataset, weighting)
+        if key not in cache:
+            cache[key] = _load_ratings(*_ORDERED_DATASETS[dataset], weighting=weighting)
+        return cache[key]
 
     return _make
 

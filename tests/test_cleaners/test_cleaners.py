@@ -20,7 +20,7 @@ Key behaviours:
 - Encoding folds case, strips whitespace, matches missing markers and
   repairs, and rejects or absorbs unknowns.
 - Config is checked against semantics before data is touched.
-- Unused categories are caught, kept, or dropped per policy.
+- Unused categories are caught or kept per policy.
 - Raters and subjects below thresholds are dropped per method.
 - The report counts everything: nulls, missing, repairs, unknowns, drops.
 """
@@ -30,10 +30,7 @@ import pandas as pd
 import pytest
 
 from interrater.contracts import MIN_RATINGS_PER_RATER, MIN_RATINGS_PER_SUBJECT
-from interrater.semantics.categories import (
-    UnorderedCategories,
-    WeightedCategories,
-)
+from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.cleaners.cleaner_config import CleanerConfig
 from interrater.cleaners.frame_layout import FrameLayout
@@ -498,17 +495,6 @@ class TestConfigAgainstSemantics:
         with pytest.raises(ValueError, match="declared category"):
             RatingsCleaner(clean_df, semantics, cfg)
 
-    def test_drop_with_weighted_categories(self, clean_df):
-        """Dropping an unused category from a WeightedCategories is forbidden."""
-        w = np.array([[1.0, 0.0], [0.0, 1.0]])
-        cats = WeightedCategories(CAT_NAMES, w)
-        sem = RatingsSemantics(raters=["ann", "bob"], categories=cats)
-        cfg = CleanerConfig(unused_categories="drop")
-        # All categories are used in CLEAN_DF so the error is about the policy
-        # being incompatible with weighted categories, not about unused ones.
-        with pytest.raises(ValueError, match="weight matrix"):
-            RatingsCleaner(clean_df, sem, cfg)
-
 
 # ============================================================================ #
 #  Column matching                                                             #
@@ -681,28 +667,6 @@ class TestUnusedCategories:
         assert rc.ratings.n_categories == 3
         assert rc.report.categories.unused == ("moderate",)
         assert rc.report.categories.action == "kept"
-
-    def test_unused_drop(self):
-        """unused_categories='drop' removes the empty category and lowers K."""
-        df, sem = self._three_cat_frame()
-        cfg = CleanerConfig(unused_categories="drop")
-        rc = RatingsCleaner(df, sem, cfg)
-        assert rc.ratings.n_categories == 2
-        assert rc.report.categories.action == "dropped"
-        assert rc.report.k_changed is True
-
-    def test_unused_drop_renumbers_codes(self):
-        """Dropping a category renumbers survivors contiguously."""
-        df, sem = self._three_cat_frame()
-        cfg = CleanerConfig(unused_categories="drop")
-        rc = RatingsCleaner(df, sem, cfg)
-        # moderate (original index 1) was dropped.
-        # mild stays at 0, severe moves from 2 to 1.
-        assert rc.ratings.category_index[0, 0] == 0  # ann sub0: mild
-        assert rc.ratings.category_index[0, 1] == 1  # bob sub0: severe
-        assert rc.ratings.category_index[1, 0] == 1  # ann sub1: severe
-        assert rc.ratings.category_index[1, 1] == 0  # bob sub1: mild
-        assert rc.ratings.semantics.categories.names == ("mild", "severe")
 
 
 # ============================================================================ #

@@ -9,7 +9,7 @@ import numpy as np
 
 from ..contracts import EMPTY, INDEX_DTYPE, LABEL_DTYPE
 from ..data_objects.ratings import Ratings
-from ..semantics.categories import (Categories, OrderedCategories, UnorderedCategories, WeightedCategories)
+from ..semantics.categories import Categories
 from ..semantics.ratings_semantics import RatingsSemantics
 from . import _drop_utils as _d
 from . import _string_utils as _s
@@ -210,20 +210,6 @@ class RatingsCleaner:
                 f"{_ERROR_PREFIX}: the config repairs {len(unknown)} string(s) into "
                 f"categories this rating task does not have (e.g. {unknown[:3]}). "
                 f"Declared categories are {list(names)}."
-            )
-
-        if (
-            self._config.unused_categories == "drop"
-            and isinstance(self._declared_semantics.categories, WeightedCategories)
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unused_categories is 'drop' but the "
-                f"categories carry a hand-written weight matrix. Dropping one "
-                f"would discard the similarities you wrote for it, and there "
-                f"is no rule to re-derive them from -- a matrix that could be "
-                f"derived would have been an OrderedCategories. Either keep "
-                f"the category, or remove it from your weight matrix and "
-                f"declare the smaller scheme yourself."
             )
 
         collides = sorted(
@@ -465,10 +451,9 @@ class RatingsCleaner:
         """
         Decide what happens to categories nobody chose.
 
-        Under ``error`` I stop. Under ``keep`` the scheme is untouched, which
-        is the safe answer: K is a fact about what raters could have said, not
-        about what they did say. Under ``drop`` the empty categories are
-        removed and the surviving codes renumbered.
+        Under ``error`` I stop. Under ``keep`` the scheme is untouched: K is a
+        fact about what raters could have said, not about what they did say.
+        I never change the declared categories.
 
         I return categories, never semantics. Building the declaration the
         surviving data describes happens in one place, so there is a single
@@ -489,67 +474,17 @@ class RatingsCleaner:
                 f"by anybody: {list(unused)}. That is a fact about the cohort "
                 f"as often as it is a mistake, but it is also the shape a "
                 f"mistake takes. Set unused_categories='keep' to accept it, or "
-                f"'drop' to remove them from the scheme -- which will change "
-                f"any coefficient whose chance term counts categories."
+                f"remove them from your semantics file if they should not be "
+                f"in the scheme."
             )
-
-        action = "kept"
-
-        if unused and policy == "drop":
-            codes, cats = self._without(unused, codes)
-            action = "dropped"
-            counts = {n: c for n, c in counts.items() if c > 0}
 
         report = CategoryReport(
             counts = counts,
             policy = policy,
-            action = action,
+            action = "kept",
             unused = unused,
         )
         return codes, cats, report
-
-    def _without(
-        self, unused: tuple[str, ...], codes: np.ndarray
-    ) -> tuple[np.ndarray, Categories]:
-        """
-        Narrow the scheme to the categories somebody chose, and renumber.
-
-        I return the smaller Categories. I do not build semantics: that
-        happens once, in ``_effective_semantics_for``, so there is one answer
-        to what the surviving data declares.
-
-        Dropping a category is the only cleaning decision that changes the
-        arithmetic rather than only the data. K moves, so AC1 and
-        Brennan-Prediger move with it, and on an ordered scale every distance
-        moves too -- dropping the middle of mild/moderate/severe leaves mild
-        and severe adjacent. The report says so loudly; nothing here is
-        silent about it.
-        """
-        old  = self._declared_semantics.categories
-        kept = tuple(n for n in old.names if n not in unused)
-
-        remap = np.full(len(old.names) + 1, EMPTY, dtype=INDEX_DTYPE)
-        for new_index, name in enumerate(kept):
-            remap[old.names.index(name)] = new_index
-
-        renumbered = np.where(codes == EMPTY, EMPTY, remap[codes])
-
-        try:
-            if isinstance(old, OrderedCategories):
-                categories = OrderedCategories(kept, weighting=old.weighting)
-            elif isinstance(old, WeightedCategories):
-                keep_index = [old.names.index(n) for n in kept]
-                categories = WeightedCategories(
-                    kept, old.weights[np.ix_(keep_index, keep_index)]
-                )
-            else:
-                categories = UnorderedCategories(kept)
-        except (TypeError, ValueError) as error:
-            raise type(error)(
-                f"{_ERROR_PREFIX}: dropping the unused categories "
-                f"{list(unused)} left a scheme that cannot exist: {error}"
-            ) from error
-        return renumbered.astype(INDEX_DTYPE), categories
 
     def _effective_semantics_for(
         self, raters: list[str], categories: Categories

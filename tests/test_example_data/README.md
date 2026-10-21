@@ -351,7 +351,7 @@ separate fixture per combination:
 
 | Fixture | Call | Why a callable |
 |---------|------|----------------|
-| weighted_config | `weighted_config(cls, "linear")` | eight (analyzer, weights) pairs would be eight fixtures |
+| ordered_ratings | `ordered_ratings("sr1_prelim", "linear")` | each (dataset, weighting) pair would otherwise be its own fixture |
 | pairwise_config | `pairwise_config("correlated")` | the mean-bootstrap method is what varies |
 | subset_config | `subset_config(3)` | the tests compare behaviour across k |
 

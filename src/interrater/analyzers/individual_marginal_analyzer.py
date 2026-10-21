@@ -107,6 +107,9 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         # Validate config type
         self._validate_individual_config()
 
+        # Weights arrive with the semantics; refuse them if unusable here
+        self._refuse_weights_if_unsupported()
+
         # Build EstimatorInput from ratings (weights=None at this level)
         self.estimator_input = self._build_estimator_input()
 

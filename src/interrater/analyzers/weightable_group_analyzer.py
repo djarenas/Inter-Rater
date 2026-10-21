@@ -21,10 +21,11 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
     I am the abstract base for group coefficients that support weighting.
 
     Coefficients like Fleiss' kappa have weighted forms for ordinal data.
-    I add validation and construction of the Weights object from the config:
+    I accept weights, and take them from the semantics of the ratings:
     - Config must be WeightableGroupConfig
-    - Build Weights from config.weights_type and custom_weights_input
-    - Validate weights_type and custom_weights_input are consistent
+    - Weights come from ``ratings.semantics.categories`` (unordered: none;
+      ordered: linear or quadratic; weighted: the declared matrix)
+    - Built from a NijMatrix there are no semantics, so no weights
 
     Attributes
     ----------
@@ -38,8 +39,8 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
     nij_matrix : NijMatrix | None
         The counts matrix (from GroupAnalyzer, populated if built from nij_matrix).
     weights : Weights | None
-        The weights object built from config.weights_type.
-        None if weights_type="identity" (unweighted).
+        The weights declared by the semantics. None for unordered categories
+        and for the NijMatrix path (unweighted).
     """
 
     # Attribute declaration
@@ -53,6 +54,8 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
     config: WeightableGroupConfig
     # Populated at this level
     weights: Weights | None
+
+    _ACCEPTS_WEIGHTS = True
 
     # Constructors ----------------------------------------------------------- #
 
@@ -74,7 +77,7 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         TypeError
             If config is not WeightableGroupConfig.
         ValueError
-            If weights_type or custom_weights_input are invalid.
+            If the config still sets weights_type or custom_weights_path.
         """
         # Call parent __init__ (validates group config, balance constraint)
         # Wrap to propagate errors with WeightableGroupAnalyzer context
@@ -83,9 +86,11 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         except (TypeError, ValueError) as e:
             raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
 
-        # Validate config type and resolve weights
+        # Validate config type; weights come from the semantics
         self._validate_weightable_config()
-        self.weights = self._resolve_weights(self.ratings.semantics.n_categories)
+        self._refuse_config_weights()
+        from ..intermediates.estimator_parts import Weights
+        self.weights = Weights.from_categories(self.ratings.semantics.categories)
 
     @classmethod
     def build_from_nij_matrix(
@@ -114,7 +119,7 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         TypeError
             If config is not WeightableGroupConfig.
         ValueError
-            If weights_type or custom_weights_input are invalid.
+            If the config still sets weights_type or custom_weights_path.
         """
         # Call parent build_from_nij_matrix (sets ratings, config, balance_profile, nij_matrix)
         # Wrap to propagate errors with WeightableGroupAnalyzer context
@@ -123,9 +128,10 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         except (TypeError, ValueError) as e:
             raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
 
-        # Validate config type and resolve weights
+        # Validate config type. Counts carry no semantics, so no weights.
         instance._validate_weightable_config()
-        instance.weights = instance._resolve_weights(nij.n_categories)
+        instance._refuse_config_weights()
+        instance.weights = None
 
         return instance
 
@@ -154,42 +160,4 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
                 f"{_ERROR_PREFIX}: config must be WeightableGroupConfig or subclass. "
                 f"Expected one of: {expected_names}. "
                 f"Got {type(self.config).__name__}"
-            )
-
-    def _resolve_weights(self, n_categories: int) -> Weights | None:
-        """
-        Resolve Weights object from config.weights_type.
-
-        Parameters
-        ----------
-        n_categories : int
-            Number of categories in the data. Needed to build weight matrices.
-
-        Returns
-        -------
-        Weights | None
-            The resolved Weights object, or None if weights_type="identity".
-
-        Raises
-        ------
-        ValueError
-            If weights_type is "custom" but custom_weights_input is None.
-            If weights_type is unknown.
-        """
-        if self.config.weights_type == "identity":
-            return None
-        elif self.config.weights_type in {"linear", "quadratic"}:
-            from ..intermediates.estimator_parts import Weights
-
-            return Weights.from_type(self.config.weights_type, n_categories)
-        elif self.config.weights_type == "custom":
-            if self.config.custom_weights_input is None:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: weights_type='custom' but custom_weights_input is None. "
-                    f"This should not happen after config validation."
-                )
-            return self.config.custom_weights_input.build_weights()
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: Unknown weights_type '{self.config.weights_type}'"
             )

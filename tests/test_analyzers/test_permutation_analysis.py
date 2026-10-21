@@ -59,7 +59,7 @@ from interrater.intermediates.results.ci_results import BootstrapCIResult
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.estimator_parts.estimator_input import EstimatorInput
 from interrater.semantics.ratings_semantics import RatingsSemantics
-from interrater.semantics import UnorderedCategories
+from interrater.semantics import OrderedCategories, UnorderedCategories
 
 # Tolerance for deterministic computations
 TOL = 1e-12
@@ -234,13 +234,21 @@ class TestWeightResolution:
         assert analysis.estimator_input.weights is None
 
     def test_linear_weights_resolved(self):
-        """Linear weights on a Cohen config should produce Weights."""
-        ratings = _make_ratings(20, 3, n_categories=4)
+        """Ordered categories with linear weighting should produce Weights."""
+        unordered = _make_ratings(20, 3, n_categories=4)
+        semantics = RatingsSemantics(
+            raters=list(unordered.semantics.raters),
+            categories=OrderedCategories(
+                unordered.semantics.categories.names, weighting="linear"
+            ),
+        )
+        ratings = Ratings(
+            category_index=unordered.category_index, semantics=semantics
+        )
         coc = CohenKappaConfig(
             n_resamples=50,
             random_state=42,
             ci_method="percentile",
-            weights_type="linear",
         )
         config = PairwisePermutationConfig(
             coefficient_to_compute="cohen_kappa",

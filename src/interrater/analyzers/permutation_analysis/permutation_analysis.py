@@ -90,6 +90,12 @@ def _krippendorff_alpha_estimator(data: EstimatorInput) -> float:
     return krippendorff_alpha(data.nij, data.weights)
 
 
+_WEIGHTABLE_COEFFICIENTS = frozenset(
+    {"cohen_kappa", "fleiss_kappa", "brennan_prediger", "krippendorff_alpha"}
+)
+"""Coefficients with a weighted form, matching the weightable analyzers."""
+
+
 _ESTIMATOR_MAP: dict[str, Estimator] = {
     "cohen_kappa": _cohen_kappa_estimator,
     "scotts_pi": _scotts_pi_estimator,
@@ -208,7 +214,7 @@ class PermutationAnalysis:
         # Build BalanceProfile
         self.balance_profile = BalanceProfile.from_ratings(self.ratings)
 
-        # Resolve weights from config_of_coefficient
+        # Weights come from the semantics, as in the analyzers
         weights = self._resolve_weights()
 
         # Build EstimatorInput with resolved weights
@@ -261,51 +267,54 @@ class PermutationAnalysis:
 
     def _resolve_weights(self) -> Weights | None:
         """
-        Resolve weights from config_of_coefficient.weights_type.
+        Read the weights from the semantics of the ratings.
 
-        Not all coefficients support weights. If config_of_coefficient
-        does not have a weights_type attribute, returns None (identity
-        weights). Mirrors the logic in WeightableIndividualAnalyzer but
-        uses getattr because the analysis does not know which config
-        subclass it has.
+        Follows the same rules as the analyzers: weights are declared in the
+        semantics, never in the config; a coefficient with a weighted form
+        uses them; a coefficient without one refuses ordered or weighted
+        categories rather than quietly ignoring them.
 
         Returns
         -------
         Weights | None
-            Resolved weights, or None for identity / unsupported.
+            The declared weights, or None for unordered categories.
 
         Raises
         ------
         ValueError
-            If weights_type is "custom" but custom_weights_path is not
-            set, or if weights_type is unknown.
+            If config_of_coefficient still sets weights_type or
+            custom_weights_path, or if the coefficient has no weighted form
+            and the semantics declares ordered or weighted categories.
         """
-        coc = self.config.config_of_coefficient
-        weights_type = getattr(coc, "weights_type", "identity")
-
-        if weights_type == "identity":
-            return None
-
         from ...intermediates.estimator_parts.weights import Weights
+        from ...semantics.categories import DistanceCategories
 
-        n_categories = self.ratings.semantics.n_categories
-
-        if weights_type in {"linear", "quadratic"}:
-            return Weights.from_type(weights_type, n_categories)
-        elif weights_type == "custom":
-            custom_path = getattr(coc, "custom_weights_path", None)
-            if custom_path is None:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: weights_type='custom' but "
-                    f"custom_weights_path is not set on "
-                    f"config_of_coefficient"
-                )
-            return Weights.from_file(custom_path)
-        else:
+        coc          = self.config.config_of_coefficient
+        weights_type = getattr(coc, "weights_type", "identity")
+        custom_path  = getattr(coc, "custom_weights_path", None)
+        if weights_type != "identity" or custom_path is not None:
             raise ValueError(
-                f"{_ERROR_PREFIX}: unknown weights_type "
-                f"'{weights_type}' on config_of_coefficient"
+                f"{_ERROR_PREFIX}: weights are no longer set in "
+                f"config_of_coefficient (got weights_type={weights_type!r}, "
+                f"custom_weights_path={custom_path!r}). Declare them in the "
+                f"semantics instead: categories kind 'ordered' with "
+                f"'weighting', or kind 'weighted' with 'weights' or "
+                f"'weights_file'."
             )
+
+        categories  = self.ratings.semantics.categories
+        coefficient = self.config.coefficient_to_compute
+        if (
+            isinstance(categories, DistanceCategories)
+            and coefficient not in _WEIGHTABLE_COEFFICIENTS
+        ):
+            raise ValueError(
+                f"{_ERROR_PREFIX}: {coefficient} has no weighted form, but "
+                f"the semantics declares categories of kind "
+                f"{categories._KIND!r}. To compute it, use a semantics with "
+                f"kind: unordered for these ratings."
+            )
+        return Weights.from_categories(categories)
 
     def _resolve_estimator(self) -> Estimator:
         """

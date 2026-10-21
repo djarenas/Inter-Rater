@@ -344,3 +344,65 @@ class Analyzer(ABC):
                 f"[Analyzer] Error: method='permutation' requires Ratings data. "
                 f"Use method='parametric_null' when initialized from NijMatrix."
             )
+
+    # Weights ---------------------------------------------------------------- #
+
+    _ACCEPTS_WEIGHTS: bool = False
+    """Whether this coefficient has a weighted form. The weightable bases say yes."""
+
+    def _refuse_weights_if_unsupported(self) -> None:
+        """
+        Refuse ordered or weighted categories for a coefficient with no weighted form.
+
+        Weights are declared in the semantics, so they arrive with the
+        ratings. A coefficient that cannot use them must say so rather than
+        quietly compute the unweighted number under a weighted declaration.
+        """
+        if self._ACCEPTS_WEIGHTS or self.ratings is None:
+            return
+        from ..semantics.categories import DistanceCategories
+
+        categories = self.ratings.semantics.categories
+        if isinstance(categories, DistanceCategories):
+            # No prefix here: the leaf constructor that called me adds its own.
+            raise ValueError(
+                f"this coefficient has no weighted form, but the semantics "
+                f"declares categories of kind {categories._KIND!r}. To "
+                f"compute it, use a semantics with kind: unordered for these "
+                f"ratings."
+            )
+
+    def _refuse_config_weights(self) -> None:
+        """
+        Refuse weights set in the config. They are declared in the semantics now.
+
+        Removed from the configs in a later step; until then, a config that
+        still asks for weights must not be silently ignored.
+        """
+        weights_type = getattr(self.config, "weights_type", "identity")
+        custom_path  = getattr(self.config, "custom_weights_path", None)
+        if weights_type != "identity" or custom_path is not None:
+            # No prefix here: the leaf constructor that called me adds its own.
+            raise ValueError(
+                f"weights are no longer set in "
+                f"the config (got weights_type={weights_type!r}, "
+                f"custom_weights_path={custom_path!r}). Declare them in the "
+                f"semantics instead: categories kind 'ordered' with "
+                f"'weighting', or kind 'weighted' with 'weights' or "
+                f"'weights_file'."
+            )
+
+    def _weights_kind(self) -> str:
+        """How the result should name its weighting: identity, linear, quadratic or custom."""
+        weights = getattr(self, "weights", None)
+        return "identity" if weights is None else weights.kind
+
+    def _reject_null(self, p_value: float, alpha: float) -> bool:
+        """Decide the test as a plain Python bool, with context if it fails."""
+        try:
+            return bool(p_value < alpha)
+        except Exception as exc:
+            raise type(exc)(
+                f"[{type(self).__name__}] Error: could not compare "
+                f"p_value={p_value!r} with alpha={alpha!r}: {exc}"
+            ) from exc

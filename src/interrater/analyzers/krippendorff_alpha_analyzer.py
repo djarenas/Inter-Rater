@@ -229,7 +229,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             ci_method=self.config.ci_method,
-            weights_type=self.config.weights_type,
+            weights_type=self._weights_kind(),
         )
 
     def estimate_from_nij_matrix(self) -> KrippendorffAlphaResult:
@@ -288,7 +288,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             ci_method=self.config.ci_method,
-            weights_type=self.config.weights_type,
+            weights_type=self._weights_kind(),
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -389,7 +389,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         return HypothesisTestResult(
             p_value=p_value,
             alpha=ht_config.alpha,
-            reject_null=(p_value < ht_config.alpha),
+            reject_null=self._reject_null(p_value, ht_config.alpha),
             method="permutation",
             point=observed_ka,
             z_statistic=None,

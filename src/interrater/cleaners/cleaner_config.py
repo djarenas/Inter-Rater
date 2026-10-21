@@ -12,7 +12,7 @@ from .insufficient_data_policy import InsufficientDataPolicy
 _ERROR_PREFIX = "[CleanerConfig] Error"
 _DEFAULT_MISSING_VALUES: tuple[str, ...] = ("",) # The only spelling of nothing safe to assume.
 _UNKNOWN_POLICIES = ("error", "empty")
-_UNUSED_POLICIES  = ("error", "keep", "drop")
+_UNUSED_POLICIES  = ("error", "keep")
 
 
 class CleanerConfig:
@@ -59,9 +59,11 @@ class CleanerConfig:
         usually a sign the data is not what its owner thinks it is.
     unused_categories:
         What to do when a declared category was never chosen. ``error`` by
-        default, for the same reason. ``keep`` is the safe alternative: K is a
-        fact about what raters could have said, and dropping a category would
-        move any coefficient whose chance term counts them.
+        default, for the same reason. ``keep`` accepts it: K is a fact about
+        what raters could have said, so the category stays in the scheme.
+        There is no option to remove it here. A category that should not exist
+        is removed from the semantics file, where a reviewer can see it.
+        (``drop`` was removed in 2.1.0 for that reason.)
     insufficient_data_drops:
         How thin the data may get. See ``InsufficientDataPolicy``.
     """
@@ -197,6 +199,13 @@ class CleanerConfig:
                 f"{list(_UNKNOWN_POLICIES)}, got {self.unknown_policy!r}. "
                 f"'error' stops on a response nobody declared; 'empty' treats "
                 f"it as no rating."
+            )
+        if self.unused_categories == "drop":
+            raise ValueError(
+                f"{_ERROR_PREFIX}.unused_categories='drop' was removed in "
+                f"2.1.0. The cleaner no longer changes the categories you "
+                f"declared. Either set unused_categories='keep', or remove the "
+                f"category from your semantics file yourself."
             )
         if self.unused_categories not in _UNUSED_POLICIES:
             raise ValueError(

@@ -20,6 +20,10 @@ holds the one end-to-end BCa test.
 Every config here comes from a conftest fixture. These tests used to build
 their own, which is how they kept BCa at B=50 after the shared config had
 moved on.
+
+Weights are declared in the semantics, so each weighted test runs the
+ordinary config on ratings whose categories are declared ordered
+(``ordered_ratings``), and compares against the same data declared unordered.
 """
 
 import pytest
@@ -29,12 +33,6 @@ from interrater import (
     KrippendorffAlphaAnalyzer,
     CohenKappaAnalyzer,
     BrennanPredigerAnalyzer,
-)
-from interrater.analyzers.configs import (
-    FleissKappaConfig,
-    KrippendorffAlphaConfig,
-    CohenKappaConfig,
-    BrennanPredigerConfig,
 )
 
 # Tolerance: 3 decimal places.
@@ -73,15 +71,15 @@ def _assert_brackets_point(result) -> None:
 class TestSR1PrelimWeighted:
     """Weighted analysis on SR1 prelim (199 subjects, 4 raters, K=3)."""
 
-    def test_fleiss_kappa_quadratic(self, sr1_prelim_ratings, weighted_config, fast_fleiss_config):
+    def test_fleiss_kappa_quadratic(self, sr1_prelim_ratings, ordered_ratings, fast_fleiss_config):
         """Fleiss' kappa with quadratic weights = 0.593.
 
         Quadratic weights (w_ij = 1 - (i-j)^2 / (K-1)^2) upweight partial
         agreements, increasing the estimate from 0.493 to 0.593.
         Exercises WeightableGroupConfig.
         """
-        config = weighted_config(FleissKappaConfig, "quadratic")
-        analyzer = FleissKappaAnalyzer(sr1_prelim_ratings, config)
+        ratings = ordered_ratings("sr1_prelim", "quadratic")
+        analyzer = FleissKappaAnalyzer(ratings, fast_fleiss_config)
         result = analyzer.estimate()
 
         # Point estimate
@@ -97,7 +95,7 @@ class TestSR1PrelimWeighted:
         # Result reports the correct weights type
         assert result.weights_type == "quadratic"
 
-    def test_krippendorff_alpha_linear(self, sr1_prelim_ratings, weighted_config, fast_krippendorff_config):
+    def test_krippendorff_alpha_linear(self, sr1_prelim_ratings, ordered_ratings, fast_krippendorff_config):
         """Krippendorff's alpha with linear weights = 0.555.
 
         Linear weights (w_ij = 1 - |i-j| / (K-1)) are less aggressive
@@ -105,8 +103,8 @@ class TestSR1PrelimWeighted:
         Different weight type on same data as Fleiss quadratic above.
         Exercises WeightableGroupConfig.
         """
-        config = weighted_config(KrippendorffAlphaConfig, "linear")
-        analyzer = KrippendorffAlphaAnalyzer(sr1_prelim_ratings, config)
+        ratings = ordered_ratings("sr1_prelim", "linear")
+        analyzer = KrippendorffAlphaAnalyzer(ratings, fast_krippendorff_config)
         result = analyzer.estimate()
 
         # Point estimate
@@ -135,15 +133,15 @@ class TestSR1PrelimWeighted:
 class TestGwetCont3x3Weighted:
     """Weighted analysis on Gwet cont3x3 (100 subjects, 2 raters, K=3)."""
 
-    def test_cohen_kappa_quadratic(self, gwet_ratings, weighted_config, fast_cohen_config):
+    def test_cohen_kappa_quadratic(self, gwet_ratings, ordered_ratings, fast_cohen_config):
         """Cohen's kappa with quadratic weights = 0.892.
 
         Quadratic weights increase the estimate from 0.796 to 0.892 because
         adjacent-category disagreements get partial credit.
         Exercises WeightableIndividualConfig.
         """
-        config = weighted_config(CohenKappaConfig, "quadratic")
-        analyzer = CohenKappaAnalyzer(gwet_ratings, config)
+        ratings = ordered_ratings("gwet", "quadratic")
+        analyzer = CohenKappaAnalyzer(ratings, fast_cohen_config)
         result = analyzer.estimate()
 
         # Point estimate
@@ -171,7 +169,7 @@ class TestGwetCont3x3Weighted:
 class TestSynthetic2RaterWeighted:
     """Weighted analysis on Synthetic 2-rater (80 subjects, 2 raters, K=3)."""
 
-    def test_brennan_prediger_linear(self, synthetic_ratings, weighted_config, fast_bp_config):
+    def test_brennan_prediger_linear(self, synthetic_ratings, ordered_ratings, fast_bp_config):
         """Brennan-Prediger with linear weights = 0.651.
 
         Linear weights lower the estimate from 0.670 to 0.651 here because
@@ -179,8 +177,8 @@ class TestSynthetic2RaterWeighted:
         partial credit than the observed-agreement correction in kappa.
         Exercises WeightableGroupConfig.
         """
-        config = weighted_config(BrennanPredigerConfig, "linear")
-        analyzer = BrennanPredigerAnalyzer(synthetic_ratings, config)
+        ratings = ordered_ratings("synthetic", "linear")
+        analyzer = BrennanPredigerAnalyzer(ratings, fast_bp_config)
         result = analyzer.estimate()
 
         # Point estimate

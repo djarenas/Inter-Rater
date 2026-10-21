@@ -34,8 +34,9 @@ class CategoryReport:
     policy:
         What ``unused_categories`` was set to.
     action:
-        What that policy did. Under ``error`` there is no report to read, so in
-        practice this is 'kept' or 'dropped'.
+        What that policy did. Under ``error`` there is no report to read, and
+        the cleaner never removes a category, so this is always 'kept'. Kept
+        as a field so that report summaries keep the same keys.
     rare_threshold:
         Below this many ratings a category is called rare.
     """

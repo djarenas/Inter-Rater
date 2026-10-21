@@ -145,6 +145,35 @@ class Weights:
         return cls(1.0 - distance / distance.max(), kind="quadratic")
 
     @classmethod
+    def from_categories(cls, categories) -> Weights | None:
+        """
+        The weights a rating task declares, read from its categories.
+
+        The semantics is the one place weights are declared. Unordered
+        categories declare none, so I return None, the package's way of
+        saying unweighted. Ordered categories give linear or quadratic weights
+        by rank; weighted categories give their own matrix.
+
+        Parameters
+        ----------
+        categories : Categories
+            Usually ``ratings.semantics.categories``.
+
+        Returns
+        -------
+        Weights | None
+            None for unordered categories, otherwise the declared weights,
+            with ``kind`` set to 'linear', 'quadratic' or 'custom'.
+        """
+        from ...semantics.categories import OrderedCategories, WeightedCategories
+
+        if isinstance(categories, OrderedCategories):
+            return cls(categories.weight_matrix(), kind=categories.weighting)
+        if isinstance(categories, WeightedCategories):
+            return cls(categories.weight_matrix(), kind="custom")
+        return None
+
+    @classmethod
     def from_type(cls, weights_type: str, n_categories: int) -> Weights | None:
         """
         Factory method to build Weights from a type string.

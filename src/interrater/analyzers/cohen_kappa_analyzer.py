@@ -174,7 +174,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             ci_method=self.config.ci_method,
-            weights_type=self.config.weights_type,
+            weights_type=self._weights_kind(),
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -207,13 +207,13 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
                 f"hypothesis testing."
             )
 
-        htc = self.config.hypothesis_test_config
+        ht_config = self.config.hypothesis_test_config
         n_categories = self.ratings.semantics.n_categories
 
         # Compute point estimate
         point = cohen_kappa(self.estimator_input, self.weights)
 
-        if htc.method == "parametric_null":
+        if ht_config.method == "parametric_null":
             # Fleiss, Cohen & Everitt (1969): null variance for two raters
             from .variance_functions import cohen_null_variance
 
@@ -237,15 +237,15 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
 
             return HypothesisTestResult(
                 p_value=p_value,
-                alpha=htc.alpha,
-                reject_null=p_value < htc.alpha,
+                alpha=ht_config.alpha,
+                reject_null=self._reject_null(p_value, ht_config.alpha),
                 method="parametric_null",
                 point=point,
                 z_statistic=z,
                 null_variance=var_null,
             )
 
-        elif htc.method == "permutation":
+        elif ht_config.method == "permutation":
             # Permutation test: shuffle ratings to build null distribution
             from .resampling_functions.permutation_resampling import (
                 column_shuffle,
@@ -259,11 +259,11 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
                 "pool_and_redistribute": pool_and_redistribute,
             }
 
-            scheme_fn = scheme_map.get(htc.scheme)
+            scheme_fn = scheme_map.get(ht_config.scheme)
             if scheme_fn is None:
                 raise ValueError(
                     f"{_ERROR_PREFIX}: unknown permutation scheme "
-                    f"'{htc.scheme}'. Expected one of: "
+                    f"'{ht_config.scheme}'. Expected one of: "
                     f"{set(scheme_map.keys())}."
                 )
 
@@ -272,8 +272,8 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
 
             for permuted_array in scheme_fn(
                 self.ratings.category_index,
-                n_permutations=htc.n_permutations,
-                random_state=htc.random_state,
+                n_permutations=ht_config.n_permutations,
+                random_state=ht_config.random_state,
             ):
                 ei = EstimatorInput(
                     category_index=permuted_array,
@@ -292,18 +292,18 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
 
             return HypothesisTestResult(
                 p_value=p_value,
-                alpha=htc.alpha,
-                reject_null=p_value < htc.alpha,
+                alpha=ht_config.alpha,
+                reject_null=self._reject_null(p_value, ht_config.alpha),
                 method="permutation",
                 point=point,
                 null_distribution=null_distribution,
-                n_permutations=htc.n_permutations,
+                n_permutations=ht_config.n_permutations,
             )
 
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown hypothesis test method "
-                f"'{htc.method}'. Expected 'parametric_null' or "
+                f"'{ht_config.method}'. Expected 'parametric_null' or "
                 f"'permutation'."
             )
 

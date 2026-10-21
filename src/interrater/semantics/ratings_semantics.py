@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from difflib import get_close_matches
 from pathlib import Path
 
 from ..contracts import MIN_RATERS, MIN_SUBJECTS
@@ -99,14 +100,34 @@ class RatingsSemantics:
     # Class methods ----------------------------------------------------------  #
 
     @classmethod
-    def from_dict(cls, spec: dict) -> RatingsSemantics:
+    def from_dict(
+        cls, spec: dict, base_dir: str | Path | None = None
+    ) -> RatingsSemantics:
         """
         Build from a plain mapping, as parsed from YAML.
 
         ``raters`` is either a list of names or an integer count.
         ``categories`` is a mapping dispatched by ``kind``; see
-        ``build_categories``.
+        ``build_categories``. ``base_dir`` is where a relative
+        ``categories.weights_file`` is read from; ``build_from_yaml`` sets it
+        to the folder of the semantics file.
         """
+        # A misspelt optional key would otherwise be dropped without a word,
+        # and the check the user thought they had switched on would never run.
+        known   = {"raters", "categories", "n_subjects", "unique_subjects"}
+        unknown = sorted(set(spec) - known)
+        if unknown:
+            hints = []
+            for key in unknown:
+                close = get_close_matches(str(key), known, n=1)
+                if close:
+                    hints.append(f"{key!r} -> did you mean {close[0]!r}?")
+            hint = f" ({'; '.join(hints)})" if hints else ""
+            raise ValueError(
+                f"{_ERROR_PREFIX}: unknown key(s) {unknown}{hint}. "
+                f"Known: {sorted(known)}."
+            )
+
         missing = {"raters", "categories"} - set(spec)
         if missing:
             raise KeyError(
@@ -118,8 +139,8 @@ class RatingsSemantics:
         # through, and somebody debugging a YAML file needs to know which
         # block was wrong.
         try:
-            categories = build_categories(spec["categories"])
-        except (KeyError, TypeError, ValueError) as error:
+            categories = build_categories(spec["categories"], base_dir=base_dir)
+        except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
             raise type(error)(f"{_ERROR_PREFIX}: {error}") from error
 
         return cls(
@@ -155,7 +176,7 @@ class RatingsSemantics:
                 f"{_ERROR_PREFIX}: {path} must contain a YAML mapping, got "
                 f"{type(spec).__name__}."
             )
-        return cls.from_dict(spec)
+        return cls.from_dict(spec, base_dir=Path(path).parent)
 
     # Public API -------------------------------------------------------------  #
 

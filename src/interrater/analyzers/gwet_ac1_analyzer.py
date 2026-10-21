@@ -366,7 +366,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         return HypothesisTestResult(
             p_value=p_value,
             alpha=ht_config.alpha,
-            reject_null=(p_value < ht_config.alpha),
+            reject_null=self._reject_null(p_value, ht_config.alpha),
             method="permutation",
             point=observed_ac1,
             z_statistic=None,

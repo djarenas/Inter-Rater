@@ -92,6 +92,9 @@ class GroupAnalyzer(Analyzer, ABC):
         self._validate_group_config()
         self._validate_balance_constraint()
 
+        # Weights arrive with the semantics; refuse them if unusable here
+        self._refuse_weights_if_unsupported()
+
     @classmethod
     def build_from_nij_matrix(
         cls, nij: NijMatrix, config: GroupCoefficientConfig
