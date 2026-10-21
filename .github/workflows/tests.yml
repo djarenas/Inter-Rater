@@ -1,0 +1,60 @@
+# Runs the test suite on every push and pull request, and on demand from
+# the Actions tab ("Run workflow").
+#
+# Two kinds of run:
+#   - "minimum": Python 3.10 with the lowest versions pyproject.toml allows,
+#     so the promise in `dependencies` is checked, not assumed.
+#   - "latest": Python 3.11-3.13 with the newest releases, so a new numpy,
+#     pandas or scipy that breaks something shows up here first.
+#
+# The package is installed, and the tests run against the installed copy,
+# which is what a user gets from PyPI.
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} (${{ matrix.deps }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.10"
+            deps: minimum
+          - python-version: "3.11"
+            deps: latest
+          - python-version: "3.12"
+            deps: latest
+          - python-version: "3.13"
+            deps: latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the minimum supported dependencies
+        if: matrix.deps == 'minimum'
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy==1.24.*" "scipy==1.10.*" "pandas==2.0.*" \
+                      "matplotlib==3.6.*" "pyyaml==6.0.*"
+
+      - name: Install the package and pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install . "pytest>=8.0"
+
+      - name: Show installed versions
+        run: pip list
+
+      - name: Run the tests
+        run: pytest -q
