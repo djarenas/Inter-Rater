@@ -61,6 +61,10 @@ class CohenKappaResult(IndividualMarginalResult):
     weights_type : str
         Weighting scheme: "identity" (unweighted), "linear", "quadratic",
         or "custom". Determines what statistic this result represents.
+    weight_matrix : list[list[float]] | None, default None
+        The weight matrix that was used, as nested lists (row i, column j is
+        the credit for categories i and j). None when unweighted. Recorded so
+        a report shows the numbers, not only the name of the scheme.
     """
 
     # Attribute declaration
@@ -75,6 +79,7 @@ class CohenKappaResult(IndividualMarginalResult):
     # Populated at this level
     ci_method: str
     weights_type: str
+    weight_matrix: list[list[float]] | None = None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -104,6 +109,20 @@ class CohenKappaResult(IndividualMarginalResult):
                 f"{_ERROR_PREFIX}: weights_type must be 'identity', 'linear', "
                 f"'quadratic', or 'custom', got '{self.weights_type}'"
             )
+
+        # Validate weight_matrix: none when unweighted, square when given
+        if self.weight_matrix is not None:
+            if self.weights_type == "identity":
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: weight_matrix must be None when "
+                    f"weights_type is 'identity' (unweighted)"
+                )
+            matrix = np.asarray(self.weight_matrix, dtype=float)
+            if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: weight_matrix must be square, "
+                    f"got shape {matrix.shape}"
+                )
 
         # Call parent validation (IndividualMarginalResult validates
         # balance_profile and n_raters; PointEstimateResult validates
@@ -141,11 +160,12 @@ class CohenKappaResult(IndividualMarginalResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'ci_method', 'weights_type'.
+            Keys from parent (including balance) plus 'ci_method', 'weights_type', 'weight_matrix'.
         """
         result = super().summary()
         result.update({
             "ci_method": self.ci_method,
             "weights_type": self.weights_type,
+            "weight_matrix": self.weight_matrix,
         })
         return result

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import warnings
 
-import numpy as np
 import pytest
 
 from interrater.analyzers.configs import (
@@ -16,7 +15,6 @@ from interrater.analyzers.configs import (
     BrennanPredigerConfig,
     CohenKappaConfig,
     CongerKappaConfig,
-    CustomWeightsInput,
     FleissKappaConfig,
     GroupCoefficientConfig,
     GwetAC1Config,
@@ -282,50 +280,14 @@ class TestNoWeightGroupConfig:
 
     def test_default_construction(self):
         cfg = NoWeightGroupConfig()
-        assert cfg.weights_type == "identity"
-        assert cfg.custom_weights_path is None
-
-    def test_linear_weights_rejected(self):
-        with pytest.raises(ValueError, match="does not support weighting"):
-            NoWeightGroupConfig(weights_type="linear")
-
-    def test_quadratic_weights_rejected(self):
-        with pytest.raises(ValueError, match="does not support weighting"):
-            NoWeightGroupConfig(weights_type="quadratic")
-
-    def test_custom_weights_path_rejected(self):
-        with pytest.raises(ValueError, match="custom_weights_path"):
-            NoWeightGroupConfig(custom_weights_path="/some/path.yaml")
-
+        assert isinstance(cfg, NoWeightGroupConfig)
 
 class TestWeightableGroupConfig:
     """Tests for WeightableGroupConfig (accepts weights)."""
 
     def test_default_construction(self):
         cfg = WeightableGroupConfig()
-        assert cfg.weights_type == "identity"
-
-    def test_linear_accepted(self):
-        cfg = WeightableGroupConfig(weights_type="linear")
-        assert cfg.weights_type == "linear"
-
-    def test_quadratic_accepted(self):
-        cfg = WeightableGroupConfig(weights_type="quadratic")
-        assert cfg.weights_type == "quadratic"
-
-    def test_custom_accepted(self):
-        cfg = WeightableGroupConfig(weights_type="custom")
-        assert cfg.weights_type == "custom"
-
-    def test_unknown_weights_rejected(self):
-        with pytest.raises(ValueError, match="weights_type"):
-            WeightableGroupConfig(weights_type="ordinal")
-
-    def test_summary_includes_weights(self):
-        cfg = WeightableGroupConfig(weights_type="linear")
-        s = cfg.summary()
-        assert s["weights_type"] == "linear"
-
+        assert isinstance(cfg, WeightableGroupConfig)
 
 # ============================================================== #
 #  Leaf group configs                                            #
@@ -385,11 +347,6 @@ class TestScottsConfig:
         assert "percentile" in message
         assert "bca" in message
 
-    def test_rejects_weights(self):
-        """Inherits from NoWeightGroupConfig."""
-        with pytest.raises(ValueError, match="does not support weighting"):
-            ScottsConfig(weights_type="linear")
-
     def test_summary(self):
         cfg = ScottsConfig()
         s = cfg.summary()
@@ -422,7 +379,7 @@ class TestBrennanPredigerConfig:
 
     def test_default_construction(self):
         cfg = BrennanPredigerConfig()
-        assert cfg.weights_type == "identity"
+        assert isinstance(cfg, BrennanPredigerConfig)
 
     def test_rejects_parametric_null_ci(self):
         with pytest.raises(ValueError, match="parametric_null.*not available"):
@@ -433,17 +390,12 @@ class TestBrennanPredigerConfig:
         with pytest.raises(ValueError, match="parametric_null.*not available"):
             BrennanPredigerConfig(hypothesis_test_config=ht)
 
-    def test_accepts_linear_weights(self):
-        cfg = BrennanPredigerConfig(weights_type="linear")
-        assert cfg.weights_type == "linear"
-
-
 class TestKrippendorffAlphaConfig:
     """Tests for KrippendorffAlphaConfig (weightable, no parametric null)."""
 
     def test_default_construction(self):
         cfg = KrippendorffAlphaConfig()
-        assert cfg.weights_type == "identity"
+        assert isinstance(cfg, KrippendorffAlphaConfig)
 
     def test_rejects_parametric_null_ci(self):
         with pytest.raises(ValueError, match="parametric_null.*not available"):
@@ -453,11 +405,6 @@ class TestKrippendorffAlphaConfig:
         ht = HypothesisTestConfig(method="parametric_null")
         with pytest.raises(ValueError, match="parametric_null.*not available"):
             KrippendorffAlphaConfig(hypothesis_test_config=ht)
-
-    def test_accepts_quadratic_weights(self):
-        cfg = KrippendorffAlphaConfig(weights_type="quadratic")
-        assert cfg.weights_type == "quadratic"
-
 
 # ============================================================== #
 #  Individual hierarchy: IndividualMarginalConfig → children      #
@@ -488,32 +435,14 @@ class TestNoWeightIndividualConfig:
 
     def test_default_construction(self):
         cfg = NoWeightIndividualConfig()
-        assert cfg.weights_type == "identity"
-
-    def test_linear_weights_rejected(self):
-        with pytest.raises(ValueError, match="does not support weighting"):
-            NoWeightIndividualConfig(weights_type="linear")
-
-    def test_custom_weights_path_rejected(self):
-        with pytest.raises(ValueError, match="custom_weights_path"):
-            NoWeightIndividualConfig(custom_weights_path="/path.yaml")
-
+        assert isinstance(cfg, NoWeightIndividualConfig)
 
 class TestWeightableIndividualConfig:
     """Tests for WeightableIndividualConfig (accepts weights)."""
 
     def test_default_construction(self):
         cfg = WeightableIndividualConfig()
-        assert cfg.weights_type == "identity"
-
-    def test_linear_accepted(self):
-        cfg = WeightableIndividualConfig(weights_type="linear")
-        assert cfg.weights_type == "linear"
-
-    def test_unknown_rejected(self):
-        with pytest.raises(ValueError, match="weights_type"):
-            WeightableIndividualConfig(weights_type="unknown")
-
+        assert isinstance(cfg, WeightableIndividualConfig)
 
 # ============================================================== #
 #  Leaf individual configs                                       #
@@ -553,11 +482,6 @@ class TestCohenKappaConfig:
         assert "percentile" in message
         assert "bca" in message
 
-    def test_accepts_linear_weights(self):
-        cfg = CohenKappaConfig(weights_type="linear")
-        assert cfg.weights_type == "linear"
-
-
 class TestCongerKappaConfig:
     """Tests for CongerKappaConfig (Finding 1a + no parametric null)."""
 
@@ -584,12 +508,6 @@ class TestCongerKappaConfig:
         with pytest.raises(ValueError, match="parametric_null.*not available"):
             CongerKappaConfig(hypothesis_test_config=ht)
 
-    def test_rejects_weights(self):
-        """Inherits from NoWeightIndividualConfig."""
-        with pytest.raises(ValueError, match="does not support weighting"):
-            CongerKappaConfig(weights_type="quadratic")
-
-
 class TestLightKappaConfig:
     """Tests for LightKappaConfig (no parametric null, unbalanced OK)."""
 
@@ -605,11 +523,6 @@ class TestLightKappaConfig:
         ht = HypothesisTestConfig(method="parametric_null")
         with pytest.raises(ValueError, match="parametric_null.*not available"):
             LightKappaConfig(hypothesis_test_config=ht)
-
-    def test_rejects_weights(self):
-        with pytest.raises(ValueError, match="does not support weighting"):
-            LightKappaConfig(weights_type="linear")
-
 
 # ============================================================== #
 #  Permutation configs                                           #
@@ -810,52 +723,6 @@ class TestSubsetPermutationConfig:
                 config_of_coefficient=CohenKappaConfig(),
                 subset_k=3,
             )
-
-
-# ============================================================== #
-#  CustomWeightsInput                                            #
-# ============================================================== #
-
-
-class TestCustomWeightsInput:
-    """Tests for CustomWeightsInput."""
-
-    def test_construction_with_matrix(self):
-        m = np.eye(3)
-        cfg = CustomWeightsInput(matrix=m)
-        assert cfg.matrix is m
-        assert cfg.file_path is None
-
-    def test_construction_with_file_path(self):
-        cfg = CustomWeightsInput(file_path="/path/to/weights.yaml")
-        assert cfg.matrix is None
-        assert cfg.file_path == "/path/to/weights.yaml"
-
-    def test_neither_set_rejected(self):
-        with pytest.raises(ValueError, match="exactly one"):
-            CustomWeightsInput()
-
-    def test_both_set_rejected(self):
-        with pytest.raises(ValueError, match="exactly one"):
-            CustomWeightsInput(
-                matrix=np.eye(3), file_path="/path.yaml"
-            )
-
-    def test_kind_not_custom_rejected(self):
-        with pytest.raises(ValueError, match="kind must be 'custom'"):
-            CustomWeightsInput(kind="linear", matrix=np.eye(3))
-
-    def test_summary_with_matrix(self):
-        cfg = CustomWeightsInput(matrix=np.eye(4))
-        s = cfg.summary()
-        assert s["matrix_shape"] == (4, 4)
-        assert s["file_path"] is None
-
-    def test_summary_with_file_path(self):
-        cfg = CustomWeightsInput(file_path="/path.yaml")
-        s = cfg.summary()
-        assert "matrix_shape" not in s
-        assert s["file_path"] == "/path.yaml"
 
 
 # ============================================================== #

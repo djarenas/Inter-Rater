@@ -225,6 +225,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             bootstrap_distribution=bootstrap_distribution,
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
         )
 
     def estimate_from_nij_matrix(self) -> FleissKappaResult:
@@ -292,6 +293,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             bootstrap_distribution=bootstrap_distribution,
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:

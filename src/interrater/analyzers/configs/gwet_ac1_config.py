@@ -39,9 +39,8 @@ class GwetAC1Config(NoWeightGroupConfig):
     For weighted (ordinal) analysis, use AC2 (GwetAC2Config) instead.
 
     I inherit all fields from NoWeightGroupConfig and add no new ones.
-    The unweighted constraint is enforced at the config level via
-    NoWeightGroupConfig, which rejects any weights_type other than
-    "identity" and any non-None custom_weights_path.
+    The unweighted constraint is enforced by the analyzer, which refuses
+    ratings whose semantics declares ordered or weighted categories.
 
     References
     ----------
@@ -77,15 +76,13 @@ class GwetAC1Config(NoWeightGroupConfig):
     balanced_data_only: bool
     rater_jackknife: bool
     # Inherited from parent class NoWeightGroupConfig (validated there to stay at defaults)
-    weights_type: str
-    custom_weights_path: str | None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Gwet AC1 configuration."""
 
-        # Call parent validation (NoWeightGroupConfig rejects weights)
+        # Call parent validation
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:

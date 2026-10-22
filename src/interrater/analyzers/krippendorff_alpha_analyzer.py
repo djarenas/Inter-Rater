@@ -230,6 +230,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             balance_profile=self.balance_profile,
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
         )
 
     def estimate_from_nij_matrix(self) -> KrippendorffAlphaResult:
@@ -289,6 +290,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             balance_profile=self.balance_profile,
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:

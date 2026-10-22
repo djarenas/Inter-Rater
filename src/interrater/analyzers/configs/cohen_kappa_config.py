@@ -27,10 +27,11 @@ class CohenKappaConfig(WeightableIndividualConfig):
     marginals across raters, Cohen's kappa preserves rater identity -- it
     compares what rater A actually said with what rater B actually said.
 
-    I support weighting for ordinal data (Cohen 1968). With weights_type
-    set to "linear" or "quadratic", disagreements between adjacent categories
-    are penalised less than disagreements between distant ones. The unweighted
-    form (weights_type="identity") treats all disagreements equally.
+    I support weighting for ordinal data (Cohen 1968). When the semantics of
+    the ratings declares ordered categories ("linear" or "quadratic") or a
+    weight matrix, disagreements between adjacent categories are penalised
+    less than disagreements between distant ones. Unordered categories give
+    the unweighted form, which treats all disagreements equally.
 
     Cohen's kappa has a known asymptotic null variance (Fleiss, Cohen &
     Everitt 1969), so ci_method="parametric_null" is available here.
@@ -67,8 +68,6 @@ class CohenKappaConfig(WeightableIndividualConfig):
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
     # Inherited from parent class WeightableIndividualConfig
-    weights_type: str 
-    custom_weights_path: str | None
     # Populated at this level: Changing default 
     balanced_data_only: bool = True
 

@@ -33,9 +33,9 @@ class BrennanPredigerConfig(WeightableGroupConfig):
     is the unweighted one with identity W as a special case. The formula is
     from Gwet (2014), implemented in irrCAC as ``bp.coeff.raw``.
 
-    I inherit weight configuration from WeightableGroupConfig. The analyzer
-    resolves the weight matrix from weights_type and custom_weights_path at
-    construction time, exactly as FleissKappaAnalyzer does.
+    Weights are declared in the semantics of the ratings (categories kind
+    'ordered' or 'weighted'). The analyzer reads the weight matrix from there
+    at construction time, exactly as FleissKappaAnalyzer does.
 
     There is no parametric null variance formula for Brennan-Prediger, so
     ``ci_method='parametric_null'`` and hypothesis test
@@ -55,8 +55,6 @@ class BrennanPredigerConfig(WeightableGroupConfig):
     balanced_data_only : bool, default False
         Brennan-Prediger works on both balanced and unbalanced data.
         The formula naturally generalizes to varying raters per subject.
-    weights_type : str, default "identity"
-        Supports "identity" (unweighted), "linear", "quadratic", "custom".
     (all other fields inherited from WeightableGroupConfig and parents)
     """
 
@@ -74,8 +72,6 @@ class BrennanPredigerConfig(WeightableGroupConfig):
     balanced_data_only: bool
     rater_jackknife: bool 
     # Inherited from parent class WeightableGroupConfig
-    weights_type: str = "identity"
-    custom_weights_path: str | None = None
 
     # Constructor ------------------------------------------------------------ #
 

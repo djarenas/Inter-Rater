@@ -14,8 +14,9 @@ and integers.
 ## Weights
 
 A frozen dataclass. Built from class methods (`identity`, `linear`,
-`quadratic`) or from a file (`from_file`). Remembers its `kind` so a
-report can say *how* a coefficient was weighted.
+`quadratic`), or from the categories a semantics declares
+(`from_categories`), which is how the analyzers get theirs. Remembers its
+`kind` so a report can say *how* a coefficient was weighted.
 
 ## NijMatrix
 

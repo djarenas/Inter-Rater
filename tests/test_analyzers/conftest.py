@@ -200,8 +200,6 @@ HYPOTHESIS_TEST_DEFAULTS = HypothesisTestConfig()
 # A valid ConvergenceTest stub, used by AnalyzerConfig tests later.
 CONVERGENCE_TEST_STUB = ConvergenceTest()
 
-# A small identity weight matrix for CustomWeightsInput tests.
-IDENTITY_3x3 = np.eye(3)
 
 
 # -- Fixtures: Ratings objects --------------------------------------------- #

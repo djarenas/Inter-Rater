@@ -340,6 +340,15 @@ class AnalyzerConfig:
         for aliases in YAML_KEY_ALIASES.values():
             valid_fields.update(aliases)
         unknown = set(data_dict) - valid_fields
+        removed = sorted(unknown & {"weights_type", "custom_weights_path"})
+        if removed:
+            raise TypeError(
+                f"{_ERROR_PREFIX}: build_from_yaml: {removed} were removed "
+                f"in 2.1.0. Weights are declared in the semantics file "
+                f"instead: categories kind 'ordered' with 'weighting', or "
+                f"kind 'weighted' with 'weights' or 'weights_file'. Delete "
+                f"these lines from {path}."
+            )
         if unknown:
             raise TypeError(
                 f"{_ERROR_PREFIX}: build_from_yaml: Unknown YAML "

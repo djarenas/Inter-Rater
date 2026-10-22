@@ -68,8 +68,8 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
     estimator_input : EstimatorInput
         Built from ratings, carrying category_index, n_categories, and weights.
     weights : Weights | None
-        The weights object (from WeightableIndividualAnalyzer).
-        None if weights_type="identity" (unweighted).
+        The weights declared by the semantics (from WeightableIndividualAnalyzer).
+        None for unordered categories (unweighted).
 
     References
     ----------
@@ -175,6 +175,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             balance_profile=self.balance_profile,
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:

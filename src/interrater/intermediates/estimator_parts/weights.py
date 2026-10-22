@@ -194,7 +194,7 @@ class Weights:
         Raises
         ------
         ValueError
-            If weights_type is "custom" (use from_file or pass matrix directly).
+            If weights_type is "custom" (pass the matrix to Weights() directly).
             If weights_type is unknown.
         """
         if weights_type == "identity":
@@ -206,140 +206,14 @@ class Weights:
         elif weights_type == "custom":
             raise ValueError(
                 f"{_WEIGHTS_ERROR}: from_type does not support 'custom'. "
-                "Use from_file() or pass a matrix directly to Weights()."
+                "Pass the matrix directly to Weights(), or declare it in the "
+                "semantics (categories kind 'weighted')."
             )
         else:
             raise ValueError(
                 f"{_WEIGHTS_ERROR}: unknown weights_type '{weights_type}'. "
                 f"Expected one of: 'identity', 'linear', 'quadratic', 'custom'."
             )
-
-    @classmethod
-    def from_file(cls, path: str) -> Weights:
-        """
-        Load custom weights from a file.
-
-        Supports YAML, JSON, CSV, and plain text formats. Auto-detects format
-        from file extension. Loaded weights default to kind="custom".
-
-        Parameters
-        ----------
-        path : str
-            Path to weights file. Extension must be one of:
-            .yaml, .yml (YAML), .json (JSON), .csv (CSV), .txt (plain text)
-
-        Returns
-        -------
-        Weights
-            Loaded and validated weights matrix with kind="custom".
-
-        Raises
-        ------
-        FileNotFoundError
-            If file does not exist.
-        ValueError
-            If file extension not recognized, or matrix is invalid.
-        IOError
-            If file cannot be read.
-
-        Examples
-        --------
-        Load from YAML:
-        >>> w = Weights.from_file("weights.yaml")
-
-        Load from CSV:
-        >>> w = Weights.from_file("weights.csv")
-        """
-        import pathlib
-
-        # Get file extension
-        path_obj = pathlib.Path(path)
-        if not path_obj.exists():
-            raise FileNotFoundError(f"{_WEIGHTS_ERROR}: file not found: {path}")
-
-        ext = path_obj.suffix.lower()
-
-        try:
-            if ext in {".yaml", ".yml"}:
-                matrix = cls._load_yaml(path)
-            elif ext == ".json":
-                matrix = cls._load_json(path)
-            elif ext == ".csv":
-                matrix = cls._load_csv(path)
-            elif ext == ".txt":
-                matrix = cls._load_text(path)
-            else:
-                raise ValueError(
-                    f"{_WEIGHTS_ERROR}: unknown file extension '{ext}'. "
-                    f"Expected one of: .yaml, .yml, .json, .csv, .txt"
-                )
-        except (FileNotFoundError, ValueError):
-            raise
-        except Exception as e:
-            raise ValueError(
-                f"{_WEIGHTS_ERROR}: failed to load weights from {path}: {e}"
-            ) from e
-
-        # Build and return Weights (validation happens in __post_init__)
-        return cls(matrix, kind="custom")
-
-    @staticmethod
-    def _load_yaml(path: str) -> np.ndarray:
-        """Load matrix from YAML file."""
-        import yaml
-
-        with open(path) as f:
-            data = yaml.safe_load(f)
-
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"YAML must contain a dict with 'matrix' key, got {type(data).__name__}"
-            )
-
-        if "matrix" not in data:
-            raise ValueError("YAML must contain 'matrix' key")
-
-        matrix = np.array(data["matrix"], dtype=np.float64)
-        return matrix
-
-    @staticmethod
-    def _load_json(path: str) -> np.ndarray:
-        """Load matrix from JSON file."""
-        import json
-
-        with open(path) as f:
-            data = json.load(f)
-
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"JSON must contain an object with 'matrix' key, got {type(data).__name__}"
-            )
-
-        if "matrix" not in data:
-            raise ValueError("JSON must contain 'matrix' key")
-
-        matrix = np.array(data["matrix"], dtype=np.float64)
-        return matrix
-
-    @staticmethod
-    def _load_csv(path: str) -> np.ndarray:
-        """Load matrix from CSV file (space, tab, or comma separated)."""
-        matrix = np.loadtxt(path, delimiter=None, dtype=np.float64)
-        if matrix.ndim != 2:
-            raise ValueError(
-                f"CSV must be 2-dimensional (K×K matrix), got shape {matrix.shape}"
-            )
-        return matrix
-
-    @staticmethod
-    def _load_text(path: str) -> np.ndarray:
-        """Load matrix from plain text file (whitespace separated)."""
-        matrix = np.loadtxt(path, dtype=np.float64)
-        if matrix.ndim != 2:
-            raise ValueError(
-                f"Text file must be 2-dimensional (K×K matrix), got shape {matrix.shape}"
-            )
-        return matrix
 
     # Public API ---------------------------------------------------------  #
 

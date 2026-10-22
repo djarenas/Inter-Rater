@@ -10,14 +10,13 @@ properties, DataFrame round-trip, frozen.
 
 Weights is a K x K symmetric matrix of credits in [0, 1] with 1.0 on the
 diagonal. Key behaviours: construction validation, factory methods (identity,
-linear, quadratic, from_type, from_file), is_identity property, equality.
+linear, quadratic, from_type), is_identity property, equality.
 
 EstimatorInput carries category_index + K + optional weights + optional
 subject_ids. Key behaviours: O(1) validation, properties, nij computation,
 take_subjects, select_raters, equality.
 """
 
-import json
 import numpy as np
 import pandas as pd
 import pytest
@@ -320,7 +319,7 @@ class TestWeightsFactories:
         np.testing.assert_allclose(w.matrix, expected.matrix, atol=1e-12)
 
     def test_from_type_custom_raises(self):
-        """from_type('custom', k) raises -- use from_file or pass a matrix."""
+        """from_type('custom', k) raises -- pass a matrix to Weights() instead."""
         with pytest.raises(ValueError, match=r"does not support 'custom'"):
             Weights.from_type("custom", 3)
 
@@ -328,48 +327,6 @@ class TestWeightsFactories:
         """from_type with an unknown string raises."""
         with pytest.raises(ValueError, match=r"unknown weights_type"):
             Weights.from_type("banana", 3)
-
-
-class TestWeightsFromFile:
-    """from_file loads custom weights from disk."""
-
-    def test_from_json(self, tmp_path):
-        """A JSON file with a 'matrix' key is loaded correctly."""
-        data = {"matrix": [[1.0, 0.5], [0.5, 1.0]]}
-        path = tmp_path / "weights.json"
-        path.write_text(json.dumps(data))
-        w = Weights.from_file(str(path))
-        expected = np.array([[1.0, 0.5], [0.5, 1.0]])
-        np.testing.assert_array_equal(w.matrix, expected)
-        assert w.kind == "custom"
-
-    def test_from_csv(self, tmp_path):
-        """A CSV file is loaded correctly."""
-        path = tmp_path / "weights.csv"
-        np.savetxt(str(path), np.array([[1.0, 0.5], [0.5, 1.0]]))
-        w = Weights.from_file(str(path))
-        expected = np.array([[1.0, 0.5], [0.5, 1.0]])
-        np.testing.assert_allclose(w.matrix, expected, atol=1e-12)
-
-    def test_from_txt(self, tmp_path):
-        """A plain text file is loaded correctly."""
-        path = tmp_path / "weights.txt"
-        np.savetxt(str(path), np.array([[1.0, 0.5], [0.5, 1.0]]))
-        w = Weights.from_file(str(path))
-        expected = np.array([[1.0, 0.5], [0.5, 1.0]])
-        np.testing.assert_allclose(w.matrix, expected, atol=1e-12)
-
-    def test_file_not_found(self):
-        """A missing file raises FileNotFoundError."""
-        with pytest.raises(FileNotFoundError, match=r"\[Weights\] Error"):
-            Weights.from_file("/nonexistent/path/weights.json")
-
-    def test_unknown_extension(self, tmp_path):
-        """An unknown extension raises ValueError."""
-        path = tmp_path / "weights.xyz"
-        path.write_text("nope")
-        with pytest.raises(ValueError, match=r"unknown file extension"):
-            Weights.from_file(str(path))
 
 
 class TestWeightsProperties:

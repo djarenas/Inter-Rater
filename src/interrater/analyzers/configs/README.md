@@ -39,8 +39,13 @@ AnalyzerConfig (base)
 Supporting types:
   HypothesisTestConfig
   PermutationBootstrapMeanConfig
-  CustomWeightsInput
 ```
+
+Weights are not configured here. They are declared in the semantics of the
+ratings (categories of kind `ordered` with a `weighting`, or kind `weighted`
+with a matrix), and the analyzer reads them from there. `weights_type` and
+`custom_weights_path` were removed in 2.1.0; a YAML config that still has them
+is refused with a message saying so.
 
 ## Base: AnalyzerConfig
 
@@ -69,20 +74,13 @@ Both are validated as strict `bool` (rejects `int` to catch `balanced_data_only=
 
 For coefficients whose chance terms are defined independently of how raters use categories. Weighting would create an inconsistency: weighted observed agreement but unweighted chance term.
 
-Validates:
-- `weights_type` must be "identity"
-- `custom_weights_path` must be None
+Adds no fields. The analyzers for these coefficients refuse ratings whose semantics declares ordered or weighted categories.
 
 Leaf configs: **GwetAC1Config**, **ScottsConfig**.
 
 ### WeightableGroupConfig
 
-For coefficients that support distance-based weighting. Adds:
-
-- `weights_type` (str, default "identity") -- "identity", "linear", "quadratic", or "custom"
-- `custom_weights_path` (str | None, default None) -- path to custom weights definition
-
-Validates `weights_type` is one of the four allowed values.
+For coefficients that support distance-based weighting. Adds no fields: the weights come from the semantics of the ratings, and these are the coefficients whose analyzers accept them.
 
 Leaf configs: **FleissKappaConfig**, **BrennanPredigerConfig**, **KrippendorffAlphaConfig**.
 
@@ -175,14 +173,6 @@ Controls bootstrapping of the mean coefficient across combinations.
 - `alpha` (float, default 0.05) -- significance level
 - `random_state` (int | None, default None) -- random seed
 
-### CustomWeightsInput
-
-Describes how to load a custom weight matrix. XOR validation: exactly one of `matrix` or `file_path` must be provided.
-
-- `kind` (str, default "custom") -- must be "custom"
-- `matrix` (ndarray | None, default None) -- weight matrix directly
-- `file_path` (str | None, default None) -- path to YAML file defining the matrix
-
 ## Using Configurations
 
 ### From YAML
@@ -199,7 +189,6 @@ alpha: 0.05
 random_state: 42
 ci_method: percentile
 balanced_data_only: true
-weights_type: identity
 hypothesis_test:                     # alias for hypothesis_test_config
   method: permutation
   scheme: column_shuffle
@@ -214,7 +203,6 @@ Unknown keys are rejected with a clear error listing valid keys (aliases include
 config = FleissKappaConfig.build_from_dict({
     "n_resamples": 2000,
     "alpha": 0.05,
-    "weights_type": "linear",
 })
 ```
 
@@ -226,7 +214,6 @@ config = FleissKappaConfig.build_from_dict({
 config = FleissKappaConfig(
     n_resamples=2000,
     alpha=0.05,
-    weights_type="linear",
 )
 ```
 
@@ -243,7 +230,6 @@ config.summary()
 #     "ci_method": "percentile",
 #     "balanced_data_only": True,
 #     "rater_jackknife": False,
-#     "weights_type": "linear",
 #     "_package_version": "2.1.3",
 # }
 ```
@@ -260,10 +246,10 @@ config.summary()
 
 ## Future: Extended Weight Types
 
-Several coefficients (Gwet's AC2, Krippendorff's alpha) support ordinal, interval, and ratio weighting schemes beyond the current "identity", "linear", "quadratic", "custom":
+Several coefficients (Gwet's AC2, Krippendorff's alpha) support ordinal, interval, and ratio weighting schemes beyond what the semantics can declare today (unordered, ordered linear or quadratic, or a weighted matrix):
 
 - Ordinal weights (Krippendorff-style distance-based)
 - Interval weights (continuous measurement distances)
 - Ratio weights (ratio-scaled measurement distances)
 
-When AC2 is implemented, it will inherit from WeightableGroupConfig. The Weights class will be extended to support these additional schemes. See Gwet (2014) for the AC2 formulation.
+When AC2 is implemented, it will inherit from WeightableGroupConfig. The categories in the semantics, and the Weights class built from them, will be extended to support these additional schemes. See Gwet (2014) for the AC2 formulation.

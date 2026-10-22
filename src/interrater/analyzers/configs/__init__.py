@@ -32,7 +32,6 @@ Hierarchy:
 Supporting types:
   HypothesisTestConfig (hypothesis testing against H₀: coefficient = 0)
   PermutationBootstrapMeanConfig (mean-level bootstrap for permutation)
-  CustomWeightsInput (describes how to load custom weight matrices)
 """
 
 from .analyzer_config import AnalyzerConfig
@@ -55,7 +54,6 @@ from .permutation_config import PermutationConfig
 from .permutation_bootstrap_mean_config import PermutationBootstrapMeanConfig
 from .pairwise_permutation_config import PairwisePermutationConfig
 from .subset_permutation_config import SubsetPermutationConfig
-from .custom_weights_input import CustomWeightsInput
 
 __all__ = [
     "AnalyzerConfig",
@@ -78,5 +76,4 @@ __all__ = [
     "PermutationBootstrapMeanConfig",
     "PairwisePermutationConfig",
     "SubsetPermutationConfig",
-    "CustomWeightsInput",
 ]

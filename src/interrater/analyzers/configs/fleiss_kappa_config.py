@@ -33,9 +33,9 @@ class FleissKappaConfig(WeightableGroupConfig):
     balanced_data_only : bool, default True
         If True, the analyzer will throw an error on unbalanced data (exact formula only).
         If False, the analyzer will allow unbalanced data (use approximation + warning).
-    weights_type : str, default "identity"
-        Fleiss' kappa supports optional weighting for ordinal data.
-        Options: "identity" (no weights), "linear", "quadratic", "custom".
+    Fleiss' kappa supports weighting for ordinal data. Weights are declared
+    in the semantics of the ratings (categories kind 'ordered' or 'weighted'),
+    not here.
     (all other fields inherited from WeightableGroupConfig and parents)
     """
 
@@ -51,9 +51,6 @@ class FleissKappaConfig(WeightableGroupConfig):
     injection: tuple[InjectorConfig] | None
     # Inherited from parent class GroupCoefficientConfig
     rater_jackknife: bool
-    weights_type: str
-    # Inherited from parent class WeightableGroupConfig
-    custom_weights_path: str | None
     # Override parent default: Fleiss prefers balance by default
     balanced_data_only: bool = True
 

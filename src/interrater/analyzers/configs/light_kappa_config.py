@@ -36,9 +36,8 @@ class LightKappaConfig(NoWeightIndividualConfig):
     (there is only one pair).
 
     I do not support weighting. Light (1971) defined the coefficient as the
-    mean of unweighted pairwise kappas. The unweighted constraint is enforced
-    by my parent NoWeightIndividualConfig, which rejects any weights_type
-    other than "identity".
+    mean of unweighted pairwise kappas. The analyzer refuses ratings whose
+    semantics declares ordered or weighted categories.
 
     There is no closed-form null variance for Light's kappa. The C(n, 2)
     pairwise kappas are correlated (pairs sharing a rater are not independent),
@@ -69,8 +68,6 @@ class LightKappaConfig(NoWeightIndividualConfig):
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
     # Inherited from parent class NoWeightIndividualConfig (validated to stay at defaults)
-    weights_type: str
-    custom_weights_path: str | None
     # Populated at this level
     balanced_data_only: bool = False  # Light's kappa handles unbalanced data (each pair uses shared_rows). Field exists so YAML configs with this key do not crash.
 
@@ -79,7 +76,7 @@ class LightKappaConfig(NoWeightIndividualConfig):
     def __post_init__(self) -> None:
         """Validate Light's kappa configuration."""
 
-        # Call parent validation (NoWeightIndividualConfig rejects weights)
+        # Call parent validation
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:

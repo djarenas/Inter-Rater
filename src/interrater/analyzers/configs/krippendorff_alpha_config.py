@@ -68,9 +68,9 @@ class KrippendorffAlphaConfig(WeightableGroupConfig):
         Unbalanced data is its natural habitat -- subjects with varying
         numbers of raters are handled by pair-pooling rather than
         subject-averaging.
-    weights_type : str, default "identity"
-        Supports "identity" (unweighted/nominal), "linear", "quadratic",
-        "custom". The cost of confusing categories a and b is 1 - w_ab.
+    The weights come from the semantics of the ratings (categories kind
+    'ordered' or 'weighted'); unordered categories give the nominal case.
+    The cost of confusing categories a and b is 1 - w_ab.
     (all other fields inherited from WeightableGroupConfig and parents)
     """
 
@@ -88,14 +88,12 @@ class KrippendorffAlphaConfig(WeightableGroupConfig):
     balanced_data_only: bool
     rater_jackknife: bool
     # Inherited from parent class WeightableGroupConfig
-    weights_type: str = "identity"
-    custom_weights_path: str | None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Krippendorff's alpha configuration."""
-        # Call parent validation (WeightableGroupConfig validates weights)
+        # Call parent validation
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:

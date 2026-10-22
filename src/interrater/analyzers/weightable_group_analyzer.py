@@ -77,7 +77,6 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         TypeError
             If config is not WeightableGroupConfig.
         ValueError
-            If the config still sets weights_type or custom_weights_path.
         """
         # Call parent __init__ (validates group config, balance constraint)
         # Wrap to propagate errors with WeightableGroupAnalyzer context
@@ -88,7 +87,6 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
 
         # Validate config type; weights come from the semantics
         self._validate_weightable_config()
-        self._refuse_config_weights()
         from ..intermediates.estimator_parts import Weights
         self.weights = Weights.from_categories(self.ratings.semantics.categories)
 
@@ -119,7 +117,6 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         TypeError
             If config is not WeightableGroupConfig.
         ValueError
-            If the config still sets weights_type or custom_weights_path.
         """
         # Call parent build_from_nij_matrix (sets ratings, config, balance_profile, nij_matrix)
         # Wrap to propagate errors with WeightableGroupAnalyzer context
@@ -130,7 +127,6 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
 
         # Validate config type. Counts carry no semantics, so no weights.
         instance._validate_weightable_config()
-        instance._refuse_config_weights()
         instance.weights = None
 
         return instance

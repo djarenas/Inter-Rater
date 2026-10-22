@@ -40,9 +40,8 @@ class ScottsConfig(NoWeightGroupConfig):
     For many raters, use FleissKappaConfig instead (it reduces to Scott's pi
     at n=2 and is the established generalization).
 
-    I enforce unweighted analysis by inheriting from NoWeightGroupConfig,
-    which validates that weights_type='identity' and custom_weights_input=None.
-    Attempting to use weights raises ValueError.
+    I am unweighted. The analyzer refuses ratings whose semantics declares
+    ordered or weighted categories, with a ValueError.
 
     Because Scott's pi is algebraically identical to Fleiss' kappa at two
     raters, the parametric null variance formula (Fleiss 1979, Eq. 12) is
@@ -76,15 +75,13 @@ class ScottsConfig(NoWeightGroupConfig):
     balanced_data_only: bool
     rater_jackknife: bool
     # Inherited from parent class NoWeightGroupConfig (validated to stay at defaults)
-    weights_type: str
-    custom_weights_path: str | None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Scott's pi configuration."""
 
-        # Call parent validation (NoWeightGroupConfig rejects weights)
+        # Call parent validation
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:

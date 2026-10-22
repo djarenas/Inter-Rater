@@ -25,7 +25,7 @@ from interrater.intermediates.estimator_parts import (Weights, NijMatrix)
 
 from interrater.analyzers import FleissKappaAnalyzer, ScottsAnalyzer, GwetAC1Analyzer, BrennanPredigerAnalyzer, KrippendorffAlphaAnalyzer, CohenKappaAnalyzer, CongerKappaAnalyzer, LightKappaAnalyzer
 from interrater.analyzers.permutation_analysis import PairwisePermutationAnalysis, SubsetPermutationAnalysis
-from interrater.analyzers.configs import FleissKappaConfig, ScottsConfig, CustomWeightsInput, GwetAC1Config, BrennanPredigerConfig, KrippendorffAlphaConfig, CohenKappaConfig, CongerKappaConfig, LightKappaConfig, PairwisePermutationConfig, SubsetPermutationConfig, PermutationBootstrapMeanConfig, HypothesisTestConfig
+from interrater.analyzers.configs import FleissKappaConfig, ScottsConfig, GwetAC1Config, BrennanPredigerConfig, KrippendorffAlphaConfig, CohenKappaConfig, CongerKappaConfig, LightKappaConfig, PairwisePermutationConfig, SubsetPermutationConfig, PermutationBootstrapMeanConfig, HypothesisTestConfig
 
 from interrater.injectors import RaterInjector, WithinSubjectInjector, RaterBootstrapInjector, PooledInjector, DistributionInjector, ExtremalInjector
 from interrater.injectors.configs import InjectorConfig, WithinSubjectInjectorConfig, RaterBootstrapInjectorConfig, PooledInjectorConfig, DistributionInjectorConfig, ExtremalInjectorConfig
@@ -128,7 +128,6 @@ __all__ = [
     "LightKappaConfig",
     "PairwisePermutationConfig",
     "SubsetPermutationConfig",
-    "CustomWeightsInput",
     "Weights",
     "NijMatrix",
     # Bootstrap of the mean over rater combinations: "correlated" (default,

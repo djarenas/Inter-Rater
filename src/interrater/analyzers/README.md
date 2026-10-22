@@ -72,7 +72,7 @@ the type.
 
 ### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
 
-- Resolves the Weights object from `config.weights_type`
+- Reads the Weights object from the semantics of the ratings (`Weights.from_categories`)
 - Validates weight matrix dimensions match the number of categories
 - Supports "identity" (unweighted), "linear", "quadratic", and "custom"
 

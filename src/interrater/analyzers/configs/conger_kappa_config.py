@@ -33,8 +33,8 @@ class CongerKappaConfig(NoWeightIndividualConfig):
 
     I do not support weighting. Conger (1980) defined the coefficient for
     nominal data only; there is no standard weighted generalisation. The
-    unweighted constraint is enforced by my parent NoWeightIndividualConfig,
-    which rejects any weights_type other than "identity".
+    analyzer refuses ratings whose semantics declares ordered or weighted
+    categories.
 
     There is no known closed-form null variance for Conger's kappa, so
     ci_method="parametric_null" is not available. Use bootstrap
@@ -64,8 +64,6 @@ class CongerKappaConfig(NoWeightIndividualConfig):
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
     # Inherited from parent class NoWeightIndividualConfig (validated to stay at defaults)
-    weights_type: str 
-    custom_weights_path: str | None
     # Populated at this level
     balanced_data_only: bool = True # Must always be True. The variable exists in the class so that if someone feeds a YAML with a true value the config takes it and does not complain.
      
@@ -75,7 +73,7 @@ class CongerKappaConfig(NoWeightIndividualConfig):
     def __post_init__(self) -> None:
         """Validate Conger's kappa configuration."""
 
-        # Call parent validation (NoWeightIndividualConfig rejects weights)
+        # Call parent validation
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:

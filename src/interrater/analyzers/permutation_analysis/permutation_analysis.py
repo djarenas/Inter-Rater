@@ -270,7 +270,7 @@ class PermutationAnalysis:
         Read the weights from the semantics of the ratings.
 
         Follows the same rules as the analyzers: weights are declared in the
-        semantics, never in the config; a coefficient with a weighted form
+        semantics; a coefficient with a weighted form
         uses them; a coefficient without one refuses ordered or weighted
         categories rather than quietly ignoring them.
 
@@ -282,25 +282,11 @@ class PermutationAnalysis:
         Raises
         ------
         ValueError
-            If config_of_coefficient still sets weights_type or
-            custom_weights_path, or if the coefficient has no weighted form
-            and the semantics declares ordered or weighted categories.
+            If the coefficient has no weighted form and the semantics
+            declares ordered or weighted categories.
         """
         from ...intermediates.estimator_parts.weights import Weights
         from ...semantics.categories import DistanceCategories
-
-        coc          = self.config.config_of_coefficient
-        weights_type = getattr(coc, "weights_type", "identity")
-        custom_path  = getattr(coc, "custom_weights_path", None)
-        if weights_type != "identity" or custom_path is not None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: weights are no longer set in "
-                f"config_of_coefficient (got weights_type={weights_type!r}, "
-                f"custom_weights_path={custom_path!r}). Declare them in the "
-                f"semantics instead: categories kind 'ordered' with "
-                f"'weighting', or kind 'weighted' with 'weights' or "
-                f"'weights_file'."
-            )
 
         categories  = self.ratings.semantics.categories
         coefficient = self.config.coefficient_to_compute

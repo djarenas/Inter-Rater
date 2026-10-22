@@ -82,7 +82,6 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
         TypeError
             If config is not WeightableIndividualConfig.
         ValueError
-            If the config still sets weights_type or custom_weights_path.
         """
         # Call parent __init__ (validates ratings, config, computes BalanceProfile,
         # builds EstimatorInput with weights=None)
@@ -95,7 +94,6 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
         self._validate_weightable_config()
 
         # Weights come from the semantics; rebuild EstimatorInput with them
-        self._refuse_config_weights()
         from ..intermediates.estimator_parts import Weights
         self.weights = Weights.from_categories(self.ratings.semantics.categories)
         if self.weights is not None:

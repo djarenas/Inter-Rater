@@ -372,30 +372,15 @@ class Analyzer(ABC):
                 f"ratings."
             )
 
-    def _refuse_config_weights(self) -> None:
-        """
-        Refuse weights set in the config. They are declared in the semantics now.
-
-        Removed from the configs in a later step; until then, a config that
-        still asks for weights must not be silently ignored.
-        """
-        weights_type = getattr(self.config, "weights_type", "identity")
-        custom_path  = getattr(self.config, "custom_weights_path", None)
-        if weights_type != "identity" or custom_path is not None:
-            # No prefix here: the leaf constructor that called me adds its own.
-            raise ValueError(
-                f"weights are no longer set in "
-                f"the config (got weights_type={weights_type!r}, "
-                f"custom_weights_path={custom_path!r}). Declare them in the "
-                f"semantics instead: categories kind 'ordered' with "
-                f"'weighting', or kind 'weighted' with 'weights' or "
-                f"'weights_file'."
-            )
-
     def _weights_kind(self) -> str:
         """How the result should name its weighting: identity, linear, quadratic or custom."""
         weights = getattr(self, "weights", None)
         return "identity" if weights is None else weights.kind
+
+    def _weight_matrix(self) -> list[list[float]] | None:
+        """The weight matrix for the result, as plain nested lists; None when unweighted."""
+        weights = getattr(self, "weights", None)
+        return None if weights is None else weights.matrix.tolist()
 
     def _reject_null(self, p_value: float, alpha: float) -> bool:
         """Decide the test as a plain Python bool, with context if it fails."""
