@@ -1,6 +1,6 @@
 ## What version 2 adds
 
-*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [GitHub](https://github.com/djarenas/Inter-Rater)*
+*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [Source on GitHub](https://github.com/djarenas/Inter-Rater)*
 
 - **Confidence intervals that estimate what they claim to.** Bootstrap
   intervals from resampled subjects, with the null test kept separate and

@@ -1,6 +1,6 @@
 ## Why pairwise, and not only a single number
 
-*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [GitHub](https://github.com/djarenas/Inter-Rater)*
+*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [Source on GitHub](https://github.com/djarenas/Inter-Rater)*
 
 Version 1 computed a coefficient for every pair of raters as well as one for
 the panel, and version 2 keeps that. Two reasons, and the second only became
