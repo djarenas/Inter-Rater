@@ -1,5 +1,7 @@
 ## Two ways to mean "by chance"
 
+*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [GitHub](https://github.com/djarenas/Inter-Rater)*
+
 Every chance-corrected coefficient must decide what to do when two raters use
 the categories at different rates, when one says "include" twice as often as
 the other. There are two defensible answers, and which one a coefficient picks

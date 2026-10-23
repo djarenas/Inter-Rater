@@ -1,5 +1,7 @@
 ## What if one of your raters were someone else?
 
+*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [GitHub](https://github.com/djarenas/Inter-Rater)*
+
 Every operation above perturbs the data: drop a subject, drop a rater, take the
 pairs. The panel itself stays fixed, and in every other agreement package it
 stays fixed permanently: the raters you had are the raters the analysis knows

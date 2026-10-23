@@ -1,5 +1,7 @@
 ## Why this is built out of objects, and what the flexibility buys
 
+*Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [GitHub](https://github.com/djarenas/Inter-Rater)*
+
 A coefficient is a formula, and a formula is a function. So it is fair to ask
 what the types are for, and why we spent so much time on a OOP design.
 
