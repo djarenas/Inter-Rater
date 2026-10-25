@@ -675,6 +675,272 @@ class TestHypothesisTestGuards:
 
 
 # ------------------------------------------------------------------ #
+# Hypothesis test on an undefined coefficient                          #
+# ------------------------------------------------------------------ #
+
+
+def _all_same_ratings(n_raters: int) -> Ratings:
+    """Every rater gives every subject the same answer."""
+    cats = UnorderedCategories(names=("A", "B"), labels={"A": "A", "B": "B"})
+    sem = RatingsSemantics(raters=n_raters, categories=cats)
+    ci = np.zeros((6, n_raters), dtype=np.int8)
+    return Ratings(category_index=ci, semantics=sem)
+
+
+class TestHypothesisTestUndefinedCoefficient:
+    """
+    When every rating is the same, six coefficients are undefined (NaN).
+    Their permutation test used to report p = 0 and reject; it must refuse.
+    Gwet's AC1 and Brennan-Prediger are defined there (1.0) and still run.
+    """
+
+    @pytest.mark.parametrize("name, n_raters", [
+        ("FleissKappa", 3), ("Scotts", 2), ("KrippendorffAlpha", 3),
+        ("CohenKappa", 2), ("CongerKappa", 3), ("LightKappa", 3),
+    ])
+    # Light averages its pair values; all NaN here, so numpy says so.
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
+    def test_undefined_refused(self, name, n_raters):
+        import interrater.analyzers as A
+        import interrater.analyzers.configs as C
+        from interrater.analyzers.configs import HypothesisTestConfig
+
+        ht = HypothesisTestConfig(method="permutation", n_permutations=20)
+        config = getattr(C, f"{name}Config")(hypothesis_test_config=ht)
+        a = getattr(A, f"{name}Analyzer")(_all_same_ratings(n_raters), config)
+        with pytest.raises(ValueError, match="undefined"):
+            a.hypothesis_test()
+
+    @pytest.mark.parametrize("name", ["GwetAC1", "BrennanPrediger"])
+    def test_defined_still_runs(self, name):
+        import interrater.analyzers as A
+        import interrater.analyzers.configs as C
+        from interrater.analyzers.configs import HypothesisTestConfig
+
+        ht = HypothesisTestConfig(method="permutation", n_permutations=20)
+        config = getattr(C, f"{name}Config")(hypothesis_test_config=ht)
+        result = getattr(A, f"{name}Analyzer")(_all_same_ratings(3), config).hypothesis_test()
+        assert result.point == 1.0
+        assert not result.reject_null
+
+
+# ------------------------------------------------------------------ #
+# parametric_null only where its formula applies                       #
+# ------------------------------------------------------------------ #
+
+
+def _three_cat_ratings(n_raters: int, ordered: bool = False, unbalanced: bool = False) -> Ratings:
+    """40 subjects, 3 categories; raters copy a true answer 70% of the time."""
+    from interrater.semantics.categories import OrderedCategories
+
+    rng = np.random.default_rng(42)
+    truth = rng.integers(0, 3, 40)
+    codes = np.where(
+        rng.random((40, n_raters)) < 0.7, truth[:, None], rng.integers(0, 3, (40, n_raters)),
+    ).astype(np.int8)
+    if unbalanced:
+        codes[:5, -1] = -1  # five subjects lose their last rater
+    names, labels = ("A", "B", "C"), {"A": "A", "B": "B", "C": "C"}
+    cats = (OrderedCategories(names=names, labels=labels, weighting="linear") if ordered
+            else UnorderedCategories(names=names, labels=labels))
+    return Ratings(category_index=codes, semantics=RatingsSemantics(raters=n_raters, categories=cats))
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")  # parametric_null warns; not the subject
+class TestParametricNullNeedsItsAssumptions:
+    """
+    The null variances behind parametric_null assume every subject has the
+    same number of raters, and Fleiss' (Eq. 12) has no weighted form. Both
+    the interval and the hypothesis test are refused at construction when
+    the data break that; Cohen's weighted null variance is published, so
+    weighted Cohen still runs.
+    """
+
+    @staticmethod
+    def _configs(config_cls, **kw):
+        from interrater.analyzers.configs import HypothesisTestConfig
+
+        return [
+            config_cls(ci_method="parametric_null", **kw),
+            config_cls(hypothesis_test_config=HypothesisTestConfig(method="parametric_null"), **kw),
+        ]
+
+    @pytest.mark.parametrize("which", [0, 1], ids=["interval", "test"])
+    def test_fleiss_unbalanced_refused(self, which):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        config = self._configs(FleissKappaConfig, balanced_data_only=False)[which]
+        with pytest.raises(ValueError, match="same number of raters; these data have 2 to 3"):
+            FleissKappaAnalyzer(_three_cat_ratings(3, unbalanced=True), config)
+
+    def test_fleiss_unbalanced_nij_refused(self):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        nij = NijMatrix(matrix=np.array([[3, 0], [2, 1], [1, 1], [0, 2]]))
+        config = self._configs(FleissKappaConfig, balanced_data_only=False)[0]
+        with pytest.raises(ValueError, match="same number of raters"):
+            FleissKappaAnalyzer.build_from_nij_matrix(nij, config)
+
+    @pytest.mark.parametrize("which", [0, 1], ids=["interval", "test"])
+    def test_fleiss_weighted_refused(self, which):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        with pytest.raises(ValueError, match="unweighted null variance"):
+            FleissKappaAnalyzer(_three_cat_ratings(3, ordered=True), self._configs(FleissKappaConfig)[which])
+
+    def test_scott_unbalanced_refused_with_the_right_reason(self):
+        """It used to fail by dividing by zero, blaming 'all ratings in one category'."""
+        from interrater.analyzers import ScottsAnalyzer
+        from interrater.analyzers.configs import ScottsConfig
+
+        config = self._configs(ScottsConfig, balanced_data_only=False)[1]
+        with pytest.raises(ValueError, match="same number of raters; these data have 1 to 2"):
+            ScottsAnalyzer(_three_cat_ratings(2, unbalanced=True), config)
+
+    @pytest.mark.parametrize("which", [0, 1], ids=["interval", "test"])
+    def test_balanced_unweighted_fleiss_still_runs(self, which):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        FleissKappaAnalyzer(_three_cat_ratings(3), self._configs(FleissKappaConfig)[which])
+
+    @pytest.mark.parametrize("which", [0, 1], ids=["interval", "test"])
+    def test_weighted_cohen_still_runs(self, which):
+        from interrater.analyzers import CohenKappaAnalyzer
+        from interrater.analyzers.configs import CohenKappaConfig
+
+        analyzer = CohenKappaAnalyzer(_three_cat_ratings(2, ordered=True), self._configs(CohenKappaConfig)[which])
+        result = analyzer.estimate() if which == 0 else analyzer.hypothesis_test()
+        assert np.isfinite(result.point)
+
+    def test_other_methods_on_unbalanced_data_unaffected(self):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        FleissKappaAnalyzer(
+            _three_cat_ratings(3, unbalanced=True),
+            FleissKappaConfig(balanced_data_only=False, n_resamples=20),
+        ).estimate()
+
+
+# ------------------------------------------------------------------ #
+# p-values: the shared helpers and what every coefficient reports      #
+# ------------------------------------------------------------------ #
+
+
+def _fleiss_analyzer():
+    from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
+    from interrater.analyzers.configs import FleissKappaConfig
+
+    return FleissKappaAnalyzer(_make_ratings(3), FleissKappaConfig())
+
+
+class TestPValueHelpers:
+    """The two helpers every analyzer now calls."""
+
+    def test_nan_draws_skipped_and_counted(self):
+        """3 of 5 draws usable, none at or above 0.35: greater = 1/4."""
+        null = np.array([0.1, 0.2, np.nan, 0.3, np.nan])
+        d = _fleiss_analyzer()._permutation_p_value(null, 0.35, "two-sided")
+        assert (d["n_usable"], d["n_at_or_above"], d["n_at_or_below"]) == (3, 0, 3)
+        assert d["p_value"] == pytest.approx(2 * 1 / 4)
+
+    def test_all_nan_draws_refused(self):
+        null = np.array([np.nan, np.nan])
+        with pytest.raises(ValueError, match="every permutation"):
+            _fleiss_analyzer()._permutation_p_value(null, 0.35, "two-sided")
+
+    @pytest.mark.parametrize("alternative, expected", [
+        ("greater", 1 / 100), ("two-sided", 2 / 100), ("less", 1.0),
+    ])
+    def test_observed_beyond_every_draw(self, alternative, expected):
+        """99 draws, all below the observed value."""
+        null = np.linspace(-0.1, 0.1, 99)
+        d = _fleiss_analyzer()._permutation_p_value(null, 0.5, alternative)
+        assert d["p_value"] == pytest.approx(expected)
+
+    @pytest.mark.parametrize("alternative, expected", [
+        ("two-sided", 0.0455), ("greater", 0.0228), ("less", 0.9772),
+    ])
+    def test_parametric_z_of_two(self, alternative, expected):
+        from interrater.analyzers.analyzer import Analyzer
+
+        assert Analyzer._parametric_p_value(2.0, alternative) == pytest.approx(expected, abs=1e-4)
+
+
+class TestPValueAgreesAcrossCoefficients:
+    """
+    With each rater's answer mix held fixed and no missing cells, Fleiss,
+    Gwet, Brennan-Prediger, Krippendorff and Conger are all increasing
+    rescalings of raw agreement, so the same shuffles rank them the same
+    way and their p-values must match. Before 2.1.0 they did not: on this
+    data Fleiss gave p = 0.02, Conger 0.055, and Gwet, Brennan-Prediger and
+    Krippendorff (then one-sided) about 0.99. All five now give 0.0398.
+    """
+
+    @staticmethod
+    def _p(name: str) -> float:
+        import interrater.analyzers as A
+        import interrater.analyzers.configs as C
+        from interrater.analyzers.configs import HypothesisTestConfig
+
+        cats = UnorderedCategories(
+            names=("A", "B", "C"), labels={"A": "A", "B": "B", "C": "C"}
+        )
+        rng = np.random.default_rng(42)
+        ratings = Ratings(
+            category_index=rng.integers(0, 3, (30, 3)).astype(np.int8),
+            semantics=RatingsSemantics(raters=3, categories=cats),
+        )
+        ht = HypothesisTestConfig(n_permutations=200)
+        config = getattr(C, f"{name}Config")(hypothesis_test_config=ht)
+        result = getattr(A, f"{name}Analyzer")(ratings, config).hypothesis_test()
+        assert result.alternative == "two-sided"
+        return result.p_value
+
+    @pytest.mark.parametrize("name, key", [
+        ("FleissKappa", "fleiss_kappa"), ("GwetAC1", "gwet_ac1"),
+        ("BrennanPrediger", "brennan_prediger"),
+        ("KrippendorffAlpha", "krippendorff_alpha"),
+        ("CongerKappa", "conger_kappa"), ("LightKappa", "light_kappa"),
+    ])
+    def test_result_names_its_coefficient(self, name, key):
+        import interrater.analyzers as A
+        import interrater.analyzers.configs as C
+        from interrater.analyzers.configs import HypothesisTestConfig
+
+        ht = HypothesisTestConfig(n_permutations=20)
+        config = getattr(C, f"{name}Config")(hypothesis_test_config=ht)
+        result = getattr(A, f"{name}Analyzer")(_make_ratings(3), config).hypothesis_test()
+        assert result.coefficient == key
+
+    @pytest.mark.parametrize("name, key", [
+        ("Scotts", "scotts_pi"), ("CohenKappa", "cohen_kappa"),
+    ])
+    @pytest.mark.parametrize("method", ["permutation", "parametric_null"])
+    def test_two_rater_result_names_its_coefficient(self, name, key, method):
+        import interrater.analyzers as A
+        import interrater.analyzers.configs as C
+        from interrater.analyzers.configs import HypothesisTestConfig
+
+        ht = HypothesisTestConfig(method=method, n_permutations=20)
+        config = getattr(C, f"{name}Config")(hypothesis_test_config=ht)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # parametric_null warns; not the subject
+            result = getattr(A, f"{name}Analyzer")(_make_ratings(2), config).hypothesis_test()
+        assert result.coefficient == key
+
+    def test_same_two_sided_p(self):
+        names = ["FleissKappa", "GwetAC1", "BrennanPrediger",
+                 "KrippendorffAlpha", "CongerKappa"]
+        p = {name: self._p(name) for name in names}
+        assert len(set(p.values())) == 1, p
+
+
+# ------------------------------------------------------------------ #
 # Smoke estimates -- all 8 leaf analyzers                              #
 # ------------------------------------------------------------------ #
 

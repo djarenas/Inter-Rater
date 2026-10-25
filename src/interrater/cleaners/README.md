@@ -47,7 +47,7 @@ attributed to the rule that caused it, and broken down per rater.
 
 | Module            | What it does                                            |
 |-------------------|---------------------------------------------------------|
-| `_string_utils.py`| `fold`, `fold_all`, `build_lookup` -- string normalisation and lookup-table construction. Free functions over plain strings; the config and the cleaner call the same code so matching is guaranteed consistent. |
+| `_string_utils.py`| `fold`, `fold_all`, `fold_collisions`, `describe_folding`, `build_lookup` -- string normalisation, finding different strings that fold alike, and lookup-table construction. Free functions over plain strings; the config and the cleaner call the same code so matching is guaranteed consistent. |
 | `_drop_utils.py`  | `rating_counts`, `sweep_once`, `sweep_until_settled`, `distribution` -- row/column dropping over the code array. Free functions over numpy; the cleaner supplies thresholds and order, gets back boolean masks. |
 
 ## Data flow
@@ -58,7 +58,7 @@ DataFrame (messy strings)
     ├──► CleanerConfig ◄── FrameLayout
     │         │             InsufficientDataPolicy
     │         ▼
-    ├──► config-vs-semantics check (_string_utils.build_lookup)
+    ├──► config-vs-semantics check (_string_utils.fold_collisions, build_lookup)
     │         │
     │         ▼
     ├──► string cleaning (_string_utils.fold, fold_all)

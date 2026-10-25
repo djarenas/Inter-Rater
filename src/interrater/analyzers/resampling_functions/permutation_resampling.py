@@ -1,9 +1,16 @@
 """Permutation resampling for null hypothesis testing.
 
 This module holds generators that produce permuted versions of the ratings
-data under the null hypothesis of no agreement. Each scheme shuffles the
-data differently and therefore tests a subtly different null hypothesis.
-See the docstring of each function for what it tests.
+data. Each scheme shuffles the data differently and therefore stands for a
+different null hypothesis. within_rater_shuffle and pool_and_redistribute
+are nulls of no agreement, used to test H0: coefficient = 0.
+within_subject_shuffle is not: it keeps the agreement, and its null is about
+the raters. See the docstring of each function for what it tests.
+
+All three keep the missing-data structure exactly. They move only answers
+that were given, and put them back only into cells that were rated: no
+answer lands on a subject its rater was not shown, every rater keeps their
+workload, and every subject keeps its number of ratings.
 
 These are conceptually different from bootstrap resampling:
 - Bootstrap: resample WITH replacement from observed data →
@@ -30,17 +37,20 @@ import numpy as np
 _ERROR_PREFIX = "[permutation_resampling] Error"
 
 
-def column_shuffle(
+def within_rater_shuffle(
     category_index: np.ndarray,
     n_permutations: int = 5000,
     random_state: int | None = 42,
 ) -> Iterator[np.ndarray]:
     """
-    Shuffle each rater's column independently.
+    Shuffle each rater's answers across the subjects that rater rated.
 
-    For each rater (column), I randomly reassign their ratings to different
-    subjects. This preserves each rater's marginal distribution -- how often
-    they use each category -- but breaks the subject-rater pairing.
+    For each rater (column), I randomly reassign their answers among the
+    subjects they rated, independently for each rater. This preserves each
+    rater's marginal distribution -- how often they use each category -- but
+    breaks the subject-rater pairing. Cells the rater was not shown stay
+    empty, so each rater keeps their workload. Called column_shuffle before
+    2.1.0.
 
     **Null hypothesis tested:** "Raters agree no more than expected given
     their individual category-usage biases." This is the strongest test
@@ -122,19 +132,24 @@ def within_subject_shuffle(
     """
     Shuffle category assignments within each subject's row.
 
-    For each subject (row), I randomly permute the ratings across rater
-    positions. This preserves the number of raters per subject and the
-    overall count of each category within that subject, but breaks the
-    association between rater identity and category choice.
+    For each subject (row), I randomly permute the answers among the raters
+    who rated it. This preserves the number of raters per subject and the
+    count of each category within that subject, but breaks the association
+    between rater identity and category choice. Cells not rated stay empty:
+    no answer reaches a rater who was not shown that subject.
 
     **Null hypothesis tested:** "The pattern of which rater chose which
     category within a subject is random." This tests whether rater
     identity matters for the category chosen.
 
-    Note: for group coefficients that discard rater identity (Fleiss,
-    Scott, AC1), this shuffle does not change the nij matrix and therefore
-    does not change the coefficient. It is more meaningful for pairwise
-    coefficients (Cohen's kappa) where rater identity matters.
+    Note: this shuffle keeps each subject's set of answers, and with it the
+    agreement, so it cannot test H0: coefficient = 0. For group coefficients
+    that discard rater identity (Fleiss, Scott, AC1) the coefficient does not
+    change at all; for Cohen, Conger and Light the null distribution sits at
+    the observed value. It is therefore not a HypothesisTestConfig scheme
+    (removed in 2.1.0). Its null suits statistics the shuffle can move: the
+    spread of a coefficient across rater pairs or subsets, or the gap between
+    an individual-marginal and a pooled coefficient (Cohen - Scott).
 
     Parameters
     ----------
@@ -210,12 +225,13 @@ def pool_and_redistribute(
     random_state: int | None = 42,
 ) -> Iterator[np.ndarray]:
     """
-    Pool all ratings and redistribute randomly across the matrix.
+    Pool all ratings and redistribute them randomly into the rated cells.
 
-    I collect all non-missing ratings into a single pool, shuffle them,
-    and redistribute them back into the original matrix positions (respecting
-    which cells are missing). This preserves only the global category
-    proportions -- all other structure is destroyed.
+    I collect all non-missing ratings into a single pool, shuffle them, and
+    deal them back out only into cells that were rated. No answer lands in a
+    cell that was not rated, so every rater keeps their workload and every
+    subject its number of ratings. Beyond that, this preserves only the
+    global category proportions -- all other structure is destroyed.
 
     **Null hypothesis tested:** "There is no structure in the data beyond
     the overall category proportions." This is the strongest null -- it

@@ -2,7 +2,7 @@
 
 Validation and test datasets for the interrater v2 package.
 
-**All V2 bootstrap results use:** `n_resamples=4000`, `random_state=32`, `ci_method="bca"` unless otherwise noted. These are reference runs, not the settings the test suite uses -- `tests/test_example_data/` runs percentile at B=250 for speed, and asserts point estimates rather than CI bounds.
+**All V2 bootstrap results use:** `n_resamples=4000`, `random_state=42`, `ci_method="bca"` unless otherwise noted. These are reference runs, not the settings the test suite uses -- `tests/test_example_data/` runs percentile at B=250 for speed, and asserts point estimates rather than CI bounds.
 
 ## Folder layout
 
@@ -14,7 +14,7 @@ example_data/
   Fleiss1971/          nij only (the original data is counts)
   Gwet_example/        both pathways, for cross-validating them against each other
   Synthetic_2raters/   both pathways
-  SR1_OSF2018/         prelim + main, plus permutation configs
+  SR1_OSF2018/         prelim + main, plus permutation configs and weighted examples
   SR2_JSRC2019/        ratings
   SR3_JGIM2019/        ratings
   SR4_FIS_CVD/         ratings
@@ -49,12 +49,27 @@ Preliminary screening data from Systematic Review 1.
 |---|---|---|---|---|
 | V1 published (buggy CI) | ~0.49 | [0.32, 0.66] | 0.34 | Wrong CI implementation |
 | V2 parametric null | 0.493 | [0.446, 0.540] | 0.094 | Correct null variance (Fleiss 1979 Eq. 12), but too narrow |
-| V2 bootstrap | 0.493 | [0.380, 0.604] | 0.224 | Empirical bootstrap CI, realistic width |
-| Gwet AC1 | 0.828 | [0.776, 0.871] | 0.095 | BCa bootstrap |
-| Brennan-Prediger | 0.779 | [0.719, 0.832] | 0.113 | BCa bootstrap |
-| Krippendorff's alpha | 0.493 | [0.381, 0.605] | 0.224 | BCa bootstrap, exact formula |
+| V2 bootstrap | 0.493 | [0.383, 0.606] | 0.223 | Empirical bootstrap CI, realistic width |
+| Gwet AC1 | 0.828 | [0.777, 0.869] | 0.092 | BCa bootstrap |
+| Brennan-Prediger | 0.779 | [0.721, 0.828] | 0.107 | BCa bootstrap |
+| Krippendorff's alpha | 0.493 | [0.383, 0.606] | 0.223 | BCa bootstrap, exact formula |
 
-The parametric null CI is ~43% the width of the bootstrap CI, illustrating that Fleiss's null variance underestimates uncertainty around the point estimate. Under heavy prevalence skew (~83% exclude), Fleiss' κ (0.493) is dragged down by inflated marginal-based chance, while B-P (0.779) and AC1 (0.828) remain high. Krippendorff's α (0.493) matches Fleiss κ exactly on this balanced dataset -- the two use different units and chance models but converge when every subject has the same number of raters.
+The parametric null CI is ~42% the width of the bootstrap CI, illustrating that Fleiss's null variance underestimates uncertainty around the point estimate. Under heavy prevalence skew (~83% exclude), Fleiss' κ (0.493) is dragged down by inflated marginal-based chance, while B-P (0.779) and AC1 (0.828) remain high. Krippendorff's α (0.493) matches Fleiss κ exactly on this balanced dataset -- the two use different units and chance models but converge when every subject has the same number of raters.
+
+**Weighted versions of the same data.** The categories have a natural order (include, uncertain, exclude), so the same ratings can also be analysed with weights. Two extra semantics files do this, each with its own reading of what "uncertain" meant. The data file and cleaner config are unchanged.
+
+| Semantics file | Weights | Fleiss' κ | Brennan-Prediger | Krippendorff's α |
+|---|---|---|---|---|
+| `SR1_prelim_semantics.yaml` | none (unordered) | 0.493 [0.383, 0.606] | 0.779 [0.721, 0.828] | 0.493 [0.383, 0.606] |
+| `SR1_prelim_ordered_semantics.yaml` | linear | 0.554 [0.440, 0.669] | 0.748 [0.683, 0.808] | 0.555 [0.440, 0.669] |
+| `SR1_prelim_weighted_semantics.yaml` | custom (`SR1_prelim_weights.yaml`) | 0.549 [0.438, 0.661] | 0.728 [0.658, 0.791] | 0.549 [0.438, 0.661] |
+
+(95% BCa intervals, `n_resamples=4000`, `random_state=42`.)
+
+- **Linear** reads "uncertain" as a 50/50 call, halfway between: include–uncertain and uncertain–exclude each keep 0.5 of the credit.
+- **Custom** reads it by what happened to the abstract. An uncertain went on to full-text review, where it was read carefully to rule out exclusion, so it behaved much like an include: include–uncertain 0.8, uncertain–exclude 0.2, include–exclude 0.0. The matrix and its reasoning are in `SR1_prelim_weights.yaml`. `SR1_prelim_weighted_inline_semantics.yaml` holds the same matrix written inline and gives identical results.
+
+Weighting raises Fleiss' κ and Krippendorff's α but lowers Brennan-Prediger. That is expected: B-P's chance term is the average weight, sum(W)/K², so partial credit raises chance agreement as well as observed agreement. Gwet's AC1, Scott's pi, Conger's kappa and Light's kappa have no weighted form and refuse the ordered and weighted files; use `SR1_prelim_semantics.yaml` for them.
 
 ---
 
@@ -78,11 +93,11 @@ Main screening data from Systematic Review 1 (FIS + Psych combined).
 | Method | kappa | 95% CI | CI Width | Notes |
 |---|---|---|---|---|
 | V1 published | 0.62 | [0.55, 0.69] | 0.14 | |
-| V2 parametric null | 0.619 | [0.574, 0.663] | 0.089 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.619 | [0.551, 0.681] | 0.130 | BCa bootstrap, realistic width |
+| V2 parametric null | — | — | — | not computed: needs the same number of raters per subject (here 2–3) |
+| V2 bootstrap | 0.619 | [0.553, 0.680] | 0.127 | BCa bootstrap, realistic width |
 | Gwet AC1 | 0.926 | [0.911, 0.939] | 0.028 | BCa bootstrap, approximation (unbalanced) |
 | Brennan-Prediger | 0.898 | [0.879, 0.916] | 0.037 | BCa bootstrap, approximation (unbalanced) |
-| Krippendorff's alpha | 0.618 | [0.552, 0.681] | 0.129 | BCa bootstrap, exact formula (unbalanced data) |
+| Krippendorff's alpha | 0.618 | [0.553, 0.679] | 0.126 | BCa bootstrap, exact formula (unbalanced data) |
 
 **This is the only shipped dataset where a rater subset's measurable pool and
 its complete cases differ**, and it is what the subset permutation tests exist
@@ -102,7 +117,7 @@ Three of the four had nothing to resample at all under the old rule. At k=2
 the two pools coincide on all six pairs, as they must -- "at least two of the
 k" is one rule, and at k=2 it means both.
 
-The parametric null CI is ~67% the width of the bootstrap CI, again illustrating that Fleiss's null variance underestimates uncertainty around the point estimate. Fleiss κ, B-P, and AC1 all use the unbalanced-data approximation on this dataset. Krippendorff's α (0.618) handles the unbalanced data exactly via pair-pooling -- no approximation needed. It is nearly identical to Fleiss κ (0.619) because only 3 of 1617 subjects deviate from 2 raters, so the data is barely unbalanced. Under extreme skew (~90% exclude), Fleiss' κ (0.619) and α (0.618) are much lower than B-P (0.898) and AC1 (0.926).
+Fleiss κ, B-P, and AC1 all use the unbalanced-data approximation on this dataset. Krippendorff's α (0.618) handles the unbalanced data exactly via pair-pooling -- no approximation needed. It is nearly identical to Fleiss κ (0.619) because only 3 of 1617 subjects deviate from 2 raters, so the data is barely unbalanced. Under extreme skew (~90% exclude), Fleiss' κ (0.619) and α (0.618) are much lower than B-P (0.898) and AC1 (0.926).
 
 ---
 
@@ -125,12 +140,12 @@ Screening data from Systematic Review 2.
 | Method | kappa | 95% CI | CI Width | Notes |
 |---|---|---|---|---|
 | V1 published | 0.42 | [0.34, 0.52] | 0.18 | |
-| V2 parametric null | 0.431 | [0.344, 0.519] | 0.175 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.431 | [0.278, 0.601] | 0.323 | BCa bootstrap, realistic width |
-| Gwet AC1 | 0.782 | [0.698, 0.853] | 0.155 | BCa bootstrap, approximation (unbalanced) |
-| Brennan-Prediger | 0.725 | [0.636, 0.812] | 0.176 | BCa bootstrap, approximation (unbalanced) |
+| V2 parametric null | — | — | — | not computed: needs the same number of raters per subject (here 2–4) |
+| V2 bootstrap | 0.431 | [0.282, 0.607] | 0.325 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.782 | [0.694, 0.849] | 0.155 | BCa bootstrap, approximation (unbalanced) |
+| Brennan-Prediger | 0.725 | [0.623, 0.802] | 0.179 | BCa bootstrap, approximation (unbalanced) |
 
-The parametric null CI is ~56% the width of the bootstrap CI. Under skew (~80% exclude), Fleiss' κ (0.431) is much lower than B-P (0.725) and AC1 (0.782).
+Under skew (~80% exclude), Fleiss' κ (0.431) is much lower than B-P (0.725) and AC1 (0.782).
 
 ---
 
@@ -154,11 +169,11 @@ Full-text screening data from SR1, FIS + Psych databases combined.
 |---|---|---|---|---|
 | V1 published | 0.68 | [0.63, 0.72] | 0.09 | |
 | V2 parametric null | 0.675 | [0.634, 0.716] | 0.082 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.675 | [0.602, 0.743] | 0.141 | BCa bootstrap, realistic width |
-| Gwet AC1 | 0.931 | [0.912, 0.946] | 0.034 | BCa bootstrap |
-| Brennan-Prediger | 0.886 | [0.860, 0.912] | 0.052 | BCa bootstrap |
+| V2 bootstrap | 0.675 | [0.602, 0.740] | 0.138 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.931 | [0.911, 0.945] | 0.034 | BCa bootstrap |
+| Brennan-Prediger | 0.886 | [0.856, 0.908] | 0.052 | BCa bootstrap |
 
-The parametric null CI is ~60% the width of the bootstrap CI. With binary categories and ~90% exclude, Fleiss' κ (0.675) is again much lower than B-P (0.886) and AC1 (0.931).
+The parametric null CI is ~59% the width of the bootstrap CI. With binary categories and ~90% exclude, Fleiss' κ (0.675) is again much lower than B-P (0.886) and AC1 (0.931).
 
 ---
 
@@ -182,9 +197,9 @@ Full-text screening data from SR1, FIS CVD database.
 |---|---|---|---|---|
 | V1 published | 0.68 | [0.66, 0.71] | 0.05 | |
 | V2 parametric null | 0.708 | [0.679, 0.737] | 0.058 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.708 | [0.662, 0.751] | 0.089 | BCa bootstrap, realistic width |
-| Gwet AC1 | 0.879 | [0.854, 0.900] | 0.046 | BCa bootstrap |
-| Brennan-Prediger | 0.828 | [0.800, 0.856] | 0.056 | BCa bootstrap |
+| V2 bootstrap | 0.708 | [0.663, 0.750] | 0.087 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.879 | [0.853, 0.899] | 0.046 | BCa bootstrap |
+| Brennan-Prediger | 0.828 | [0.798, 0.855] | 0.057 | BCa bootstrap |
 
 The parametric null CI is ~67% the width of the bootstrap CI. Under ~82% exclude skew, Fleiss' κ (0.708) is lower than B-P (0.828) and AC1 (0.879).
 
@@ -210,9 +225,9 @@ Full-text screening data from SR2, Cocaine-Cardio database.
 |---|---|---|---|---|
 | V1 published | 0.51 | [0.47, 0.55] | 0.08 | |
 | V2 parametric null | 0.509 | [0.471, 0.547] | 0.076 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.509 | [0.442, 0.576] | 0.134 | BCa bootstrap, realistic width |
-| Gwet AC1 | 0.865 | [0.840, 0.887] | 0.047 | BCa bootstrap |
-| Brennan-Prediger | 0.788 | [0.756, 0.820] | 0.064 | BCa bootstrap |
+| V2 bootstrap | 0.509 | [0.443, 0.574] | 0.131 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.865 | [0.840, 0.886] | 0.046 | BCa bootstrap |
+| Brennan-Prediger | 0.788 | [0.755, 0.820] | 0.065 | BCa bootstrap |
 
 The parametric null CI is ~58% the width of the bootstrap CI. Under ~88% exclude skew, Fleiss' κ (0.509) is much lower than B-P (0.788) and AC1 (0.865).
 
@@ -239,9 +254,9 @@ Nij (counts matrix) format of the classic Fleiss (1971) psychiatric diagnosis da
 |---|---|---|---|---|
 | Fleiss (1971) original | 0.430 | | | Variance formula in this paper is known to be wrong |
 | V2 parametric null | 0.430 | [0.382, 0.478] | 0.096 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.430 | [0.336, 0.550] | 0.214 | BCa bootstrap (n_bootstrap=4000), realistic width |
-| Gwet AC1 | 0.448 | [0.346, 0.565] | 0.219 | BCa bootstrap (n_bootstrap=4000) |
-| Brennan-Prediger | 0.444 | [0.344, 0.564] | 0.220 | BCa bootstrap (n_bootstrap=4000), Pe = 1/5 = 0.2 |
+| V2 bootstrap | 0.430 | [0.335, 0.549] | 0.214 | BCa bootstrap (n_bootstrap=4000), realistic width |
+| Gwet AC1 | 0.448 | [0.349, 0.564] | 0.215 | BCa bootstrap (n_bootstrap=4000) |
+| Brennan-Prediger | 0.444 | [0.344, 0.561] | 0.217 | BCa bootstrap (n_bootstrap=4000), Pe = 1/5 = 0.2 |
 
 The parametric null CI is ~45% the width of the bootstrap CI. With 5 categories and no extreme skew toward any single category, all three coefficients are remarkably close: Fleiss κ (0.430), B-P (0.444), and AC1 (0.448) -- the chance terms diverge little when prevalence is spread across categories.
 
@@ -267,16 +282,16 @@ Synthetic dataset for testing 2-rater agreement coefficients.
 
 | Coefficient | Method | Value | 95% CI | CI Width |
 |---|---|---|---|---|
-| Cohen's kappa | bootstrap | 0.641 | [0.507, 0.767] | 0.260 |
+| Cohen's kappa | bootstrap | 0.641 | [0.497, 0.757] | 0.260 |
 | Fleiss' kappa | parametric null | 0.641 | [0.493, 0.788] | 0.295 |
-| Fleiss' kappa | bootstrap | 0.641 | [0.507, 0.767] | 0.260 |
+| Fleiss' kappa | bootstrap | 0.641 | [0.499, 0.759] | 0.260 |
 | Scott's pi | parametric null | 0.641 | [0.493, 0.788] | 0.295 |
-| Scott's pi | bootstrap | 0.641 | [0.507, 0.767] | 0.260 |
-| Gwet AC1 (ratings) | bootstrap | 0.683 | [0.562, 0.800] | 0.238 |
-| Gwet AC1 (nij) | bootstrap | 0.683 | [0.553, 0.791] | 0.238 |
-| Brennan-Prediger | bootstrap | 0.670 | [0.565, 0.805] | 0.240 |
+| Scott's pi | bootstrap | 0.641 | [0.499, 0.759] | 0.260 |
+| Gwet AC1 (ratings) | bootstrap | 0.683 | [0.546, 0.786] | 0.240 |
+| Gwet AC1 (nij) | bootstrap | 0.683 | [0.546, 0.786] | 0.240 |
+| Brennan-Prediger | bootstrap | 0.670 | [0.535, 0.775] | 0.240 |
 
-Cohen's κ (0.641) matches Fleiss' κ and Scott's π to 3 decimal places on this balanced 2-rater data -- the individual marginals (p_a = [0.36, 0.15, 0.49], p_b = [0.37, 0.16, 0.47]) are close enough that Pe_Cohen ≈ Pe_Fleiss, so the coefficients converge. They differ at the 4th decimal place. Fleiss' kappa and Scott's pi are identical for balanced 2-rater data, as expected. With only 2 raters, the parametric null CI is actually *wider* than the bootstrap CI here -- the opposite of the pattern seen with more raters. Gwet AC1 from both pathways (ratings and nij matrix) gives the same point estimate; the slight CI difference is expected from bootstrap resampling. With moderate prevalence (no extreme skew), all four chance-corrected coefficients are close: Cohen κ / Fleiss κ (0.641), B-P (0.670), and AC1 (0.683).
+Cohen's κ (0.641) matches Fleiss' κ and Scott's π to 3 decimal places on this balanced 2-rater data -- the individual marginals (p_a = [0.36, 0.15, 0.49], p_b = [0.37, 0.16, 0.47]) are close enough that Pe_Cohen ≈ Pe_Fleiss, so the coefficients converge. They differ at the 4th decimal place. Fleiss' kappa and Scott's pi are identical for balanced 2-rater data, as expected. With only 2 raters, the parametric null CI is actually *wider* than the bootstrap CI here -- the opposite of the pattern seen with more raters. Gwet AC1 from both pathways (ratings and nij matrix) gives the same point estimate and, at this seed, the same interval: both pathways resample the same subjects. With moderate prevalence (no extreme skew), all four chance-corrected coefficients are close: Cohen κ / Fleiss κ (0.641), B-P (0.670), and AC1 (0.683).
 
 ---
 
@@ -332,14 +347,14 @@ Nij (counts matrix) format of the same dataset.
 
 | Coefficient | Value | 95% CI | CI Width | Notes |
 |---|---|---|---|---|
-| Cohen's kappa | 0.796 | [0.669, 0.895] | 0.226 | BCa bootstrap (n_bootstrap=4000) |
-| Gwet AC1 | 0.849 | [0.754, 0.919] | 0.165 | BCa bootstrap (n_bootstrap=4000) |
-| Fleiss' kappa | 0.796 | [0.669, 0.895] | 0.226 | BCa bootstrap (n_bootstrap=4000) |
-| Scott's pi | 0.796 | [0.669, 0.895] | 0.226 | BCa bootstrap (n_bootstrap=4000) |
-| Brennan-Prediger | 0.835 | [0.745, 0.925] | 0.180 | BCa bootstrap (n_bootstrap=4000) |
-| Krippendorff's alpha | 0.797 | [0.670, 0.896] | 0.226 | BCa bootstrap (n_bootstrap=4000), exact formula |
+| Cohen's kappa | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap (n_bootstrap=4000) |
+| Gwet AC1 | 0.849 | [0.745, 0.919] | 0.174 | BCa bootstrap (n_bootstrap=4000) |
+| Fleiss' kappa | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap (n_bootstrap=4000) |
+| Scott's pi | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap (n_bootstrap=4000) |
+| Brennan-Prediger | 0.835 | [0.715, 0.910] | 0.195 | BCa bootstrap (n_bootstrap=4000) |
+| Krippendorff's alpha | 0.797 | [0.649, 0.894] | 0.245 | BCa bootstrap (n_bootstrap=4000), exact formula |
 
-V2 point estimates match irrCAC: Cohen κ 0.796 vs 0.79641, AC1 0.849 vs 0.84933, Fleiss κ 0.796 vs Scott π 0.79624 (equivalent for 2 balanced raters), B-P 0.835 vs 0.83500. Cohen's κ (0.796) matches Fleiss' κ (0.796) to 3 decimal places -- on this 2-rater data the individual marginals are close, so Pe_Cohen ≈ Pe_Fleiss. Krippendorff's α (0.797) is nearly identical to Fleiss κ (0.796) on this balanced 2-rater data, as expected -- the two use different units and chance models but converge when every subject has the same number of raters and the dataset is large enough. The irrCAC asymptotic CI [0.764, 0.935] (width 0.171) is close to the V2 bootstrap CI [0.754, 0.919] (width 0.165) for AC1.
+V2 point estimates match irrCAC: Cohen κ 0.796 vs 0.79641, AC1 0.849 vs 0.84933, Fleiss κ 0.796 vs Scott π 0.79624 (equivalent for 2 balanced raters), B-P 0.835 vs 0.83500. Cohen's κ (0.796) matches Fleiss' κ (0.796) to 3 decimal places -- on this 2-rater data the individual marginals are close, so Pe_Cohen ≈ Pe_Fleiss. Krippendorff's α (0.797) is nearly identical to Fleiss κ (0.796) on this balanced 2-rater data, as expected -- the two use different units and chance models but converge when every subject has the same number of raters and the dataset is large enough. The irrCAC asymptotic CI [0.764, 0.935] (width 0.171) is close to the V2 bootstrap CI [0.745, 0.919] (width 0.174) for AC1.
 
 ---
 

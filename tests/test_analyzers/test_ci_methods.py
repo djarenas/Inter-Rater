@@ -318,6 +318,27 @@ class TestBcaCi:
             _acceleration(jackknife), abs=1e-12
         )
 
+    def test_ties_at_the_point_count_half(self):
+        """
+        Draws centred on the point, with 40% tied at it: no bias to correct.
+
+        Counting the ties as below (the old `<=`) read this as 70% of draws
+        below the point and shifted the interval up (z0 = +0.52). Half
+        below and half above, as scipy.stats.bootstrap does, gives 50%.
+        """
+        dist = np.repeat([0.4, 0.5, 0.6], [300, 400, 300])
+        ci = bca_ci(dist, 0.5, 0.05, _JACKKNIFE)
+        assert ci.method_used == "bca"
+        assert ci.bias_correction == pytest.approx(0.0, abs=1e-12)
+
+    def test_ties_at_the_point_hand_worked(self):
+        """100 below, 200 tied, 700 above: (100 + 100) / 1000 = 20% below."""
+        from scipy.stats import norm
+
+        dist = np.repeat([0.4, 0.5, 0.6], [100, 200, 700])
+        ci = bca_ci(dist, 0.5, 0.05, _JACKKNIFE)
+        assert ci.bias_correction == pytest.approx(norm.ppf(0.2), abs=1e-12)
+
     def test_extreme_inputs_do_not_raise(self):
         """A point far from the distribution mass must not crash BCa."""
         dist = np.full(100, 0.99)

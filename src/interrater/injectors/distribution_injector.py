@@ -47,7 +47,7 @@ class DistributionInjector(RaterInjector):
     # Constructor ------------------------------------------------------------ #
 
     def __init__(
-        self, ratings: Ratings, config: DistributionInjectorConfig
+        self, ratings: Ratings, config: DistributionInjectorConfig, *, step_position: int = 0
     ) -> None:
         """
         Initialize with ratings and distribution config.
@@ -68,7 +68,7 @@ class DistributionInjector(RaterInjector):
             If prevalences length does not match n_categories.
         """
         try:
-            super().__init__(ratings, config)
+            super().__init__(ratings, config, step_position=step_position)
         except (TypeError, ValueError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -95,7 +95,7 @@ class DistributionInjector(RaterInjector):
         n_categories = self.ratings.semantics.n_categories
 
         probs = self._build_prevalences(n_categories)
-        rng = np.random.default_rng(self.config.random_state)
+        rng = self._rng()
 
         result = rng.choice(
             n_categories,

@@ -187,13 +187,13 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         if ht_config.method == "permutation":
             # Permutation test: shuffle ratings to build null distribution
             from .resampling_functions.permutation_resampling import (
-                column_shuffle,
+                within_rater_shuffle,
                 within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
-                "column_shuffle": column_shuffle,
+                "within_rater_shuffle": within_rater_shuffle,
                 "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
@@ -223,19 +223,19 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
 
             null_distribution = np.array(null_values)
 
-            # p-value: proportion of null values >= observed (two-sided)
-            p_value = float(
-                np.mean(np.abs(null_distribution) >= abs(point))
+            counts = self._permutation_p_value(
+                null_distribution, point, ht_config.alternative
             )
 
             return HypothesisTestResult(
-                p_value=p_value,
                 alpha=ht_config.alpha,
-                reject_null=self._reject_null(p_value, ht_config.alpha),
+                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
                 method="permutation",
+                coefficient="conger_kappa",
                 point=point,
                 null_distribution=null_distribution,
                 n_permutations=ht_config.n_permutations,
+                **counts,
             )
 
         else:

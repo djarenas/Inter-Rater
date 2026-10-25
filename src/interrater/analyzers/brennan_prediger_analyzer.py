@@ -310,7 +310,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
         from ..intermediates.estimator_parts import NijMatrix
         from .agreement_functions.group_agreement import brennan_prediger
         from .resampling_functions.permutation_resampling import (
-            column_shuffle,
+            within_rater_shuffle,
             within_subject_shuffle,
             pool_and_redistribute,
         )
@@ -346,7 +346,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
 
         # Select permutation scheme
         scheme_map = {
-            "column_shuffle": column_shuffle,
+            "within_rater_shuffle": within_rater_shuffle,
             "within_subject": within_subject_shuffle,
             "pool_and_redistribute": pool_and_redistribute,
         }
@@ -372,21 +372,21 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
 
         null_distribution = np.array(null_values)
 
-        # p-value: proportion of null values >= observed (one-sided)
-        p_value = float(np.mean(null_distribution >= observed_bp))
-
-        
+        counts = self._permutation_p_value(
+            null_distribution, observed_bp, ht_config.alternative
+        )
 
         return HypothesisTestResult(
-            p_value=p_value,
             alpha=ht_config.alpha,
-            reject_null=self._reject_null(p_value, ht_config.alpha),
+            reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
             method="permutation",
+            coefficient="brennan_prediger",
             point=observed_bp,
             z_statistic=None,
             null_variance=None,
             null_distribution=null_distribution,
             n_permutations=ht_config.n_permutations,
+            **counts,
         )
 
     # Private helpers -------------------------------------------------------- #

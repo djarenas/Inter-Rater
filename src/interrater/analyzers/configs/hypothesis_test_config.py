@@ -7,7 +7,8 @@ from dataclasses import dataclass
 _ERROR_PREFIX = "[HypothesisTestConfig] Error"
 
 _VALID_METHODS = {"permutation", "parametric_null"}
-_VALID_SCHEMES = {"column_shuffle", "within_subject", "pool_and_redistribute"}
+_VALID_SCHEMES = {"within_rater_shuffle", "pool_and_redistribute"}
+_VALID_ALTERNATIVES = {"two-sided", "greater", "less"}
 
 
 @dataclass(frozen=True)
@@ -27,16 +28,25 @@ class HypothesisTestConfig:
       specific (e.g., Fleiss 1979 Eq. 12 for Fleiss' kappa). Works with
       both Ratings and NijMatrix.
 
-    Three permutation schemes are supported (only used when method="permutation"):
-    - "column_shuffle": shuffle each rater's column independently. Preserves
+    Two permutation schemes are supported (only used when method="permutation"):
+    - "within_rater_shuffle": shuffle each rater's answers across subjects. Preserves
       each rater's marginal distribution. Tests: "Do raters agree more than
       expected given their individual biases?"
-    - "within_subject": shuffle category assignments within each subject's row.
-      Preserves the number of raters per subject. Tests: "Is the pattern
-      within subjects non-random?"
     - "pool_and_redistribute": pool all ratings and redistribute randomly.
       Preserves global category proportions only. Tests: "Is there ANY
       structure in the data?"
+
+    "within_subject" was removed in 2.1.0. Shuffling ratings within each
+    subject keeps every subject's set of ratings, and with it the agreement,
+    so its null distribution sits at the observed value and it cannot test
+    H₀: coefficient = 0.
+
+    Three alternatives are supported, for both methods:
+    - "two-sided" (default): agreement differs from chance, above or below.
+      Below-chance agreement is a real finding -- raters who read a scale
+      backwards, or swap two labels -- and a one-sided test cannot see it.
+    - "greater": agreement is above chance.
+    - "less": agreement is below chance.
 
     Attributes
     ----------
@@ -44,6 +54,8 @@ class HypothesisTestConfig:
         The hypothesis testing method ("permutation" or "parametric_null").
     scheme : str
         The permutation scheme (only used when method="permutation").
+    alternative : str
+        "two-sided", "greater" or "less".
     n_permutations : int
         Number of permutations to generate (only used when method="permutation").
     alpha : float
@@ -53,14 +65,15 @@ class HypothesisTestConfig:
     """
 
     method: str = "permutation"
-    scheme: str = "column_shuffle"
+    scheme: str = "within_rater_shuffle"
+    alternative: str = "two-sided"
     n_permutations: int = 5000
     alpha: float = 0.05
     random_state: int = 42
 
     def __post_init__(self) -> None:
         """Validate hypothesis test configuration."""
-        for name in ("method", "scheme"):
+        for name in ("method", "scheme", "alternative"):
             if not isinstance(getattr(self, name), str):
                 raise TypeError(
                     f"{_ERROR_PREFIX}: {name} must be a string, "
@@ -74,10 +87,29 @@ class HypothesisTestConfig:
             )
 
         # Validate scheme (only meaningful for permutation, but always validated)
+        if self.scheme == "within_subject":
+            raise ValueError(
+                f"{_ERROR_PREFIX}: scheme='within_subject' was removed in "
+                f"2.1.0. It shuffles ratings within each subject, which keeps "
+                f"the agreement, so it cannot test H₀: coefficient = 0. "
+                f"Use scheme='within_rater_shuffle'."
+            )
+        if self.scheme == "column_shuffle":
+            raise ValueError(
+                f"{_ERROR_PREFIX}: scheme='column_shuffle' was renamed to "
+                f"'within_rater_shuffle' in 2.1.0: it shuffles each rater's "
+                f"answers across subjects, not the raters themselves."
+            )
         if self.scheme not in _VALID_SCHEMES:
             raise ValueError(
                 f"{_ERROR_PREFIX}: scheme must be one of {_VALID_SCHEMES}, "
                 f"got '{self.scheme}'."
+            )
+
+        if self.alternative not in _VALID_ALTERNATIVES:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: alternative must be one of "
+                f"{sorted(_VALID_ALTERNATIVES)}, got '{self.alternative}'."
             )
 
         # Check the bool python bug. After around Python2.3, bools were made to inherit
@@ -127,6 +159,7 @@ class HypothesisTestConfig:
         return {
             "method": self.method,
             "scheme": self.scheme,
+            "alternative": self.alternative,
             "n_permutations": self.n_permutations,
             "alpha": self.alpha,
             "random_state": self.random_state,

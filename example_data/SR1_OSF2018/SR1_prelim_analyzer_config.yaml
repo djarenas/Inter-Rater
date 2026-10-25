@@ -4,14 +4,12 @@ random_state: 42
 ci_method: bca
 convergence_test: null
 rater_jackknife: false
-weights_type: "identity"
-custom_weights_path: null
 balanced_data_only: false
 
 # Hypothesis test (optional)
 hypothesis_test:
   method: permutation
-  scheme: column_shuffle
+  scheme: within_rater_shuffle
   n_permutations: 5000
   alpha: 0.05
   random_state: 42

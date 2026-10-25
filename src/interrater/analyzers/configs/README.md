@@ -156,7 +156,8 @@ For all C(n, k) subset analyses. Validates:
 Configuration for hypothesis testing against H₀: coefficient = 0.
 
 - `method` (str, default "permutation") -- "permutation" or "parametric_null"
-- `scheme` (str, default "column_shuffle") -- "column_shuffle", "within_subject", or "pool_and_redistribute"
+- `scheme` (str, default "within_rater_shuffle") -- "within_rater_shuffle" or "pool_and_redistribute". Both keep the missing-data structure: answers move only between cells that were rated. `"column_shuffle"` (renamed) and `"within_subject"` (cannot test coefficient = 0) were removed in 2.1.0 and are refused with a message saying so
+- `alternative` (str, default "two-sided") -- "two-sided", "greater" or "less", for both methods. Two-sided by default because below-chance agreement (raters who read a scale backwards, or swap two labels) is a real finding a one-sided test cannot see
 - `n_permutations` (int, default 5000) -- number of permutation draws
 - `alpha` (float, default 0.05) -- significance level
 - `random_state` (int | None, default 42) -- random seed
@@ -191,7 +192,8 @@ ci_method: percentile
 balanced_data_only: true
 hypothesis_test:                     # alias for hypothesis_test_config
   method: permutation
-  scheme: column_shuffle
+  scheme: within_rater_shuffle
+  alternative: two-sided
   n_permutations: 5000
 ```
 

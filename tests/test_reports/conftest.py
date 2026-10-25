@@ -46,7 +46,7 @@ MATCHING_MESSY = MatchingReport(
     repairs={"inc": 1},
     unknown_values={"???": 1},
     per_rater_null={"bob": 1},
-    per_rater_missing={"ann": 1, "bob": 1},
+    per_rater_missing={"ann": 2, "bob": 1},  # ann: "NA" and "???"; bob: the null
     per_rater_unknown={"ann": 1},
     subject_missing_distribution={0: 2, 1: 1, 2: 1},
 )
@@ -54,10 +54,11 @@ MATCHING_MESSY = MatchingReport(
 
 # -- DropReport -------------------------------------------------------------- #
 
-DROPS_NOTHING = DropReport(method="raters_first")
+DROPS_NOTHING = DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2)
 
 DROPS_SOME = DropReport(
     method="raters_first",
+    min_ratings_per_rater=2, min_ratings_per_subject=2,
     converged=True,
     passes=(DropPass(1, 1, 2),),
     dropped_raters={"carol": 1},

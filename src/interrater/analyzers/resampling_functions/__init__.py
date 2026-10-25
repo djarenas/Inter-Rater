@@ -12,7 +12,7 @@ from .subject_resampling import (
     subject_jackknife_from_nij_matrix,
 )
 from .rater_resampling import rater_jackknife, rater_subset
-from .permutation_resampling import column_shuffle, within_subject_shuffle, pool_and_redistribute
+from .permutation_resampling import within_rater_shuffle, within_subject_shuffle, pool_and_redistribute
 
 __all__ = [
     "subject_bootstrap",
@@ -21,7 +21,7 @@ __all__ = [
     "subject_jackknife_from_nij_matrix",
     "rater_jackknife",
     "rater_subset",
-    "column_shuffle",
+    "within_rater_shuffle",
     "within_subject_shuffle",
     "pool_and_redistribute",
 ]

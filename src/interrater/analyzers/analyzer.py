@@ -189,20 +189,28 @@ class Analyzer(ABC):
         next. The new Ratings validates itself through its own constructor.
 
         I update ``self.ratings`` in place. If ``self.config.injection``
-        is None or ``self.ratings`` is None (NijMatrix path), I do nothing.
+        is None I do nothing; if it is set and ``self.ratings`` is None
+        (NijMatrix path), I raise, since injection needs individual ratings.
 
         Called automatically in ``__init__`` before BalanceProfile is built,
         so all downstream computation sees the injected data.
         """
-        if self.config.injection is None or self.ratings is None:
+        if self.config.injection is None:
             return
+        if self.ratings is None:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: injection needs individual ratings: it "
+                f"builds a new rater from the real raters' answers, and a nij "
+                f"matrix holds only counts per subject. Build the analyzer "
+                f"from Ratings, or remove injection from the config."
+            )
 
         from ..injectors.registry import get_injector_class
 
-        for step in self.config.injection:
+        for position, step in enumerate(self.config.injection):
             try:
                 injector_cls = get_injector_class(step)
-                injector = injector_cls(self.ratings, step)
+                injector = injector_cls(self.ratings, step, step_position=position)
                 self.ratings = injector.inject()
             except Exception as e:
                 raise type(e)(
@@ -372,6 +380,45 @@ class Analyzer(ABC):
                 f"ratings."
             )
 
+    def _refuse_parametric_null_if_invalid(self, *, allow_weights: bool) -> None:
+        """
+        Refuse parametric_null where its formula does not apply.
+
+        The null variances behind it (Fleiss, Nee & Landis 1979 for Fleiss
+        and Scott; Fleiss, Cohen & Everitt 1969 for Cohen) assume every
+        subject has the same number of raters. The Fleiss one also has no
+        weighted form, while Cohen's does, hence ``allow_weights``. Checked
+        at construction, the first point where the method asked for, the
+        balance of the data and the weights are all known; both the
+        interval and the hypothesis test are covered.
+        """
+        asked = []
+        if self.config.ci_method == "parametric_null":
+            asked.append("ci_method='parametric_null'")
+        ht = self.config.hypothesis_test_config
+        if ht is not None and ht.method == "parametric_null":
+            asked.append("hypothesis test method='parametric_null'")
+        if not asked:
+            return
+        what = " and ".join(asked)
+        prefix = f"[{type(self).__name__}] Error"
+
+        profile = self.balance_profile
+        if not profile.is_balanced:
+            counts = profile.n_per_subject
+            raise ValueError(
+                f"{prefix}: {what} assumes every subject has the same number of "
+                f"raters; these data have {int(counts.min())} to "
+                f"{int(counts.max())}. Use ci_method='percentile' or 'bca', "
+                f"or hypothesis test method='permutation'."
+            )
+        if not allow_weights and getattr(self, "weights", None) is not None:
+            raise ValueError(
+                f"{prefix}: {what} uses an unweighted null variance, but the semantics "
+                f"declares a weighted kind. Use ci_method='percentile' or "
+                f"'bca', or hypothesis test method='permutation'."
+            )
+
     def _weights_kind(self) -> str:
         """How the result should name its weighting: identity, linear, quadratic or custom."""
         weights = getattr(self, "weights", None)
@@ -391,3 +438,60 @@ class Analyzer(ABC):
                 f"[{type(self).__name__}] Error: could not compare "
                 f"p_value={p_value!r} with alpha={alpha!r}: {exc}"
             ) from exc
+
+    def _permutation_p_value(
+        self, null_distribution: np.ndarray, point: float, alternative: str
+    ) -> dict:
+        """
+        Count the permutations at or beyond the observed point, and the p-value.
+
+        Draws that came out NaN are skipped and counted, as the bootstrap
+        does: a NaN compares False with everything, so left in it would
+        count as "not extreme" and push the p-value down.
+
+        Returns the keyword arguments HypothesisTestResult records:
+        p_value, n_usable, n_at_or_above, n_at_or_below and alternative.
+        The formula is ``permutation_p_value_from_counts``, which the
+        result uses to check them.
+        """
+        from ..intermediates.results.hypothesis_test_result import (
+            permutation_p_value_from_counts,
+        )
+
+        null = np.asarray(null_distribution, dtype=float)
+        usable = null[~np.isnan(null)]
+        if usable.size == 0:
+            raise ValueError(
+                f"[{type(self).__name__}] Error: every permutation gave an "
+                f"undefined coefficient (NaN), so there is no null "
+                f"distribution to compare with."
+            )
+
+        # A shuffle that reproduces the observed table can give the same
+        # value with different rounding; count it as a tie, as
+        # scipy.stats.permutation_test does.
+        tol = 100 * np.finfo(float).eps * max(abs(point), 1.0)
+        n_at_or_above = int(np.sum(usable >= point - tol))
+        n_at_or_below = int(np.sum(usable <= point + tol))
+        n_usable = int(usable.size)
+
+        return {
+            "p_value": permutation_p_value_from_counts(
+                n_at_or_above, n_at_or_below, n_usable, alternative
+            ),
+            "alternative": alternative,
+            "n_usable": n_usable,
+            "n_at_or_above": n_at_or_above,
+            "n_at_or_below": n_at_or_below,
+        }
+
+    @staticmethod
+    def _parametric_p_value(z: float, alternative: str) -> float:
+        """The normal-theory p-value of z for the given alternative."""
+        from scipy import stats
+
+        if alternative == "greater":
+            return float(stats.norm.sf(z))
+        if alternative == "less":
+            return float(stats.norm.cdf(z))
+        return float(min(1.0, 2.0 * stats.norm.sf(abs(z))))

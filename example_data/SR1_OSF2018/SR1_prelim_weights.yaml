@@ -1,0 +1,16 @@
+# Custom agreement weights for SR1 preliminary screening.
+# Categories: '1' include, '0' uncertain, '-1' exclude.
+#
+# An 'uncertain' went on to full-text review, where it was read carefully
+# to rule out exclusion, so it behaved much like an include:
+#   include vs uncertain  0.8  (same path: both read in full)
+#   uncertain vs exclude  0.2  (different paths: read vs dropped)
+#   include vs exclude    0.0  (opposite decisions)
+#
+# Row and column i belong to names[i]; the names must match the
+# semantics file exactly, in the same order.
+names: ['1', '0', '-1']
+matrix:
+    - [1.0, 0.8, 0.0]
+    - [0.8, 1.0, 0.2]
+    - [0.0, 0.2, 1.0]

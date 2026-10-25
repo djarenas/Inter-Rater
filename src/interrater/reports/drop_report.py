@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._wording import counted
+
 from dataclasses import dataclass, field
 
 
@@ -42,6 +44,11 @@ class DropReport:
     ----------
     method:
         Which order was used: raters first, subjects first, or iterate.
+    min_ratings_per_rater, min_ratings_per_subject:
+        The rule that was applied: the fewest ratings a rater or a subject
+        could keep and stay. Recorded so the report says what it enforced,
+        not only what it removed -- "nothing dropped" means little without
+        the rule nothing fell below.
     passes:
         The sweeps that ran. One entry for the non-iterating methods.
     converged:
@@ -59,6 +66,8 @@ class DropReport:
     """
 
     method:    str
+    min_ratings_per_rater:   int
+    min_ratings_per_subject: int
     converged: bool = True
     passes:    tuple[DropPass, ...] = ()
 
@@ -85,6 +94,8 @@ class DropReport:
     def summary(self) -> dict:
         return {
             "method":    self.method,
+            "min_ratings_per_rater":   self.min_ratings_per_rater,
+            "min_ratings_per_subject": self.min_ratings_per_subject,
             "converged": self.converged,
             "n_passes":  self.n_passes,
             "passes": [
@@ -102,25 +113,33 @@ class DropReport:
         }
 
     def render(self, verbosity: str = "summary") -> str:
-        pad = "    "
+        pad  = "    "
+        rule = (
+            f"at least {self.min_ratings_per_rater} ratings per rater and "
+            f"{self.min_ratings_per_subject} per subject"
+        )
 
         if self.dropped_nothing:
-            return f"Drops\n{pad}nothing dropped ({self.method})"
+            return "\n".join([
+                "Drops",
+                f"{pad}rule       : {rule} ({self.method})",
+                f"{pad}no raters or subjects dropped",
+            ])
 
         ending = (
-            f"converged after {self.n_passes} pass(es)"
+            f"converged after {counted(self.n_passes, 'pass', 'passes')}"
             if self.converged
             else f"STOPPED AT THE PASS LIMIT after {self.n_passes}; "
                  f"the cascade had not settled"
         )
         lines = [
             "Drops",
-            f"{pad}method     : {self.method} ({ending})",
+            f"{pad}rule       : {rule} ({self.method}, {ending})",
             f"{pad}raters     : {self.n_raters_dropped} removed",
         ]
         if self.dropped_raters:
             shown = ", ".join(
-                f"{name} ({n:,} rating(s))"
+                f"{name} ({counted(n, 'rating')})"
                 for name, n in list(self.dropped_raters.items())[:3]
             )
             more = self.n_raters_dropped - min(3, self.n_raters_dropped)
@@ -132,7 +151,7 @@ class DropReport:
 
         if self.dropped_subject_distribution:
             shown = ", ".join(
-                f"{n:,} held {k}"
+                f"{counted(n, 'subject')} holding {counted(k, 'rating')}"
                 for k, n in sorted(self.dropped_subject_distribution.items())
             )
             lines.append(f"{pad}             {shown}")
@@ -140,10 +159,12 @@ class DropReport:
         if verbosity == "full":
             if len(self.passes) > 1:
                 for p in self.passes:
-                    lines.append(
-                        f"{pad}  pass {p.number}: -{p.n_raters} rater(s), "
-                        f"-{p.n_subjects:,} subject(s)"
+                    removed = (
+                        "nothing removed" if p.dropped_nothing else
+                        f"removed {counted(p.n_raters, 'rater')} and "
+                        f"{counted(p.n_subjects, 'subject')}"
                     )
+                    lines.append(f"{pad}  pass {p.number}: {removed}")
             if self.dropped_subject_ids:
                 ids = list(self.dropped_subject_ids)
                 shown = ", ".join(map(str, ids[:10]))

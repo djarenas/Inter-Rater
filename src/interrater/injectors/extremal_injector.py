@@ -53,7 +53,7 @@ class ExtremalInjector(RaterInjector):
     # Constructor ------------------------------------------------------------ #
 
     def __init__(
-        self, ratings: Ratings, config: ExtremalInjectorConfig
+        self, ratings: Ratings, config: ExtremalInjectorConfig, *, step_position: int = 0
     ) -> None:
         """
         Initialize with ratings and extremal config.
@@ -71,7 +71,7 @@ class ExtremalInjector(RaterInjector):
             If config is not ExtremalInjectorConfig.
         """
         try:
-            super().__init__(ratings, config)
+            super().__init__(ratings, config, step_position=step_position)
         except (TypeError, ValueError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -99,7 +99,7 @@ class ExtremalInjector(RaterInjector):
         n_categories = self.ratings.semantics.n_categories
         strategy = self.config.strategy
 
-        rng = np.random.default_rng(self.config.random_state)
+        rng = self._rng()
         result = np.empty((n_subjects, n_injected), dtype=INDEX_DTYPE)
 
         # Dispatch to the right candidate finder

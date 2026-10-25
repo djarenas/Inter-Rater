@@ -86,6 +86,7 @@ the README's CI bounds.
 | test_subset_permutation.py | Subset permutation on partially crossed data -- the measurable-pool regression | 5 |
 | test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches | 4 |
 | test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | 4 |
+| test_missing_structure.py | The three shuffles keep SR1 main's missing-data design | 5 |
 | conftest.py | Dataset-loading fixtures, shared analyzer config builders | -- |
 
 **Total: 33 tests.** Counts here are from `pytest --collect-only`; if you
@@ -264,6 +265,30 @@ Each weighted test also checks:
 - `result.point != unweighted_point` (weights changed the estimate)
 - CI structure (lower < point < upper)
 - `result.weights_type` matches the requested type
+
+
+## test_missing_structure.py (5 tests)
+
+The three shuffles behind the permutation tests, on SR1 main: 1617 abstracts,
+4 reviewers, half of all cells empty, each abstract read by 2 of the 4 (3 by
+three). Who was shown what is the design of the study, so every shuffle must
+leave the empty cells exactly where they are: no answer may land on an
+abstract its reviewer was never shown, and every reviewer keeps their
+workload. Each shuffle test runs 200 draws.
+
+| Test | What it pins |
+|------|--------------|
+| test_half_the_cells_are_empty | The fixture is the design the rest rely on: 1617 x 4, 3231 empty cells |
+| test_each_abstract_read_by_two_or_three | Every abstract was read by 2 or 3 reviewers |
+| test_within_rater_shuffle | Empty cells stay put; each reviewer keeps their own answer mix |
+| test_within_subject_shuffle | Empty cells stay put; each abstract keeps the answers it got |
+| test_pool_and_redistribute | Empty cells stay put; the overall mix of answers is unchanged |
+
+Each shuffle test also checks that answers do move, so a shuffle that returned
+its input unchanged fails. Verified by replacing the three shuffles with naive
+ones that shuffle empty cells along with the answers, as a generic routine
+would: all three shuffle tests fail. The small-fixture versions of these
+checks are in `tests/test_analyzers/test_resampling_functions.py`.
 
 
 ## Not yet covered

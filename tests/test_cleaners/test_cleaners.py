@@ -254,6 +254,20 @@ class TestCleanerConfigValidation:
         with pytest.raises(ValueError, match="empty key"):
             CleanerConfig(value_map={"": "include"})
 
+    def test_value_map_conflicting_keys_rejected(self):
+        """'Y' and 'y' match the same cells; they cannot mean different things."""
+        with pytest.raises(ValueError, match="'Y' -> 'include' and 'y' -> 'exclude'"):
+            CleanerConfig(value_map={"Y": "include", "y": "exclude"})
+
+    def test_value_map_agreeing_keys_accepted(self):
+        """The same meaning twice is a harmless duplicate."""
+        cfg = CleanerConfig(value_map={"Y": "include", "y": "include"})
+        assert len(cfg.value_map) == 2
+
+    def test_value_map_case_keys_distinct_when_case_sensitive(self):
+        cfg = CleanerConfig(case_sensitive=True, value_map={"Y": "include", "y": "exclude"})
+        assert cfg.value_map["y"] == "exclude"
+
     def test_unknown_policy_bad(self):
         with pytest.raises(ValueError, match="unknown_policy"):
             CleanerConfig(unknown_policy="ignore")
@@ -343,6 +357,26 @@ class TestCleanerConfigYaml:
         """A nonexistent path raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
             CleanerConfig.build_from_yaml("/nonexistent/config.yaml")
+
+    def test_to_dict_round_trips(self):
+        """Every setting survives to_dict -> from_dict, so a report can carry it."""
+        cfg = CleanerConfig(
+            frame_layout=FrameLayout(use_column_names=False, subject_id_col=None),
+            case_sensitive=True, strip_whitespace=False,
+            missing_values=("NA", "o"), value_map={"inc": "include"},
+            unknown_policy="empty", unused_categories="keep",
+            insufficient_data_drops=InsufficientDataPolicy(
+                min_ratings_per_rater=3, min_ratings_per_subject=2, method="iterate",
+            ),
+        )
+        assert CleanerConfig.from_dict(cfg.to_dict()) == cfg
+
+    def test_value_map_conflict_refused_on_load(self, tmp_path):
+        """Caught when the YAML is read, before any semantics or data."""
+        path = tmp_path / "config.yaml"
+        path.write_text("value_map:\n  'Y': include\n  'y ': exclude\n")
+        with pytest.raises(ValueError, match="match the same cells"):
+            CleanerConfig.build_from_yaml(path)
 
 
 class TestCleanerConfigEquality:
@@ -495,6 +529,57 @@ class TestConfigAgainstSemantics:
         with pytest.raises(ValueError, match="declared category"):
             RatingsCleaner(clean_df, semantics, cfg)
 
+    @staticmethod
+    def _semantics(names):
+        cats = UnorderedCategories(names=names, labels={n: n for n in names})
+        return RatingsSemantics(raters=2, categories=cats)
+
+    @pytest.mark.parametrize("names, config", [
+        (("A", "a", "B"), CleanerConfig()),
+        (("A", "A ", "B"), CleanerConfig(case_sensitive=True)),
+    ], ids=["case", "trailing-space"])
+    def test_names_matched_as_one_refused(self, names, config):
+        """
+        Folded alike, every answer for either would be coded as one category.
+
+        The frame's columns are wrong on purpose: the names are refused
+        before a single cell is read, so the column error never comes up.
+        """
+        frame = pd.DataFrame({"wrong": ["A"], "columns": ["B"]})
+        with pytest.raises(ValueError, match="cannot be told apart"):
+            RatingsCleaner(frame, self._semantics(names), config)
+
+    def test_names_kept_apart_when_case_sensitive(self):
+        frame = pd.DataFrame({"rater0": ["A", "a", "B"], "rater1": ["a", "A", "B"]})
+        ratings = RatingsCleaner(
+            frame, self._semantics(("A", "a", "B")), CleanerConfig(case_sensitive=True),
+        ).ratings
+        assert ratings.category_index.tolist() == [[0, 1], [1, 0], [2, 2]]
+
+
+class TestFoldCollisions:
+    """The helper both checks use: which different strings fold alike."""
+
+    def test_groups_in_given_order(self):
+        from interrater.cleaners._string_utils import fold_collisions
+
+        found = fold_collisions(
+            ["b", "A", "B", "a", "c"], case_sensitive=False, strip_whitespace=True,
+        )
+        assert found == [("b", "B"), ("A", "a")]
+
+    def test_repeats_are_not_collisions(self):
+        from interrater.cleaners._string_utils import fold_collisions
+
+        assert fold_collisions(["A", "A"], case_sensitive=False, strip_whitespace=True) == []
+
+    def test_respects_the_matching_rule(self):
+        from interrater.cleaners._string_utils import fold_collisions
+
+        values = ["A", "a", "B", "B "]
+        assert fold_collisions(values, case_sensitive=True, strip_whitespace=False) == []
+        assert fold_collisions(values, case_sensitive=True, strip_whitespace=True) == [("B", "B ")]
+
 
 # ============================================================================ #
 #  Column matching                                                             #
@@ -611,6 +696,25 @@ class TestEncoding:
         rc = RatingsCleaner(df, sem, cfg)
         assert rc.report.matching.n_unknown == 1
 
+    def test_unknown_empty_counts_as_no_rating_everywhere(self, two_cat):
+        """
+        A null, a missing marker and an unknown treated as empty are all no
+        rating. Before 2.1.0 the headline counted 2 here and the per-rater
+        lines 3.
+        """
+        df = pd.DataFrame({
+            "ann": ["???", "NA", "include", "exclude"],
+            "bob": [None, "include", "exclude", "include"],
+        })
+        sem = RatingsSemantics(raters=["ann", "bob"], categories=two_cat)
+        cfg = CleanerConfig(unknown_policy="empty", missing_values=("NA",))
+        m = RatingsCleaner(df, sem, cfg).report.matching
+        assert (m.n_null, m.n_matched_missing, m.n_unknown) == (1, 1, 1)
+        assert m.n_missing == 3
+        assert sum(m.per_rater_missing.values()) == 3
+        assert sum(k * n for k, n in m.subject_missing_distribution.items()) == 3
+        assert m.summary()["n_missing"] == 3
+
     def test_case_sensitive_encoding(self, two_cat):
         """case_sensitive=True: 'Include' does not match 'include'."""
         df = pd.DataFrame({
@@ -706,6 +810,16 @@ class TestDrops:
         assert "cara" in rc.report.drops.dropped_raters
         assert rc.report.semantics_changed is True
 
+    def test_report_records_the_rule_it_applied(self):
+        """The drop report carries the configured minimums, not defaults of its own."""
+        df, sem = self._thin_rater_frame()
+        policy = InsufficientDataPolicy(min_ratings_per_rater=3, min_ratings_per_subject=2)
+        drops = RatingsCleaner(
+            df, sem, CleanerConfig(insufficient_data_drops=policy),
+        ).report.drops
+        assert (drops.min_ratings_per_rater, drops.min_ratings_per_subject) == (3, 2)
+        assert "at least 3 ratings per rater and 2 per subject" in drops.render()
+
     def test_drop_subjects_first(self):
         """subjects_first sweeps subjects before raters."""
         df, sem = self._thin_rater_frame()
@@ -768,8 +882,13 @@ class TestDrops:
         assert d.passes[1].n_subjects == 1
         # Pass 3: nothing -> converged
         assert d.passes[2].dropped_nothing is True
-        # Cara had 2 ratings in the original array
-        assert d.dropped_raters == {"cara": 2}
+        # Counts at removal, not in the original array: cara had 2 ratings to
+        # start with but went in pass 2 holding 1, after sub3 was removed.
+        # Before 2.1.0 this reported 2, against a minimum of 2.
+        assert d.dropped_raters == {"cara": 1}
+        # sub3 went in pass 1 with 1 rating; sub2 in pass 2, after cara, with
+        # 1. The original counts would say {1: 1, 2: 1}.
+        assert d.dropped_subject_distribution == {1: 2}
         assert d.n_subjects_dropped == 2
         assert set(d.dropped_subject_ids) == {"subject2", "subject3"}
 
@@ -778,6 +897,37 @@ class TestDrops:
         assert rc.report.n_subjects_lost == 2
         assert rc.report.n_raters_lost == 1
         assert rc.report.semantics_changed is True
+
+    # Each case survives cleaning and cascades: before 2.1.0 every one of them
+    # reported a casualty holding at least the minimum.
+    @pytest.mark.parametrize("method, seed", [
+        ("raters_first", 8), ("raters_first", 10), ("raters_first", 11),
+        ("subjects_first", 1), ("subjects_first", 2), ("subjects_first", 6),
+        ("subjects_first", 7), ("subjects_first", 8),
+        ("iterate", 1), ("iterate", 6), ("iterate", 7),
+    ])
+    def test_every_casualty_held_less_than_the_minimum(self, method, seed):
+        """
+        What the report says a casualty held is what it was judged on, so it
+        is always below the minimum. Reporting counts from before the sweep
+        broke this whenever one axis's removals thinned the other.
+        """
+        rng = np.random.default_rng(seed)
+        values = np.where(rng.random((40, 6)) < 0.4, None,
+                          rng.choice(["include", "exclude"], (40, 6)))
+        df = pd.DataFrame(values, columns=[f"r{i}" for i in range(6)])
+        df = df[df.notna().sum(axis=1) > 0]
+        sem = RatingsSemantics(
+            raters=list(df.columns),
+            categories=UnorderedCategories(("include", "exclude")),
+        )
+        policy = InsufficientDataPolicy(
+            min_ratings_per_rater=20, min_ratings_per_subject=3, method=method,
+        )
+        cfg = CleanerConfig(insufficient_data_drops=policy, unused_categories="keep")
+        d = RatingsCleaner(df, sem, cfg).report.drops
+        assert all(n < 20 for n in d.dropped_raters.values()), d.dropped_raters
+        assert all(k < 3 for k in d.dropped_subject_distribution), d.dropped_subject_distribution
 
     def test_drop_iterate_nothing_dropped(self, clean_df, semantics):
         """iterate on clean data: one pass that drops nothing, converged."""

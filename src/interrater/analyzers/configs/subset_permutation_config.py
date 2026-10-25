@@ -41,7 +41,7 @@ class SubsetPermutationConfig(PermutationConfig):
     ----------
     coefficient_to_compute : str
         Must be one of: "fleiss_kappa", "scotts_pi", "gwet_ac1",
-        "brennan_prediger", "percent_agreement", "krippendorff_alpha"
+        "brennan_prediger", "krippendorff_alpha"
     config_of_coefficient : AnalyzerConfig
         The nested config matching the coefficient
         (FleissKappaConfig, ScottsConfig, GwetAC1Config, etc.)
@@ -90,7 +90,6 @@ class SubsetPermutationConfig(PermutationConfig):
             "scotts_pi": "ScottsConfig",
             "gwet_ac1": "GwetAC1Config",
             "brennan_prediger": "BrennanPredigerConfig",
-            "percent_agreement": "PercentAgreementConfig",
             "krippendorff_alpha": "KrippendorffAlphaConfig",
         }
 
@@ -179,7 +178,6 @@ class SubsetPermutationConfig(PermutationConfig):
             "gwet_ac1": GwetAC1Config,
             "brennan_prediger": BrennanPredigerConfig,
             "krippendorff_alpha": KrippendorffAlphaConfig,
-            # "percent_agreement": PercentAgreementConfig  -- not yet implemented
         }
 
         # Hydrate config_of_coefficient if it is still a raw dict

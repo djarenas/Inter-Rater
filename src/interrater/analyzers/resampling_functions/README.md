@@ -88,11 +88,15 @@ All combinations of k raters from n. Yields C(n, k) modified arrays, each contai
 
 ### Permutation Resampling
 
-These generate null distributions for hypothesis testing. Conceptually different from bootstrap: they shuffle without replacement to destroy structure, testing whether the observed agreement exceeds what chance would produce.
+These generate null distributions by shuffling without replacement. Conceptually different from bootstrap: they destroy chosen structure rather than resample it.
 
-#### `column_shuffle(category_index, n_permutations=5000, random_state=42)`
+All three keep the missing-data structure exactly: they move only answers that were given, and put them back only into cells that were rated. No answer lands on a subject its rater was not shown, every rater keeps their workload, and every subject keeps its number of ratings.
 
-Shuffle each rater's column independently. Preserves each rater's marginal distribution (how often they use each category) but breaks the subject-rater pairing.
+`within_rater_shuffle` and `pool_and_redistribute` are the schemes for testing H₀: coefficient = 0 (`HypothesisTestConfig.scheme`). `within_subject_shuffle` is not: it keeps the agreement, so it cannot test that.
+
+#### `within_rater_shuffle(category_index, n_permutations=5000, random_state=42)`
+
+Shuffle each rater's answers across the subjects that rater rated, independently for each rater. Preserves each rater's marginal distribution (how often they use each category) but breaks the subject-rater pairing. Called `column_shuffle` before 2.1.0.
 
 **Null hypothesis:** "Raters agree no more than expected given their individual category-usage biases."
 
@@ -104,11 +108,11 @@ Shuffle category assignments within each subject's row. Preserves per-subject ca
 
 **Null hypothesis:** "The pattern of which rater chose which category within a subject is random."
 
-**Note:** For group coefficients that discard rater identity (Fleiss, Scott, AC1), this shuffle does not change the nij matrix and therefore does not change the coefficient. More meaningful for pairwise coefficients (Cohen's kappa) where rater identity matters.
+**Note:** This shuffle keeps each subject's set of answers, and with it the agreement, so it cannot test H₀: coefficient = 0. For group coefficients that discard rater identity (Fleiss, Scott, AC1) the coefficient does not change at all; for Cohen, Conger and Light the null distribution sits at the observed value. It was removed as a `HypothesisTestConfig` scheme in 2.1.0. Its null is about the raters: it suits statistics the shuffle can move, such as the spread of coefficients across rater pairs or subsets, or the gap between an individual-marginal and a pooled coefficient (Cohen − Scott).
 
 #### `pool_and_redistribute(category_index, n_permutations=5000, random_state=42)`
 
-Pool all non-missing ratings and redistribute randomly across the matrix, preserving only global category proportions.
+Pool all non-missing ratings and redistribute them randomly into the cells that were rated, preserving only global category proportions.
 
 **Null hypothesis:** "There is no structure in the data beyond the overall category proportions."
 
@@ -166,7 +170,7 @@ resampling_functions/
   __init__.py
   subject_resampling.py       # subject_bootstrap, subject_jackknife, subject_bootstrap_from_nij_matrix
   rater_resampling.py         # rater_jackknife, rater_subset
-  permutation_resampling.py   # column_shuffle, within_subject_shuffle, pool_and_redistribute
+  permutation_resampling.py   # within_rater_shuffle, within_subject_shuffle, pool_and_redistribute
   README.md
 ```
 

@@ -252,10 +252,10 @@ class PermutationAnalysis:
 
         from ...injectors.registry import get_injector_class
 
-        for step in injection:
+        for position, step in enumerate(injection):
             try:
                 injector_cls = get_injector_class(step)
-                injector = injector_cls(self.ratings, step)
+                injector = injector_cls(self.ratings, step, step_position=position)
                 self.ratings = injector.inject()
             except Exception as e:
                 raise type(e)(

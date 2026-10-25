@@ -267,6 +267,18 @@ class AnalyzerConfig:
                 f"a dictionary. Got {type(data_dict).__name__}"
             )
 
+        # Checked here, not in build_from_yaml, so that a config nested
+        # inside a pairwise or subset config gets the same message.
+        removed = sorted(set(data_dict) & {"weights_type", "custom_weights_path"})
+        if removed:
+            raise TypeError(
+                f"{_ERROR_PREFIX}: build_from_dict: {removed} were removed "
+                f"in 2.1.0. Weights are declared in the semantics file "
+                f"instead: categories kind 'ordered' with 'weighting', or "
+                f"kind 'weighted' with 'weights' or 'weights_file'. Delete "
+                f"these lines from your config."
+            )
+
         from ...yaml_utils import normalize_yaml_key
         from .hypothesis_test_config import HypothesisTestConfig
 
@@ -339,16 +351,10 @@ class AnalyzerConfig:
         valid_fields = {f.name for f in fields(cls)}
         for aliases in YAML_KEY_ALIASES.values():
             valid_fields.update(aliases)
-        unknown = set(data_dict) - valid_fields
-        removed = sorted(unknown & {"weights_type", "custom_weights_path"})
-        if removed:
-            raise TypeError(
-                f"{_ERROR_PREFIX}: build_from_yaml: {removed} were removed "
-                f"in 2.1.0. Weights are declared in the semantics file "
-                f"instead: categories kind 'ordered' with 'weighting', or "
-                f"kind 'weighted' with 'weights' or 'weights_file'. Delete "
-                f"these lines from {path}."
-            )
+        # The two keys removed in 2.1.0 pass through to build_from_dict,
+        # which gives them their own message.
+        unknown = (set(data_dict) - valid_fields
+                   - {"weights_type", "custom_weights_path"})
         if unknown:
             raise TypeError(
                 f"{_ERROR_PREFIX}: build_from_yaml: Unknown YAML "

@@ -4,7 +4,7 @@ One test file covering all 8 exported functions across the three modules:
   - subject_resampling: subject_bootstrap, subject_jackknife,
     subject_bootstrap_from_nij_matrix
   - rater_resampling: rater_jackknife, rater_subset
-  - permutation_resampling: column_shuffle, within_subject_shuffle,
+  - permutation_resampling: within_rater_shuffle, within_subject_shuffle,
     pool_and_redistribute
 
 All functions are generators. Validation runs on first next() call,
@@ -28,7 +28,7 @@ from interrater.analyzers.resampling_functions.rater_resampling import (
     rater_subset,
 )
 from interrater.analyzers.resampling_functions.permutation_resampling import (
-    column_shuffle,
+    within_rater_shuffle,
     pool_and_redistribute,
     within_subject_shuffle,
 )
@@ -397,75 +397,93 @@ class TestRaterSubsetBehavior:
 
 # ================================================================== #
 #                                                                      #
-#   column_shuffle                                                     #
+#   within_rater_shuffle                                               #
 #                                                                      #
 # ================================================================== #
 
 
-class TestColumnShuffleValidation:
-    """Type and value checks for column_shuffle."""
+class TestWithinRaterShuffleValidation:
+    """Type and value checks for within_rater_shuffle."""
 
     def test_category_index_not_ndarray(self):
         with pytest.raises(TypeError, match="category_index must be np.ndarray"):
-            list(column_shuffle([[0, 1]], n_permutations=1))
+            list(within_rater_shuffle([[0, 1]], n_permutations=1))
 
     def test_n_permutations_not_int(self, ratings_3x2):
         with pytest.raises(TypeError, match="n_permutations must be int"):
-            list(column_shuffle(ratings_3x2, n_permutations=5.0))
+            list(within_rater_shuffle(ratings_3x2, n_permutations=5.0))
 
     def test_random_state_not_int_or_none(self, ratings_3x2):
         with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(column_shuffle(ratings_3x2, random_state="bad"))
+            list(within_rater_shuffle(ratings_3x2, random_state="bad"))
 
     def test_category_index_not_2d(self):
         with pytest.raises(ValueError, match="category_index must be 2D"):
-            list(column_shuffle(np.array([0, 1, 2]), n_permutations=1))
+            list(within_rater_shuffle(np.array([0, 1, 2]), n_permutations=1))
 
     def test_n_permutations_zero(self, ratings_3x2):
         with pytest.raises(ValueError, match="n_permutations must be >= 1"):
-            list(column_shuffle(ratings_3x2, n_permutations=0))
+            list(within_rater_shuffle(ratings_3x2, n_permutations=0))
 
 
-class TestColumnShuffleBehavior:
-    """Functional tests for column_shuffle."""
+class TestWithinRaterShuffleBehavior:
+    """Functional tests for within_rater_shuffle."""
 
     def test_yields_correct_count(self, ratings_3x2):
-        draws = list(column_shuffle(ratings_3x2, n_permutations=7))
+        draws = list(within_rater_shuffle(ratings_3x2, n_permutations=7))
         assert len(draws) == 7
 
     def test_each_draw_has_correct_shape(self, ratings_3x2):
-        for draw in column_shuffle(ratings_3x2, n_permutations=5):
+        for draw in within_rater_shuffle(ratings_3x2, n_permutations=5):
             assert draw.shape == (3, 2)
 
     def test_preserves_per_column_values(self, ratings_4x3):
         """Each column must contain the same multiset of values."""
-        for draw in column_shuffle(ratings_4x3, n_permutations=10):
+        for draw in within_rater_shuffle(ratings_4x3, n_permutations=10):
             for col in range(ratings_4x3.shape[1]):
                 np.testing.assert_array_equal(
                     np.sort(draw[:, col]),
                     np.sort(ratings_4x3[:, col]),
                 )
 
+    def test_preserves_per_rater_answers_with_missing(self, ratings_with_missing):
+        """With missing cells, each rater keeps exactly the answers they gave.
+
+        Only the answers move, never the empty cells, so each rater's answer
+        mix and workload are unchanged. Across draws the answers do move: a
+        function that returned its input unchanged would fail here.
+        """
+        moved = False
+        for draw in within_rater_shuffle(ratings_with_missing, n_permutations=50):
+            for col in range(ratings_with_missing.shape[1]):
+                given = ratings_with_missing[:, col]
+                np.testing.assert_array_equal(
+                    np.sort(draw[draw[:, col] >= 0, col]),
+                    np.sort(given[given >= 0]),
+                )
+            moved |= not np.array_equal(draw, ratings_with_missing)
+        assert moved
+
     def test_preserves_missing_positions(self, ratings_with_missing):
         """Missing values (-1) should stay in their positions after shuffle.
-        Actually, column_shuffle shuffles only valid (>= 0) entries within
+        Actually, within_rater_shuffle shuffles only valid (>= 0) entries within
         each column, so -1 cells keep their positions."""
         missing_mask = ratings_with_missing < 0
-        for draw in column_shuffle(
+        for draw in within_rater_shuffle(
             ratings_with_missing, n_permutations=10
         ):
             draw_missing = draw < 0
             np.testing.assert_array_equal(draw_missing, missing_mask)
 
     def test_reproducibility_same_seed(self, ratings_3x2):
-        draws_a = list(column_shuffle(ratings_3x2, n_permutations=5, random_state=42))
-        draws_b = list(column_shuffle(ratings_3x2, n_permutations=5, random_state=42))
+        draws_a = list(within_rater_shuffle(ratings_3x2, n_permutations=5, random_state=42))
+        draws_b = list(within_rater_shuffle(ratings_3x2, n_permutations=5, random_state=42))
         for a, b in zip(draws_a, draws_b):
             np.testing.assert_array_equal(a, b)
 
     def test_default_random_state_is_42(self, ratings_3x2):
-        draws_default = list(column_shuffle(ratings_3x2, n_permutations=5))
-        draws_42 = list(column_shuffle(
+        draws_default = list(within_rater_shuffle(ratings_3x2, n_permutations=5))
+        draws_42 = list(within_rater_shuffle(
             ratings_3x2, n_permutations=5, random_state=42
         ))
         for a, b in zip(draws_default, draws_42):
@@ -522,6 +540,24 @@ class TestWithinSubjectShuffleBehavior:
                     np.sort(draw[row, :]),
                     np.sort(ratings_4x3[row, :]),
                 )
+
+    def test_preserves_per_subject_answers_with_missing(self, ratings_with_missing):
+        """With missing cells, each subject keeps exactly the answers it got.
+
+        Only the answers move between the raters who rated that subject; no
+        answer reaches a rater who was not shown it. Across draws the answers
+        do move: a function that returned its input unchanged would fail here.
+        """
+        moved = False
+        for draw in within_subject_shuffle(ratings_with_missing, n_permutations=50):
+            for row in range(ratings_with_missing.shape[0]):
+                given = ratings_with_missing[row, :]
+                np.testing.assert_array_equal(
+                    np.sort(draw[row, draw[row, :] >= 0]),
+                    np.sort(given[given >= 0]),
+                )
+            moved |= not np.array_equal(draw, ratings_with_missing)
+        assert moved
 
     def test_preserves_missing_positions(self, ratings_with_missing):
         """Missing values (-1) should stay in their positions."""

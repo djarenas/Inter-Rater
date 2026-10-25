@@ -49,7 +49,7 @@ class RaterBootstrapInjector(RaterInjector):
     # Constructor ------------------------------------------------------------ #
 
     def __init__(
-        self, ratings: Ratings, config: RaterBootstrapInjectorConfig
+        self, ratings: Ratings, config: RaterBootstrapInjectorConfig, *, step_position: int = 0
     ) -> None:
         """
         Initialize with ratings and rater bootstrap config.
@@ -70,7 +70,7 @@ class RaterBootstrapInjector(RaterInjector):
             pool contains no valid ratings.
         """
         try:
-            super().__init__(ratings, config)
+            super().__init__(ratings, config, step_position=step_position)
         except (TypeError, ValueError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -97,7 +97,7 @@ class RaterBootstrapInjector(RaterInjector):
         n_injected = self.config.n_new_raters
 
         pool = self._build_source_pool()
-        rng = np.random.default_rng(self.config.random_state)
+        rng = self._rng()
 
         result = rng.choice(
             pool, size=(n_subjects, n_injected), replace=True

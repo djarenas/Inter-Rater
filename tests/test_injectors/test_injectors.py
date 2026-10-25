@@ -672,3 +672,90 @@ class TestChaining:
         np.testing.assert_array_equal(
             simple_ratings.category_index, original_copy,
         )
+
+
+# ============================================================================ #
+#  Injection through an analyzer config                                        #
+# ============================================================================ #
+
+
+class TestInjectionNeedsRatings:
+    """
+    Injection builds a new rater from the real raters' answers. A nij matrix
+    holds only counts per subject, so there is nothing to build from: the
+    analyzer refuses at construction rather than silently skipping the step
+    and reporting an un-augmented coefficient as an augmented one.
+    """
+
+    @staticmethod
+    def _config(config_cls):
+        return config_cls(injection=DistributionInjectorConfig(n_new_raters=1, random_state=0))
+
+    @pytest.mark.parametrize("name", ["FleissKappa", "GwetAC1"])
+    def test_nij_path_refused(self, name):
+        import interrater.analyzers as A
+        import interrater.analyzers.configs as C
+        from interrater.intermediates.estimator_parts import NijMatrix
+
+        nij = NijMatrix(matrix=np.array([[3, 0], [2, 1], [1, 2], [0, 3]]))
+        with pytest.raises(ValueError, match="injection needs individual ratings"):
+            getattr(A, f"{name}Analyzer").build_from_nij_matrix(
+                nij, self._config(getattr(C, f"{name}Config")),
+            )
+
+    def test_ratings_path_injects(self, simple_ratings):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        analyzer = FleissKappaAnalyzer(simple_ratings, self._config(FleissKappaConfig))
+        assert analyzer.ratings.n_raters == simple_ratings.n_raters + 1
+
+
+# ============================================================================ #
+#  Seeds in a chain                                                            #
+# ============================================================================ #
+
+
+class TestChainedSeeds:
+    """
+    Each step is seeded with [random_state, step_position]. Before 2.1.0 a
+    step was seeded with random_state alone, so two chained steps given the
+    same seed produced identical raters.
+    """
+
+    @staticmethod
+    def _injected(simple_ratings, steps):
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        analyzer = FleissKappaAnalyzer(
+            simple_ratings, FleissKappaConfig(injection=steps, n_resamples=2),
+        )
+        return analyzer.ratings.category_index[:, simple_ratings.n_raters:]
+
+    def test_same_seed_in_two_steps_gives_different_raters(self, simple_ratings):
+        step = DistributionInjectorConfig(n_new_raters=5, random_state=42)
+        injected = self._injected(simple_ratings, [step, step])
+        assert not np.array_equal(injected[:, :5], injected[:, 5:])
+
+    def test_pipeline_reruns_identically(self, simple_ratings):
+        steps = [
+            DistributionInjectorConfig(n_new_raters=2, random_state=42),
+            PooledInjectorConfig(n_new_raters=2, random_state=42),
+        ]
+        np.testing.assert_array_equal(
+            self._injected(simple_ratings, steps), self._injected(simple_ratings, steps),
+        )
+
+    def test_seed_is_the_pair(self, simple_ratings):
+        """The rule itself: the generator is default_rng([random_state, step_position])."""
+        config = DistributionInjectorConfig(n_new_raters=1, random_state=42)
+        injector = DistributionInjector(simple_ratings, config, step_position=3)
+        expected = np.random.default_rng([42, 3]).random(5)
+        np.testing.assert_array_equal(injector._rng().random(5), expected)
+
+    @pytest.mark.parametrize("bad, error", [(-1, ValueError), (True, TypeError), (1.0, TypeError)])
+    def test_step_position_validated(self, simple_ratings, bad, error):
+        config = DistributionInjectorConfig(n_new_raters=1, random_state=42)
+        with pytest.raises(error, match="step_position"):
+            DistributionInjector(simple_ratings, config, step_position=bad)

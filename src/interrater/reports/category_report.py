@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from ._wording import counted
+
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -22,8 +24,8 @@ class CategoryReport:
 
     I also record the rare categories, which the unused check does not catch
     and which are more dangerous than the empty ones. A category chosen once in
-    three hundred cells passes any test for being used, and every statistic
-    involving it is noise.
+    three hundred cells passes any test for being used, and every estimate
+    involving it is imprecise.
 
     Attributes
     ----------
@@ -39,6 +41,12 @@ class CategoryReport:
         as a field so that report summaries keep the same keys.
     rare_threshold:
         Below this many ratings a category is called rare.
+    labels:
+        Category name to its declared label, shown beside the name when it
+        says something the name does not.
+
+    The counts are of the cleaned data: what survived matching and dropping,
+    which is what every coefficient is computed on.
     """
 
     counts:         dict[str, int]
@@ -46,10 +54,11 @@ class CategoryReport:
     action:         str = "kept"
     rare_threshold: int = 10
     unused:         tuple[str, ...] = ()
+    labels:         dict[str, str] = field(default_factory=dict)
 
     @property
     def rare(self) -> dict[str, int]:
-        """Used, but so seldom that anything involving them is noise."""
+        """Used, but so seldom that estimates involving them are imprecise."""
         return {
             name: n
             for name, n in self.counts.items()
@@ -69,28 +78,45 @@ class CategoryReport:
     def render(self, verbosity: str = "summary") -> str:
         pad   = "    "
         total = sum(self.counts.values()) or 1
-        lines = ["Categories"]
+        rare  = self.rare
 
+        # Rare and unused are marked on the category's own row, so nothing
+        # else in this section sits where a category name would.
+        def mark(name: str) -> str:
+            if name in rare:
+                return " (rare)"
+            if name in self.unused:
+                return f" (unused, {self.action})"
+            return ""
+
+        def named(name: str) -> str:
+            label = self.labels.get(name, "")
+            # A label only differing in case says nothing the name does not.
+            if label and label.casefold() != name.casefold():
+                return f"{name} ({label})"
+            return name
+
+        n_ratings = sum(self.counts.values())
+        lines = [f"Categories (cleaned data: {counted(n_ratings, 'rating')})"]
         if verbosity == "full":
+            width = max([14] + [len(named(n)) + 1 for n in self.counts])
             for name, n in self.counts.items():
-                lines.append(f"{pad}{name:<14} {n:>8,}  ({n / total:.1%})")
+                lines.append(
+                    f"{pad}{named(name):<{width}} {n:>8,}  ({n / total:.1%}){mark(name)}"
+                )
         else:
             shown = ", ".join(
-                f"{name} {n / total:.0%}" for name, n in self.counts.items()
+                f"{name} {n / total:.0%}{mark(name)}"
+                for name, n in self.counts.items()
             )
-            lines.append(f"{pad}used       : {shown}")
+            lines.append(f"{pad}share      : {shown}")
 
-        if self.unused:
-            lines.append(
-                f"{pad}unused     : {list(self.unused)} ({self.action})"
-            )
-        if self.rare:
-            shown = ", ".join(f"{k} ({v})" for k, v in self.rare.items())
-            lines.append(
-                f"{pad}rare       : {shown} -- fewer than "
-                f"{self.rare_threshold} ratings; statistics involving these "
-                f"are not estimable"
-            )
+        if rare:
+            lines += [
+                "",
+                f"{pad}(rare = fewer than {self.rare_threshold} ratings; "
+                f"estimates involving it are imprecise)",
+            ]
         return "\n".join(lines)
 
     def __repr__(self) -> str:

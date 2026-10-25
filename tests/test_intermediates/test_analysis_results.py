@@ -37,6 +37,9 @@ from interrater.intermediates.results import (
     CohenKappaResult,
     CongerKappaResult,
 )
+from interrater.intermediates.results.hypothesis_test_result import (
+    permutation_p_value_from_counts,
+)
 from interrater.intermediates.results.analyzer_results.individual_marginal_result import (
     IndividualMarginalResult,
 )
@@ -617,6 +620,7 @@ class TestHypothesisTestResultConstruction:
             point=0.65,
             z_statistic=3.42,
             null_variance=0.036,
+            coefficient="fleiss_kappa",
         )
         assert r.p_value == 0.001
         assert r.reject_null is True
@@ -636,6 +640,7 @@ class TestHypothesisTestResultConstruction:
             point=0.5,
             null_distribution=null_dist,
             n_permutations=5000,
+            coefficient="fleiss_kappa",
         )
         assert r.method == "permutation"
         assert r.n_permutations == 5000
@@ -651,6 +656,7 @@ class TestHypothesisTestResultConstruction:
             method="permutation",
             point=0.1,
             n_permutations=1000,
+            coefficient="fleiss_kappa",
         )
         assert r.null_distribution is None
         assert r.z_statistic is None
@@ -661,6 +667,7 @@ class TestHypothesisTestResultConstruction:
         r = HypothesisTestResult(
             0.001, 0.05, True, "parametric_null", 0.65,
             z_statistic=3.42, null_variance=0.036,
+            coefficient="fleiss_kappa",
         )
         with pytest.raises(AttributeError):
             r.p_value = 0.01
@@ -670,6 +677,7 @@ class TestHypothesisTestResultConstruction:
         r = HypothesisTestResult(
             p_value=0.05, alpha=0.05, reject_null=True,
             method="permutation", point=0.3, n_permutations=100,
+            coefficient="fleiss_kappa",
         )
         assert r.reject_null is True
 
@@ -678,6 +686,7 @@ class TestHypothesisTestResultConstruction:
         r = HypothesisTestResult(
             p_value=0.05, alpha=0.05, reject_null=False,
             method="permutation", point=0.3, n_permutations=100,
+            coefficient="fleiss_kappa",
         )
         assert r.reject_null is False
 
@@ -692,6 +701,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value="0.5", alpha=0.05, reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_p_value_negative(self):
@@ -699,6 +709,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=-0.1, alpha=0.05, reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_p_value_above_one(self):
@@ -706,6 +717,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=1.5, alpha=0.05, reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     # --- alpha -------------------------------------------------------------- #
@@ -715,6 +727,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha="0.05", reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_alpha_zero(self):
@@ -722,6 +735,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=0.0, reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_alpha_one(self):
@@ -729,6 +743,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=1.0, reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     # --- reject_null -------------------------------------------------------- #
@@ -738,6 +753,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=0.05, reject_null=0,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_reject_null_false_but_p_below_alpha(self):
@@ -746,6 +762,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.01, alpha=0.05, reject_null=False,
                 method="permutation", point=0.5, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_reject_null_true_but_p_above_alpha(self):
@@ -754,6 +771,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=0.05, reject_null=True,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     # --- method ------------------------------------------------------------- #
@@ -763,6 +781,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=0.05, reject_null=False,
                 method=42, point=0.1,
+                coefficient="fleiss_kappa",
             )
 
     def test_method_invalid(self):
@@ -770,6 +789,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=0.05, reject_null=False,
                 method="custom", point=0.1,
+                coefficient="fleiss_kappa",
             )
 
     # --- point -------------------------------------------------------------- #
@@ -779,6 +799,16 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.5, alpha=0.05, reject_null=False,
                 method="permutation", point="0.1", n_permutations=100,
+                coefficient="fleiss_kappa",
+            )
+
+    def test_point_nan_refused(self):
+        """What a permutation test used to return for an undefined coefficient."""
+        with pytest.raises(ValueError, match="undefined"):
+            HypothesisTestResult(
+                p_value=0.0, alpha=0.05, reject_null=True,
+                method="permutation", point=float("nan"), n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     # --- Cross-validation: method-specific required fields ------------------ #
@@ -789,6 +819,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.001, alpha=0.05, reject_null=True,
                 method="parametric_null", point=0.65,
                 null_variance=0.036,
+                coefficient="fleiss_kappa",
             )
 
     def test_parametric_null_requires_null_variance(self):
@@ -797,6 +828,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.001, alpha=0.05, reject_null=True,
                 method="parametric_null", point=0.65,
                 z_statistic=3.42,
+                coefficient="fleiss_kappa",
             )
 
     def test_permutation_requires_n_permutations(self):
@@ -804,6 +836,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value=0.04, alpha=0.05, reject_null=True,
                 method="permutation", point=0.5,
+                coefficient="fleiss_kappa",
             )
 
     # --- Optional field type/value checks ----------------------------------- #
@@ -814,6 +847,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.001, alpha=0.05, reject_null=True,
                 method="parametric_null", point=0.65,
                 z_statistic="3.42", null_variance=0.036,
+                coefficient="fleiss_kappa",
             )
 
     def test_null_variance_not_numeric(self):
@@ -822,6 +856,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.001, alpha=0.05, reject_null=True,
                 method="parametric_null", point=0.65,
                 z_statistic=3.42, null_variance="0.036",
+                coefficient="fleiss_kappa",
             )
 
     def test_null_variance_negative(self):
@@ -830,6 +865,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.001, alpha=0.05, reject_null=True,
                 method="parametric_null", point=0.65,
                 z_statistic=3.42, null_variance=-0.01,
+                coefficient="fleiss_kappa",
             )
 
     def test_null_distribution_not_ndarray(self):
@@ -838,6 +874,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.04, alpha=0.05, reject_null=True,
                 method="permutation", point=0.5,
                 null_distribution=[0.1, 0.2], n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
     def test_n_permutations_not_int(self):
@@ -846,6 +883,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.04, alpha=0.05, reject_null=True,
                 method="permutation", point=0.5,
                 n_permutations=100.0,
+                coefficient="fleiss_kappa",
             )
 
     def test_n_permutations_zero(self):
@@ -854,6 +892,7 @@ class TestHypothesisTestResultValidation:
                 p_value=0.04, alpha=0.05, reject_null=True,
                 method="permutation", point=0.5,
                 n_permutations=0,
+                coefficient="fleiss_kappa",
             )
 
     # --- Error prefix ------------------------------------------------------- #
@@ -863,6 +902,7 @@ class TestHypothesisTestResultValidation:
             HypothesisTestResult(
                 p_value="bad", alpha=0.05, reject_null=False,
                 method="permutation", point=0.1, n_permutations=100,
+                coefficient="fleiss_kappa",
             )
 
 
@@ -879,12 +919,13 @@ class TestHypothesisTestResultStr:
             point=0.65,
             z_statistic=3.42,
             null_variance=0.036,
+            coefficient="fleiss_kappa",
         )
         s = str(r)
         assert "z = 3.42" in s
         assert "reject" in s
         assert "α = 0.05" in s
-        assert "point estimate" in s
+        assert "H₀: fleiss_kappa = 0" in s
 
     def test_permutation_format(self):
         """Permutation: shows n_permutations."""
@@ -895,17 +936,19 @@ class TestHypothesisTestResultStr:
             method="permutation",
             point=0.5,
             n_permutations=5000,
+            coefficient="fleiss_kappa",
         )
         s = str(r)
         assert "5000 permutations" in s
         assert "reject" in s
-        assert "point estimate" in s
+        assert "H₀: fleiss_kappa = 0" in s
 
     def test_very_small_p_value(self):
         """p < 0.000001 uses 'p < 0.000001' format."""
         r = HypothesisTestResult(
             1e-10, 0.05, True, "parametric_null", 0.9,
             z_statistic=8.0, null_variance=0.012,
+            coefficient="fleiss_kappa",
         )
         s = str(r)
         assert "p < 0.000001" in s
@@ -914,6 +957,7 @@ class TestHypothesisTestResultStr:
         """Normal p-values show 6 decimal places."""
         r = HypothesisTestResult(
             0.042, 0.05, True, "permutation", 0.5, n_permutations=1000,
+            coefficient="fleiss_kappa",
         )
         s = str(r)
         assert "p = 0.042000" in s
@@ -926,10 +970,11 @@ class TestHypothesisTestResultSummary:
         """Permutation with only required extras has base keys + n_permutations."""
         d = HypothesisTestResult(
             0.5, 0.05, False, "permutation", 0.1, n_permutations=100,
+            coefficient="fleiss_kappa",
         ).summary()
         assert set(d.keys()) == {
             "p_value", "alpha", "reject_null", "method", "point",
-            "n_permutations",
+            "coefficient", "n_permutations",
         }
 
     def test_parametric_keys(self):
@@ -937,6 +982,7 @@ class TestHypothesisTestResultSummary:
         d = HypothesisTestResult(
             0.001, 0.05, True, "parametric_null", 0.65,
             z_statistic=3.42, null_variance=0.036,
+            coefficient="fleiss_kappa",
         ).summary()
         assert d["z_statistic"] == 3.42
         assert d["null_variance"] == 0.036
@@ -948,10 +994,104 @@ class TestHypothesisTestResultSummary:
             0.04, 0.05, True, "permutation", 0.5,
             null_distribution=np.array([0.0, 0.1]),
             n_permutations=5000,
+            coefficient="fleiss_kappa",
         ).summary()
         assert d["n_permutations"] == 5000
         assert "null_distribution" not in d
         assert "z_statistic" not in d
+
+
+class TestHypothesisTestResultCounts:
+    """
+    The p-value follows from the counts the result records.
+
+    Hand-worked counts: 9 usable permutations, 2 at or above the observed
+    value, 7 at or below. With the observed data counted as one more
+    arrangement (Phipson & Smyth 2010): greater = 3/10, less = 8/10,
+    two-sided = 2 * 3/10.
+    """
+
+    @pytest.mark.parametrize("alternative, expected", [
+        ("greater", 0.3), ("less", 0.8), ("two-sided", 0.6),
+    ])
+    def test_formula(self, alternative, expected):
+        assert permutation_p_value_from_counts(2, 7, 9, alternative) == pytest.approx(expected)
+
+    def test_two_sided_capped_at_one(self):
+        """Both tails at 0.6; twice the smaller would be 1.2."""
+        assert permutation_p_value_from_counts(5, 5, 9, "two-sided") == 1.0
+
+    def test_never_zero(self):
+        """No permutation as extreme as the observed: 1/(B+1), not 0."""
+        assert permutation_p_value_from_counts(0, 9, 9, "greater") == pytest.approx(0.1)
+
+    def _result(self, **overrides):
+        kwargs = dict(
+            p_value=0.6, alpha=0.05, reject_null=False, method="permutation",
+            point=0.2, coefficient="fleiss_kappa", n_permutations=10,
+            alternative="two-sided",
+            n_usable=9, n_at_or_above=2, n_at_or_below=7,
+        )
+        kwargs.update(overrides)
+        return HypothesisTestResult(**kwargs)
+
+    def test_consistent_counts_accepted(self):
+        assert self._result().n_usable == 9
+
+    def test_p_value_not_following_counts_refused(self):
+        with pytest.raises(ValueError, match="does not follow from the counts"):
+            self._result(p_value=0.3)
+
+    def test_counts_without_alternative_refused(self):
+        with pytest.raises(ValueError, match="alternative must be too"):
+            self._result(alternative=None)
+
+    def test_counts_recorded_together(self):
+        with pytest.raises(ValueError, match="recorded together"):
+            self._result(n_at_or_below=None)
+
+    @pytest.mark.parametrize("overrides, match", [
+        (dict(n_usable=11), "cannot exceed n_permutations"),
+        (dict(n_usable=0), "n_usable must be >= 1"),
+        (dict(n_at_or_above=10), r"n_at_or_above must be in \[0"),
+        (dict(n_at_or_below=-1), r"n_at_or_below must be in \[0"),
+    ])
+    def test_counts_out_of_range_refused(self, overrides, match):
+        with pytest.raises(ValueError, match=match):
+            self._result(**overrides)
+
+    def test_alternative_invalid_refused(self):
+        with pytest.raises(ValueError, match="alternative must be"):
+            HypothesisTestResult(
+                p_value=0.5, alpha=0.05, reject_null=False,
+                method="permutation", point=0.1, n_permutations=10,
+                alternative="sideways",
+                coefficient="fleiss_kappa",
+            )
+
+    def test_str_names_alternative_and_usable_draws(self):
+        s = str(self._result())
+        assert "two-sided p = 0.600000" in s
+        assert "9 of 10 permutations usable" in s
+
+    def test_coefficient_required(self):
+        """Every coefficient returns this class, so it must say which it is."""
+        kwargs = dict(p_value=0.5, alpha=0.05, reject_null=False,
+                      method="permutation", point=0.1, n_permutations=10)
+        with pytest.raises(TypeError, match="coefficient"):
+            HypothesisTestResult(**kwargs)
+
+    def test_coefficient_unknown_refused(self):
+        with pytest.raises(ValueError, match="coefficient must be one of"):
+            self._result(coefficient="fleiss")
+
+    def test_str_names_coefficient(self):
+        assert str(self._result()).startswith("H₀: fleiss_kappa = 0")
+
+    def test_summary_has_counts(self):
+        d = self._result().summary()
+        assert d["alternative"] == "two-sided"
+        assert (d["n_usable"], d["n_at_or_above"], d["n_at_or_below"]) == (9, 2, 7)
 
 
 # ============================================================================ #

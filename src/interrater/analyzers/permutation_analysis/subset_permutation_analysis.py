@@ -111,7 +111,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 f"{_ERROR_PREFIX}: parent init failed: {e}"
             ) from e
 
-        self.ks = self._normalize_ks(config.subset_k, ratings.n_raters)
+        # self.ratings, not the argument: the parent has applied any
+        # injection, and k may count the injected raters too.
+        self.ks = self._normalize_ks(config.subset_k, self.ratings.n_raters)
 
     # Public API --------------------------------------------------------- #
 

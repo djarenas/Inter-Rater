@@ -53,7 +53,7 @@ class PooledInjector(RaterInjector):
     # Constructor ------------------------------------------------------------ #
 
     def __init__(
-        self, ratings: Ratings, config: PooledInjectorConfig
+        self, ratings: Ratings, config: PooledInjectorConfig, *, step_position: int = 0
     ) -> None:
         """
         Initialize with ratings and pooled config.
@@ -74,7 +74,7 @@ class PooledInjector(RaterInjector):
             are excluded, or no valid ratings remain after exclusion.
         """
         try:
-            super().__init__(ratings, config)
+            super().__init__(ratings, config, step_position=step_position)
         except (TypeError, ValueError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -106,7 +106,7 @@ class PooledInjector(RaterInjector):
         smoothing = self.config.smoothing
 
         pool = self._build_pool()
-        rng = np.random.default_rng(self.config.random_state)
+        rng = self._rng()
 
         if smoothing == 0.0:
             # Fast path: resample directly from pool values

@@ -29,6 +29,44 @@ def fold(value: str, *, case_sensitive: bool, strip_whitespace: bool) -> str:
     return value if case_sensitive else value.casefold()
 
 
+def fold_collisions(
+    values: Sequence[str], *, case_sensitive: bool, strip_whitespace: bool
+) -> list[tuple[str, ...]]:
+    """
+    The groups of different strings that ``fold`` makes the same.
+
+    ``["A", "a", "B"]`` gives ``[("A", "a")]`` under case-insensitive
+    matching and ``[]`` under case-sensitive. Repeats of the very same string
+    are not a collision. Groups keep the order the strings were given in, and
+    come back in the order their first member was given.
+
+    Two declared names in one group would be matched as one: every answer
+    for either would be coded as the same category.
+    """
+    groups: dict[str, list[str]] = {}
+    for v in values:
+        members = groups.setdefault(
+            fold(v, case_sensitive=case_sensitive, strip_whitespace=strip_whitespace),
+            [],
+        )
+        if v not in members:
+            members.append(v)
+    return [tuple(m) for m in groups.values() if len(m) > 1]
+
+
+def describe_folding(*, case_sensitive: bool, strip_whitespace: bool) -> str:
+    """One sentence saying what ``fold`` ignores, for error messages."""
+    ignored = [
+        what for what, on in (
+            ("case", not case_sensitive),
+            ("spaces at either end", strip_whitespace),
+        ) if on
+    ]
+    if not ignored:
+        return "Matching is exact."
+    return f"Matching ignores {' and '.join(ignored)}."
+
+
 def fold_all(
     values: Sequence[str], *, case_sensitive: bool, strip_whitespace: bool
 ) -> list[str]:

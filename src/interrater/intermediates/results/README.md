@@ -44,13 +44,22 @@ results rather than under them keeps that relationship visible, and keeps
 | Class                  | What It Holds                                                    | Why It Exists                                                      |
 |------------------------|------------------------------------------------------------------|---------------------------------------------------------------------|
 | `AnalysisResult`       | ABC with `summary() -> dict`                                      | Common contract: every result can describe itself in plain types.   |
-| `HypothesisTestResult` | p_value, alpha, reject_null, method, point, optional z/null dist  | Test against H0: coefficient = 0. Parametric or permutation.        |
+| `HypothesisTestResult` | p_value, alpha, reject_null, method, point, alternative; z (parametric) or null distribution and counts (permutation) | Test against H0: coefficient = 0. Parametric or permutation.        |
 
 **`HypothesisTestResult` is standalone.** A hypothesis test is a
 fundamentally different kind of output from a point estimate with a
 confidence interval -- there is no point estimate of its own for it to
 inherit a contract for. It does not inherit from `AnalysisResult`, and it
 is kept at this level rather than filed under a tree it is not part of.
+
+**The p-value can be recomputed from the result.** A permutation result
+records `n_usable`, `n_at_or_above` and `n_at_or_below`, and refuses to be
+built if its p-value does not follow from them. Each tail is
+(count + 1)/(n_usable + 1), counting the observed data as one of the
+arrangements, so a p-value is never 0 (Phipson & Smyth 2010); two-sided is
+twice the smaller tail, capped at 1. Shuffles whose coefficient came out
+NaN are not counted in `n_usable`. A NaN observed coefficient is refused:
+there is no agreement to test.
 
 ## Design decisions spanning the trees
 

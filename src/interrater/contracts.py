@@ -126,7 +126,6 @@ SUBJECT_BOOTSTRAP_COEFFICIENTS: frozenset[str] = frozenset([
     "scotts_pi",
     "gwet_ac1",
     "brennan_prediger",
-    "percent_agreement",
     "krippendorff_alpha",
     "cohen_kappa",
     "conger_kappa",
@@ -181,7 +180,6 @@ SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([
     "scotts_pi",
     "gwet_ac1",
     "brennan_prediger",
-    "percent_agreement",
     "krippendorff_alpha",
     # "gwet_ac2",  # Future: weighted form of AC1, also supports subset permutation
 ])
@@ -190,7 +188,7 @@ SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([
 A coefficient is eligible for subset permutation if it can be computed on
 subsets of the rater pool. This includes all group coefficients (which read
 counts matrices and are rater-agnostic):
-- Fleiss' kappa, Scott's pi, Gwet AC1, Brennan-Prediger, Percent agreement
+- Fleiss' kappa, Scott's pi, Gwet AC1, Brennan-Prediger
 - Krippendorff's alpha
 
 Subset permutation is useful for understanding how agreement scales with panel

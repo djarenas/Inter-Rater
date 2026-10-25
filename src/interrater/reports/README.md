@@ -33,8 +33,11 @@ The top-level receipt. It holds:
 Key properties: `semantics_changed`, `k_changed`, `survived`,
 `n_subjects_lost`, `n_raters_lost`.
 
-`summary()` returns the full record in plain types. `to_yaml(path)` writes
-it beside the config, so the pair reproduces the run.
+`summary()` returns the full record in plain types, including the cleaner
+config that produced it (`cleaner_config`, in the shape
+`CleanerConfig.from_dict` reads) and the package version
+(`_package_version`). `to_yaml(path)` writes it to disk, so the record alone
+says how the data was cleaned and by which release.
 
 `render(verbosity)` validates verbosity (`"summary"` or `"full"`) and
 delegates to each sub-report's `render()`. When semantics changed, an

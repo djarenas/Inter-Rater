@@ -235,14 +235,24 @@ def conger_kappa(data: EstimatorInput) -> float:
     they diverge the approximation is not holding for that panel, which is
     itself worth knowing.
 
+    Both terms are taken over the subjects rated at least twice, as in every
+    group coefficient: a subject one rater saw alone joins no comparison, so
+    it enters neither the observed agreement nor the raters' marginals. On a
+    full panel that is every subject. On a pair it is the subjects both
+    rated, where Conger's kappa is exactly Cohen's.
+
     **Takes no weights**, because its weighted form is not implemented. There
     is no parameter to pass one to, which is a TypeError at the call site
     rather than a number that quietly ignored half of what it was given.
     """
     from .group_agreement import observed_agreement
 
+    # Both terms over the same subjects: those rated at least twice, the rule
+    # the group coefficients follow (group_agreement.category_proportions).
+    # observed_agreement already skips the rest, so the marginals must too.
+    compared = np.flatnonzero((data.category_index != EMPTY).sum(axis=1) >= 2)
     po = observed_agreement(data.nij)
-    pe = chance_conger(rater_marginals(data))
+    pe = chance_conger(rater_marginals(data, compared))
     return agreement_corrected_by_chance(po, pe)
 
 

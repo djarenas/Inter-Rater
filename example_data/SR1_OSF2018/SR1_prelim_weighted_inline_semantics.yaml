@@ -1,0 +1,13 @@
+# SR1 preliminary, with the same custom weights as
+# SR1_prelim_weights.yaml, written inline. Gives identical results to
+# SR1_prelim_weighted_semantics.yaml.
+raters: 4
+categories:
+    kind: weighted
+    names: ['1', '0', '-1']
+    weights:
+        - [1.0, 0.8, 0.0]
+        - [0.8, 1.0, 0.2]
+        - [0.0, 0.2, 1.0]
+n_subjects: 199
+unique_subjects: true

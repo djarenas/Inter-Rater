@@ -149,6 +149,12 @@ class TestAnalyzerConfig:
         assert cfg.n_resamples == 5000
         assert cfg.alpha == 0.01
 
+    @pytest.mark.parametrize("key", ["weights_type", "custom_weights_path"])
+    def test_build_from_dict_removed_weights_key_refused(self, key):
+        """Weights moved to the semantics in 2.1.0; the old keys say so."""
+        with pytest.raises(TypeError, match="removed in 2.1.0"):
+            FleissKappaConfig.build_from_dict({key: None})
+
     def test_summary_has_version(self):
         cfg = AnalyzerConfig()
         s = cfg.summary()
@@ -174,7 +180,7 @@ class TestHypothesisTestConfig:
     def test_default_construction(self):
         cfg = HypothesisTestConfig()
         assert cfg.method == "permutation"
-        assert cfg.scheme == "column_shuffle"
+        assert cfg.scheme == "within_rater_shuffle"
         assert cfg.n_permutations == 5000
         assert cfg.alpha == 0.05
         assert cfg.random_state == 42
@@ -191,9 +197,24 @@ class TestHypothesisTestConfig:
         with pytest.raises(ValueError, match="scheme"):
             HypothesisTestConfig(scheme="invalid")
 
-    def test_scheme_within_subject_accepted(self):
-        cfg = HypothesisTestConfig(scheme="within_subject")
-        assert cfg.scheme == "within_subject"
+    def test_alternative_default_two_sided_and_all_accepted(self):
+        """Two-sided by default: below-chance agreement is a real finding."""
+        assert HypothesisTestConfig().alternative == "two-sided"
+        for alt in ("two-sided", "greater", "less"):
+            assert HypothesisTestConfig(alternative=alt).alternative == alt
+
+    def test_alternative_invalid_rejected(self):
+        with pytest.raises(ValueError, match="alternative"):
+            HypothesisTestConfig(alternative="two_sided")
+
+    def test_scheme_within_subject_refused(self):
+        with pytest.raises(ValueError, match="removed in 2.1.0"):
+            HypothesisTestConfig(scheme="within_subject")
+
+    def test_scheme_column_shuffle_refused(self):
+        """The old name is refused, and the message names the new one."""
+        with pytest.raises(ValueError, match="renamed to 'within_rater_shuffle' in 2.1.0"):
+            HypothesisTestConfig(scheme="column_shuffle")
 
     # Finding 1b: bool-first guards on n_permutations
     def test_n_permutations_bool_rejected(self):
@@ -243,7 +264,8 @@ class TestHypothesisTestConfig:
         cfg = HypothesisTestConfig()
         s = cfg.summary()
         assert set(s.keys()) == {
-            "method", "scheme", "n_permutations", "alpha", "random_state",
+            "method", "scheme", "alternative", "n_permutations", "alpha",
+            "random_state",
         }
 
 
@@ -649,6 +671,14 @@ class TestPairwisePermutationConfig:
                 bootstrap_mean_config=bmc,
             )
 
+    def test_nested_removed_weights_key_refused(self):
+        """An old key inside config_of_coefficient gets the 2.1.0 message too."""
+        with pytest.raises(TypeError, match="removed in 2.1.0"):
+            PairwisePermutationConfig.build_from_dict({
+                "coefficient_to_compute": "cohen_kappa",
+                "config_of_coefficient": {"weights_type": "identity"},
+            })
+
 
 class TestSubsetPermutationConfig:
     """Tests for SubsetPermutationConfig."""
@@ -723,6 +753,15 @@ class TestSubsetPermutationConfig:
                 config_of_coefficient=CohenKappaConfig(),
                 subset_k=3,
             )
+
+    def test_nested_removed_weights_key_refused(self):
+        """An old key inside config_of_coefficient gets the 2.1.0 message too."""
+        with pytest.raises(TypeError, match="removed in 2.1.0"):
+            SubsetPermutationConfig.build_from_dict({
+                "coefficient_to_compute": "fleiss_kappa",
+                "config_of_coefficient": {"custom_weights_path": None},
+                "subset_k": 3,
+            })
 
 
 # ============================================================== #

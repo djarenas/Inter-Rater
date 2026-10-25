@@ -43,7 +43,9 @@ class RaterInjector(ABC):
 
     # Constructor ------------------------------------------------------------ #
 
-    def __init__(self, ratings: Ratings, config: InjectorConfig) -> None:
+    def __init__(
+        self, ratings: Ratings, config: InjectorConfig, *, step_position: int = 0
+    ) -> None:
         """
         Initialize the injector with ratings and config.
 
@@ -53,17 +55,46 @@ class RaterInjector(ABC):
             The ratings data to inject into. Must not be None.
         config : InjectorConfig
             The injection configuration.
+        step_position : int, default 0
+            Where this step stands in an injection pipeline, counting from
+            0. Mixed into the seed (see ``_rng``) so that chained steps
+            with the same ``random_state`` do not produce the same raters.
 
         Raises
         ------
         TypeError
-            If ratings is not Ratings or config is not InjectorConfig.
+            If ratings is not Ratings or config is not InjectorConfig, or
+            step_position is not an int.
         ValueError
-            If ratings is None.
+            If ratings is None or step_position is negative.
         """
         self._validate_base_inputs(ratings, config)
+        if isinstance(step_position, bool) or not isinstance(step_position, int):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: step_position must be int, "
+                f"got {type(step_position).__name__}"
+            )
+        if step_position < 0:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: step_position must be >= 0, got {step_position}"
+            )
         self.ratings = ratings
         self.config = config
+        self.step_position = step_position
+
+    def _rng(self) -> np.random.Generator:
+        """
+        The random generator for this step, seeded from its seed and position.
+
+        Seeding with the pair ``[random_state, step_position]`` lets numpy mix
+        both into one seed, so two steps given the same ``random_state`` get
+        unrelated streams, and different pairs cannot collide the way
+        ``seed + position`` can. One rule for every step, the first included.
+        ``random_state=None`` means fresh randomness, as before.
+        """
+        if self.config.random_state is None:
+            return np.random.default_rng()
+        return np.random.default_rng([self.config.random_state, self.step_position])
 
     # Public API ------------------------------------------------------------- #
 

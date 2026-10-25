@@ -7,8 +7,6 @@ config_of_coefficient:
   ci_method: bca
   convergence_test: null
   rater_jackknife: false
-  weights_type: "identity"
-  custom_weights_path: null
   balanced_data_only: false
 bootstrap_mean_config:
   n_bootstraps: 4000

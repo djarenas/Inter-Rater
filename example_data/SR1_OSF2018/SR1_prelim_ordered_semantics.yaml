@@ -1,0 +1,12 @@
+# SR1 preliminary, with the categories declared ordered and linear weights.
+# Reads 'uncertain' as a 50/50 call, halfway between include and exclude:
+#   include vs uncertain  0.5
+#   uncertain vs exclude  0.5
+#   include vs exclude    0.0
+raters: 4
+categories:
+    kind: ordered
+    names: ['1', '0', '-1']
+    weighting: linear
+n_subjects: 199
+unique_subjects: true

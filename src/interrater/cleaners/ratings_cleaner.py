@@ -197,6 +197,8 @@ class RatingsCleaner:
         value_map may be inconsistent in trying to map strings to a
         category that does not exist in semantics.
         """
+        self._check_names_distinct_after_folding()
+
         names  = self._declared_semantics.categories.names
         folded = {self._fold(n): n for n in names}
 
@@ -222,6 +224,35 @@ class RatingsCleaner:
                 f"but {[folded[self._fold(c)] for c in collides[:3]]} is a "
                 f"declared category. A response a rater was offered cannot "
                 f"also be a marker for absence."
+            )
+
+    def _check_names_distinct_after_folding(self) -> None:
+        """
+        Refuse category names the matching rule cannot tell apart.
+
+        Matched as one, every answer for either would be coded as the same
+        category, the other would look unused, and K would still count both.
+        The semantics alone cannot decide this: 'A' and 'a' are distinct
+        under case_sensitive=True. So it is checked here, the first point
+        where both the names and the matching rule are known, before any
+        cell is read.
+        """
+        collisions = _s.fold_collisions(
+            self._declared_semantics.categories.names,
+            case_sensitive   = self._config.case_sensitive,
+            strip_whitespace = self._config.strip_whitespace,
+        )
+        if collisions:
+            shown = ", ".join(" and ".join(repr(n) for n in g) for g in collisions[:3])
+            rule = _s.describe_folding(
+                case_sensitive   = self._config.case_sensitive,
+                strip_whitespace = self._config.strip_whitespace,
+            )
+            raise ValueError(
+                f"{_ERROR_PREFIX}: the categories {shown} cannot be told apart. "
+                f"{rule} The cleaner would code them as one category. Rename "
+                f"one, or set case_sensitive=True / strip_whitespace=False if "
+                f"the difference is meant."
             )
 
     def _interpret_frame(self) -> tuple[np.ndarray, list]:
@@ -387,7 +418,8 @@ class RatingsCleaner:
         Which order, and whether to repeat, is the policy's call -- dropping
         is not symmetric, so a sweep one way gives a different answer from a
         sweep the other. Counts are taken before the drop so the report can
-        say how much each casualty held when it went.
+        say how much each casualty held when it went: the count it was judged
+        on, in the pass that removed it, not its count before any dropping.
 
         Subject ids are generated here if the frame had none, because a row
         must be nameable before it can be reported as dropped.
@@ -404,12 +436,13 @@ class RatingsCleaner:
             # raters_first is arbitrary here: the maximal set satisfying both
             # thresholds is unique, so sweep order affects the path but not the
             # converged endpoint.
-            keep_s, keep_r, per_pass, converged = _d.sweep_until_settled(
+            (keep_s, keep_r, per_pass, converged,
+             subject_held, rater_held) = _d.sweep_until_settled(
                 codes, policy.min_ratings_per_rater,
                 policy.min_ratings_per_subject, True, MAX_DROP_PASSES,
             )
         else:
-            keep_s, keep_r = _d.sweep_once(
+            keep_s, keep_r, subject_held, rater_held = _d.sweep_once(
                 codes, policy.min_ratings_per_rater,
                 policy.min_ratings_per_subject,
                 raters_first = policy.method == "raters_first",
@@ -417,17 +450,16 @@ class RatingsCleaner:
             per_pass  = [(int((~keep_r).sum()), int((~keep_s).sum()))]
             converged = True
 
-        _, per_rater_before = _d.rating_counts(codes)
-        per_subject_before  = _d.rating_counts(codes)[0]
-
         dropped_raters = {
-            raters[i]: int(per_rater_before[i])
+            raters[i]: int(rater_held[i])
             for i in np.flatnonzero(~keep_r)
         }
         dropped_ids = tuple(subject_ids[~keep_s].tolist())
 
         report = DropReport(
             method    = policy.method,
+            min_ratings_per_rater   = policy.min_ratings_per_rater,
+            min_ratings_per_subject = policy.min_ratings_per_subject,
             converged = converged,
             passes    = tuple(
                 DropPass(i + 1, r, s) for i, (r, s) in enumerate(per_pass)
@@ -435,7 +467,7 @@ class RatingsCleaner:
             dropped_raters      = dropped_raters,
             dropped_subject_ids = dropped_ids,
             dropped_subject_distribution = _d.distribution(
-                per_subject_before[~keep_s]
+                subject_held[~keep_s]
             ),
         )
         return (
@@ -483,6 +515,7 @@ class RatingsCleaner:
             policy = policy,
             action = "kept",
             unused = unused,
+            labels = dict(self._declared_semantics.categories.labels),
         )
         return codes, cats, report
 

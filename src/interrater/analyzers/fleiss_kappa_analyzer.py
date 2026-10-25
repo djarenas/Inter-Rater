@@ -127,6 +127,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         # Validate config type and compute is_exact flag
         self._validate_fleiss_config()
         self.is_exact = self.balance_profile.is_balanced
+        self._refuse_parametric_null_if_invalid(allow_weights=False)
 
     @classmethod
     def build_from_nij_matrix(
@@ -167,6 +168,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         # Validate config type and compute is_exact flag
         instance._validate_fleiss_config()
         instance.is_exact = instance.balance_profile.is_balanced
+        instance._refuse_parametric_null_if_invalid(allow_weights=False)
 
         return instance
 
@@ -317,7 +319,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             If config.hypothesis_test_config is None.
             If method="permutation" but ratings is None.
         """
-        from scipy import stats
         from ..intermediates.results import HypothesisTestResult
 
         # Guard: hypothesis_test_config must be set
@@ -351,16 +352,18 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             bias_correction = 1.0 / (n_subjects * (n_raters - 1))
             z = (point + bias_correction) / se_null
 
-            p_value = 2.0 * (1.0 - stats.norm.cdf(abs(z)))
+            p_value = self._parametric_p_value(z, ht_config.alternative)
 
             return HypothesisTestResult(
                 p_value=p_value,
                 alpha=ht_config.alpha,
                 reject_null=self._reject_null(p_value, ht_config.alpha),
                 method="parametric_null",
+                coefficient="fleiss_kappa",
                 point=point,
                 z_statistic=z,
                 null_variance=var_null,
+                alternative=ht_config.alternative,
             )
 
         elif ht_config.method == "permutation":
@@ -369,13 +372,13 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
 
             # Select permutation scheme
             from .resampling_functions.permutation_resampling import (
-                column_shuffle,
+                within_rater_shuffle,
                 within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
-                "column_shuffle": column_shuffle,
+                "within_rater_shuffle": within_rater_shuffle,
                 "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
@@ -403,17 +406,19 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
 
             null_distribution = np.array(null_values)
 
-            # p-value: proportion of null values >= observed (two-sided)
-            p_value = float(np.mean(np.abs(null_distribution) >= abs(point)))
+            counts = self._permutation_p_value(
+                null_distribution, point, ht_config.alternative
+            )
 
             return HypothesisTestResult(
-                p_value=p_value,
                 alpha=ht_config.alpha,
-                reject_null=self._reject_null(p_value, ht_config.alpha),
+                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
                 method="permutation",
+                coefficient="fleiss_kappa",
                 point=point,
                 null_distribution=null_distribution,
                 n_permutations=ht_config.n_permutations,
+                **counts,
             )
 
         else:

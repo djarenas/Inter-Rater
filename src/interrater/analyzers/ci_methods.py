@@ -329,7 +329,16 @@ def bca_ci(
     # array would count every failed draw as lying above the point estimate,
     # since `np.nan <= point` is False -- a bias rather than an error, and so
     # one that nothing downstream would catch.
-    ecdf_point = float(np.mean(usable <= point))
+    #
+    # Draws equal to the point estimate count as half below and half above.
+    # Counting them all as below (`<=`) shifts the interval up, counting them
+    # all as above (Efron & Tibshirani's strict `<`) shifts it down, and on
+    # small discrete data ties are common: Brennan-Prediger, which depends
+    # only on raw agreement, ties the point in up to 12% of draws in the
+    # example data. This is the 'mean' rule scipy.stats.bootstrap uses.
+    n_below = np.sum(usable < point)
+    n_at_or_below = np.sum(usable <= point)
+    ecdf_point = float((n_below + n_at_or_below) / (2 * usable.size))
     z0 = float(norm.ppf(np.clip(ecdf_point, 1e-10, 1 - 1e-10)))
 
     z_lower = float(norm.ppf(alpha / 2))

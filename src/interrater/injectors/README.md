@@ -59,3 +59,15 @@ Injections can be chained. Each call returns a new `Ratings`, and
 injected raters are named `injected_rater0`, `injected_rater1`, etc.
 When chaining, naming picks up where the previous injection left off,
 so names never collide.
+
+Seeds don't collide either. Each step's generator is seeded with the pair
+`[random_state, step_position]`, the step's own seed and its place in the
+pipeline (0, 1, 2, ...), which numpy mixes into one seed. Two steps given
+the same `random_state` therefore produce different raters, and a whole
+pipeline still reruns identically. Reordering steps changes the results,
+since order is part of the pipeline. `random_state=None` means fresh
+randomness on every run.
+
+A later step draws from every rater present when it runs, including
+those injected by earlier steps. A pooled or bootstrap step after a
+distribution step learns partly from the distribution step's raters.

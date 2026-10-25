@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ._wording import counted
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -124,14 +126,21 @@ class CleaningReport:
         Everything I hold, in plain types.
 
         Complete at every verbosity: this is the machine-readable record, and
-        it would be useless if a display setting could change it. Write it
-        beside the config and the pair reproduces the run.
+        it would be useless if a display setting could change it. It carries
+        the cleaner config that produced it and the package version, so the
+        record alone says how the data was cleaned and by which release.
 
         ``effective_semantics`` comes out in the same shape a semantics YAML
         takes, so somebody who accepts the change can lift it straight into
         their declaration rather than editing by hand.
         """
+        try:
+            from .. import __version__ as version
+        except ImportError:
+            version = "unknown"
         return {
+            "_package_version": version,
+            "cleaner_config":   self.config.to_dict(),
             "shape_in":  list(self.shape_in),
             "shape_out": list(self.shape_out),
             "n_subjects_lost": self.n_subjects_lost,
@@ -174,20 +183,21 @@ class CleaningReport:
         effective = self.effective_semantics
         lines = [
             "Semantics",
-            f"{pad}declared   : {declared.n_raters} rater(s) "
+            f"{pad}declared   : {counted(declared.n_raters, 'rater')} "
             f"{list(declared.raters)}, K={declared.n_categories}",
-            f"{pad}effective  : {effective.n_raters} rater(s) "
+            f"{pad}effective  : {counted(effective.n_raters, 'rater')} "
             f"{list(effective.raters)}, K={effective.n_categories}",
         ]
 
         if self.drops.dropped_raters:
             shown = ", ".join(
-                f"{name} ({n:,} rating(s))"
+                f"{name} ({counted(n, 'rating')})"
                 for name, n in self.drops.dropped_raters.items()
             )
             lines.append(
                 f"{pad}raters     : {shown} fell below "
-                f"min_ratings_per_rater and were dropped"
+                f"min_ratings_per_rater and "
+                f"{'was' if len(self.drops.dropped_raters) == 1 else 'were'} dropped"
             )
 
         if self.k_changed:
@@ -232,8 +242,8 @@ class CleaningReport:
         rows_out, cols_out = self.shape_out
         head = [
             "CleaningReport",
-            f"    in         : {rows_in:,} row(s) x {cols_in} column(s)",
-            f"    out        : {rows_out:,} subject(s) x {cols_out} rater(s) "
+            f"    in         : {counted(rows_in, 'row')} x {counted(cols_in, 'column')}",
+            f"    out        : {counted(rows_out, 'subject')} x {counted(cols_out, 'rater')} "
             f"({self.survived:.1%} of rows kept)",
             "",
         ]

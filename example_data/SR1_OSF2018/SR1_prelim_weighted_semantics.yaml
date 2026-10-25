@@ -1,0 +1,9 @@
+# SR1 preliminary, with custom weights read from a separate file.
+# See SR1_prelim_weights.yaml for the matrix and the reasoning behind it.
+raters: 4
+categories:
+    kind: weighted
+    names: ['1', '0', '-1']
+    weights_file: SR1_prelim_weights.yaml
+n_subjects: 199
+unique_subjects: true

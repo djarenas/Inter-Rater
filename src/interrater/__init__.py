@@ -55,7 +55,7 @@ except PackageNotFoundError:
 # -- Lazy plotting exports -------------------------------------------------- #
 #
 # The plotting functions import matplotlib, which costs roughly 2.5 seconds.
-# Nobody computing a coefficient should pay that, so these three names are
+# Nobody computing a coefficient should pay that, so these names are
 # resolved on first use rather than at import time (PEP 562). The effect is
 # that `from interrater import plot_pairwise_permutation` works exactly as if
 # it were imported above, while `import interrater` never touches matplotlib.
@@ -67,6 +67,8 @@ _LAZY_EXPORTS = {
     "plot_pairwise_permutation": "interrater.visualizers",
     "plot_subset_sorted": "interrater.visualizers",
     "plot_subset_strip": "interrater.visualizers",
+    "plot_bootstrap_distribution": "interrater.visualizers",
+    "plot_null_distribution": "interrater.visualizers",
 }
 
 
@@ -154,4 +156,6 @@ __all__ = [
     "plot_pairwise_permutation",
     "plot_subset_sorted",
     "plot_subset_strip",
+    "plot_bootstrap_distribution",
+    "plot_null_distribution",
 ]

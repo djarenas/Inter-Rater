@@ -50,7 +50,7 @@ class WithinSubjectInjector(RaterInjector):
     # Constructor ------------------------------------------------------------ #
 
     def __init__(
-        self, ratings: Ratings, config: WithinSubjectInjectorConfig
+        self, ratings: Ratings, config: WithinSubjectInjectorConfig, *, step_position: int = 0
     ) -> None:
         """
         Initialize with ratings and within-subject config.
@@ -68,7 +68,7 @@ class WithinSubjectInjector(RaterInjector):
             If config is not WithinSubjectInjectorConfig.
         """
         try:
-            super().__init__(ratings, config)
+            super().__init__(ratings, config, step_position=step_position)
         except (TypeError, ValueError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -96,7 +96,7 @@ class WithinSubjectInjector(RaterInjector):
         n_categories = self.ratings.semantics.n_categories
         noise_rate = self.config.noise_rate
 
-        rng = np.random.default_rng(self.config.random_state)
+        rng = self._rng()
 
         result = np.empty((n_subjects, n_injected), dtype=INDEX_DTYPE)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from ._string_utils import fold
+from ._string_utils import describe_folding, fold, fold_collisions
 from .frame_layout import FrameLayout
 from .insufficient_data_policy import InsufficientDataPolicy
 
@@ -170,6 +170,30 @@ class CleanerConfig:
                     f"cell is handled by missing_values, not here."
                 )
 
+        # Keys that match the same cells must agree on what those cells mean.
+        # Otherwise the last one silently wins. Keys that agree ("Y" and "y"
+        # both to Include) are a harmless duplicate.
+        conflicts = [
+            group for group in fold_collisions(
+                list(self.value_map),
+                case_sensitive   = self.case_sensitive,
+                strip_whitespace = self.strip_whitespace,
+            )
+            if len({self.value_map[k] for k in group}) > 1
+        ]
+        if conflicts:
+            shown = ", ".join(
+                " and ".join(f"{k!r} -> {self.value_map[k]!r}" for k in group)
+                for group in conflicts[:3]
+            )
+            raise ValueError(
+                f"{_ERROR_PREFIX}.value_map maps keys that match the same "
+                f"cells to different categories: {shown}. "
+                f"{describe_folding(case_sensitive=self.case_sensitive, strip_whitespace=self.strip_whitespace)} "
+                f"Make them agree, or set case_sensitive=True / "
+                f"strip_whitespace=False if they are meant to differ."
+            )
+
     def _validate_no_double_claim(self) -> None:
         """
         A string cannot both mean nothing and mean something.
@@ -290,6 +314,33 @@ class CleanerConfig:
                 f"{type(spec).__name__}."
             )
         return cls.from_dict(spec)
+
+    def to_dict(self) -> dict:
+        """
+        Me in plain types, in the shape ``from_dict`` reads.
+
+        So a cleaning report can carry the exact config that produced it, and
+        ``CleanerConfig.from_dict(config.to_dict()) == config``.
+        """
+        layout = self.frame_layout
+        drops  = self.insufficient_data_drops
+        return {
+            "frame_layout": {
+                "use_column_names": layout.use_column_names,
+                "subject_id_col":   layout.subject_id_col,
+            },
+            "case_sensitive":    self.case_sensitive,
+            "strip_whitespace":  self.strip_whitespace,
+            "missing_values":    list(self.missing_values),
+            "value_map":         dict(self.value_map),
+            "unknown_policy":    self.unknown_policy,
+            "unused_categories": self.unused_categories,
+            "insufficient_data_drops": {
+                "min_ratings_per_rater":   drops.min_ratings_per_rater,
+                "min_ratings_per_subject": drops.min_ratings_per_subject,
+                "method":                  drops.method,
+            },
+        }
 
     # Comparison and display -------------------------------------------------  #
 

@@ -272,6 +272,28 @@ class TestInjectionPipeline:
         assert analysis.ratings.n_subjects == 20
         assert analysis.ratings.n_raters == 3
 
+    @staticmethod
+    def _subset_with_one_injected(subset_k):
+        from interrater.injectors.configs import DistributionInjectorConfig
+
+        coc = FleissKappaConfig(
+            n_resamples=2,
+            injection=DistributionInjectorConfig(n_new_raters=1, random_state=0),
+        )
+        config = SubsetPermutationConfig(
+            coefficient_to_compute="fleiss_kappa", config_of_coefficient=coc,
+            subset_k=subset_k,
+        )
+        return SubsetPermutationAnalysis(_make_ratings(20, 3), config)
+
+    def test_subset_k_all_counts_injected_raters(self):
+        """3 real raters + 1 injected: 'all' runs k = 2, 3 and 4."""
+        assert self._subset_with_one_injected("all").ks == [2, 3, 4]
+
+    def test_subset_k_may_include_injected_raters(self):
+        """k = 4 was refused as 'exceeds n_raters=3' before 2.1.0."""
+        assert self._subset_with_one_injected(4).ks == [4]
+
 
 class TestComputeCI:
     """_compute_ci delegates to percentile and bca."""

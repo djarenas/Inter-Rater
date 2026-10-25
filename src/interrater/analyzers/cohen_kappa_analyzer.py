@@ -198,8 +198,6 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         ValueError
             If config.hypothesis_test_config is None.
         """
-        from scipy import stats
-
         # Guard: hypothesis_test_config must be set
         if self.config.hypothesis_test_config is None:
             raise ValueError(
@@ -234,28 +232,30 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             # for multi-rater kappa and does not apply to Cohen's kappa.
             z = point / se_null
 
-            p_value = 2.0 * (1.0 - stats.norm.cdf(abs(z)))
+            p_value = self._parametric_p_value(z, ht_config.alternative)
 
             return HypothesisTestResult(
                 p_value=p_value,
                 alpha=ht_config.alpha,
                 reject_null=self._reject_null(p_value, ht_config.alpha),
                 method="parametric_null",
+                coefficient="cohen_kappa",
                 point=point,
                 z_statistic=z,
                 null_variance=var_null,
+                alternative=ht_config.alternative,
             )
 
         elif ht_config.method == "permutation":
             # Permutation test: shuffle ratings to build null distribution
             from .resampling_functions.permutation_resampling import (
-                column_shuffle,
+                within_rater_shuffle,
                 within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
-                "column_shuffle": column_shuffle,
+                "within_rater_shuffle": within_rater_shuffle,
                 "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
@@ -286,19 +286,19 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
 
             null_distribution = np.array(null_values)
 
-            # p-value: proportion of null values >= observed (two-sided)
-            p_value = float(
-                np.mean(np.abs(null_distribution) >= abs(point))
+            counts = self._permutation_p_value(
+                null_distribution, point, ht_config.alternative
             )
 
             return HypothesisTestResult(
-                p_value=p_value,
                 alpha=ht_config.alpha,
-                reject_null=self._reject_null(p_value, ht_config.alpha),
+                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
                 method="permutation",
+                coefficient="cohen_kappa",
                 point=point,
                 null_distribution=null_distribution,
                 n_permutations=ht_config.n_permutations,
+                **counts,
             )
 
         else:

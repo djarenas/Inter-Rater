@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from ._wording import counted
+
 from dataclasses import dataclass, field
+
+_ERROR_PREFIX = "[MatchingReport] Error"
 
 
 @dataclass(frozen=True)
@@ -44,10 +48,20 @@ class MatchingReport:
         Strings that were neither missing nor a category, with how often each
         appeared. Non-empty only when ``unknown_policy`` is ``empty``; under
         ``error`` the clean stopped and there is no report to read.
-    per_rater_null, per_rater_missing, per_rater_unknown:
-        The same counts, keyed by rater name.
+    per_rater_null, per_rater_unknown:
+        The null and unknown counts, keyed by rater name.
+    per_rater_missing:
+        Cells each rater was left without a rating, whatever the reason:
+        null, a missing marker, or an unknown treated as empty.
     subject_missing_distribution:
-        How many subjects lost how many ratings: ``{0: 1204, 1: 380, 2: 33}``.
+        How many subjects had how many cells with no rating, before any
+        dropping: ``{0: 1204, 1: 380, 2: 33}``.
+
+    "No rating" means one thing everywhere in me: a cell that ended up empty,
+    whatever the reason. ``n_missing`` is the sum of the three reasons, and
+    the per-rater counts and the subject distribution add up to it. I check
+    that when I am built: if they disagree the cleaner has a bug, and a
+    report whose own lines contradict each other is not one to cite.
     """
 
     n_cells:         int
@@ -62,10 +76,39 @@ class MatchingReport:
 
     subject_missing_distribution: dict[int, int] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Refuse to exist if my own counts do not add up."""
+        checks = [
+            ("per_rater_missing", sum(self.per_rater_missing.values()), self.n_missing),
+            ("per_rater_null", sum(self.per_rater_null.values()), self.n_null),
+            ("per_rater_unknown", sum(self.per_rater_unknown.values()), self.n_unknown),
+            ("subject_missing_distribution",
+             sum(k * n for k, n in self.subject_missing_distribution.items()),
+             self.n_missing),
+        ]
+        for name, got, want in checks:
+            # An empty breakdown was not recorded, which is not a disagreement.
+            if getattr(self, name) and got != want:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: {name} adds up to {got:,}, but the "
+                    f"total it breaks down is {want:,}. The counts were built "
+                    f"inconsistently; this is a bug, not a property of the data."
+                )
+        if self.n_missing > self.n_cells:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: {self.n_missing:,} cells without a rating "
+                f"out of {self.n_cells:,} cells."
+            )
+
+    @property
+    def n_matched_missing(self) -> int:
+        """Cells caught by a missing marker."""
+        return sum(self.missing_matched.values())
+
     @property
     def n_missing(self) -> int:
-        """Cells with no rating: nulls plus every string that meant nothing."""
-        return self.n_null + sum(self.missing_matched.values())
+        """Cells with no rating: null, a missing marker, or an unknown treated as empty."""
+        return self.n_null + self.n_matched_missing + self.n_unknown
 
     @property
     def n_repaired(self) -> int:
@@ -80,6 +123,7 @@ class MatchingReport:
         return {
             "n_cells":         self.n_cells,
             "n_null":          self.n_null,
+            "n_matched_missing": self.n_matched_missing,
             "n_missing":       self.n_missing,
             "n_repaired":      self.n_repaired,
             "n_unknown":       self.n_unknown,
@@ -97,11 +141,22 @@ class MatchingReport:
     def render(self, verbosity: str = "summary") -> str:
         pad   = "    "
         fill  = self.n_missing / self.n_cells if self.n_cells else 0.0
+        # The parts add up to the headline: null, marker, unknown.
+        parts = [
+            f"{self.n_null:,} arrived null",
+            f"{self.n_matched_missing:,} matched a missing marker",
+        ]
+        if self.n_unknown:
+            parts.append(f"{self.n_unknown:,} unknown treated as empty")
+        # Nothing missing is said in one word; the parts would all be zero.
+        no_rating = (
+            f"{self.n_missing:,} ({fill:.1%}): " + ", ".join(parts)
+            if self.n_missing else "0"
+        )
         lines = [
             "Matching",
             f"{pad}cells      : {self.n_cells:,}",
-            f"{pad}no rating  : {self.n_missing:,} ({fill:.1%}), "
-            f"of which {self.n_null:,} arrived null",
+            f"{pad}no rating  : {no_rating}",
         ]
 
         if self.missing_matched:
@@ -127,18 +182,20 @@ class MatchingReport:
             )
 
         if verbosity == "full":
+            # Every rater has one cell per row, so rated = rows - no rating.
+            rows = self.n_cells // len(self.per_rater_missing) if self.per_rater_missing else 0
             for rater, n in self.per_rater_missing.items():
                 extra = self.per_rater_unknown.get(rater, 0)
                 lines.append(
-                    f"{pad}  {rater}: {n:,} without a rating"
-                    + (f", {extra:,} unknown" if extra else "")
+                    f"{pad}  {rater}: {rows - n:,} rated, {n:,} with no rating"
+                    + (f", {extra:,} of them unknown" if extra else "")
                 )
             if self.subject_missing_distribution:
                 shown = ", ".join(
-                    f"{n} subject(s) lost {k}"
+                    f"{counted(n, 'subject')} with {k}"
                     for k, n in sorted(self.subject_missing_distribution.items())
                 )
-                lines.append(f"{pad}  by subject: {shown}")
+                lines.append(f"{pad}  no rating per subject (before drops): {shown}")
 
         return "\n".join(lines)
 

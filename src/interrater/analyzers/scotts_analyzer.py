@@ -114,6 +114,7 @@ class ScottsAnalyzer(GroupAnalyzer):
 
         # Validate config type
         self._validate_scotts_config()
+        self._refuse_parametric_null_if_invalid(allow_weights=False)
 
     @classmethod
     def build_from_nij_matrix(
@@ -156,6 +157,7 @@ class ScottsAnalyzer(GroupAnalyzer):
 
         # Validate config type
         instance._validate_scotts_config()
+        instance._refuse_parametric_null_if_invalid(allow_weights=False)
 
         return instance
 
@@ -276,7 +278,6 @@ class ScottsAnalyzer(GroupAnalyzer):
         -------
         HypothesisTestResult
         """
-        from scipy import stats
         from ..intermediates.results import HypothesisTestResult
 
         # Guard: hypothesis_test_config must be set
@@ -306,16 +307,18 @@ class ScottsAnalyzer(GroupAnalyzer):
             # Bias correction from Fleiss (1979) Eq. 17
             bias_correction = 1.0 / (n_subjects * (n_raters - 1))
             z = (point + bias_correction) / se_null
-            p_value = 2.0 * (1.0 - stats.norm.cdf(abs(z)))
+            p_value = self._parametric_p_value(z, ht_config.alternative)
 
             return HypothesisTestResult(
                 p_value=p_value,
                 alpha=ht_config.alpha,
                 reject_null=self._reject_null(p_value, ht_config.alpha),
                 method="parametric_null",
+                coefficient="scotts_pi",
                 point=point,
                 z_statistic=z,
                 null_variance=var_null,
+                alternative=ht_config.alternative,
             )
 
         elif ht_config.method == "permutation":
@@ -323,13 +326,13 @@ class ScottsAnalyzer(GroupAnalyzer):
             self._check_permutation_available()
 
             from .resampling_functions.permutation_resampling import (
-                column_shuffle,
+                within_rater_shuffle,
                 within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
-                "column_shuffle": column_shuffle,
+                "within_rater_shuffle": within_rater_shuffle,
                 "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
@@ -356,16 +359,19 @@ class ScottsAnalyzer(GroupAnalyzer):
                 null_values.append(pi_perm)
 
             null_distribution = np.array(null_values)
-            p_value = float(np.mean(np.abs(null_distribution) >= abs(point)))
+            counts = self._permutation_p_value(
+                null_distribution, point, ht_config.alternative
+            )
 
             return HypothesisTestResult(
-                p_value=p_value,
                 alpha=ht_config.alpha,
-                reject_null=self._reject_null(p_value, ht_config.alpha),
+                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
                 method="permutation",
+                coefficient="scotts_pi",
                 point=point,
                 null_distribution=null_distribution,
                 n_permutations=ht_config.n_permutations,
+                **counts,
             )
 
         else:

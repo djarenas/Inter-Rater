@@ -97,7 +97,8 @@ class TestDropReportSummary:
     def test_keys(self, drops_some):
         s = drops_some.summary()
         expected = {
-            "method", "converged", "n_passes", "passes",
+            "method", "min_ratings_per_rater", "min_ratings_per_subject",
+            "converged", "n_passes", "passes",
             "n_raters_dropped", "n_subjects_dropped",
             "dropped_raters", "dropped_subject_ids",
             "dropped_subject_distribution",
@@ -126,9 +127,18 @@ class TestDropReportRender:
     """render() produces readable text at two verbosity levels."""
 
     def test_nothing_dropped_shortcut(self, drops_nothing):
+        """Says what was checked, and that nobody of either kind fell below it."""
         text = drops_nothing.render()
-        assert "nothing dropped" in text
-        assert "raters_first" in text
+        assert "rule       : at least 2 ratings per rater and 2 per subject (raters_first)" in text
+        assert "no raters or subjects dropped" in text
+
+    def test_rule_shown_when_something_dropped(self, drops_some):
+        text = drops_some.render()
+        assert "rule       : at least 2 ratings per rater and 2 per subject (" in text
+
+    def test_rule_in_summary(self, drops_some):
+        s = drops_some.summary()
+        assert (s["min_ratings_per_rater"], s["min_ratings_per_subject"]) == (2, 2)
 
     def test_summary_shows_counts(self, drops_some):
         text = drops_some.render("summary")
@@ -140,6 +150,7 @@ class TestDropReportRender:
         """Full verbosity shows per-pass breakdown when there are multiple."""
         r = DropReport(
             method="iterate",
+            min_ratings_per_rater=2, min_ratings_per_subject=2,
             converged=True,
             passes=(DropPass(1, 1, 0), DropPass(2, 0, 3), DropPass(3, 0, 0)),
             dropped_raters={"carol": 1},
@@ -158,6 +169,7 @@ class TestDropReportRender:
     def test_non_converged_text(self):
         r = DropReport(
             method="iterate",
+            min_ratings_per_rater=2, min_ratings_per_subject=2,
             converged=False,
             passes=(DropPass(1, 0, 5),),
             dropped_subject_ids=tuple(f"s{i}" for i in range(5)),
@@ -170,6 +182,7 @@ class TestDropReportRender:
         """Integer subject IDs render without error (widened type)."""
         r = DropReport(
             method="raters_first",
+            min_ratings_per_rater=2, min_ratings_per_subject=2,
             passes=(DropPass(1, 0, 2),),
             dropped_subject_ids=(0, 1),
             dropped_subject_distribution={1: 2},
@@ -183,6 +196,7 @@ class TestDropReportRender:
         raters = {f"r{i}": i + 1 for i in range(5)}
         r = DropReport(
             method="raters_first",
+            min_ratings_per_rater=2, min_ratings_per_subject=2,
             passes=(DropPass(1, 5, 0),),
             dropped_raters=raters,
         )
@@ -202,8 +216,8 @@ class TestMatchingReportProperties:
         assert matching_clean.n_missing == 0
 
     def test_n_missing_messy(self, matching_messy):
-        # 1 null + 1 matched "NA"
-        assert matching_messy.n_missing == 2
+        # 1 null + 1 matched "NA" + 1 unknown treated as empty
+        assert matching_messy.n_missing == 3
 
     def test_n_repaired(self, matching_messy):
         assert matching_messy.n_repaired == 1
@@ -224,7 +238,7 @@ class TestMatchingReportSummary:
     def test_keys(self, matching_messy):
         s = matching_messy.summary()
         expected = {
-            "n_cells", "n_null", "n_missing", "n_repaired", "n_unknown",
+            "n_cells", "n_null", "n_matched_missing", "n_missing", "n_repaired", "n_unknown",
             "missing_matched", "repairs", "unknown_values",
             "per_rater_null", "per_rater_missing", "per_rater_unknown",
             "subject_missing_distribution",
@@ -233,7 +247,7 @@ class TestMatchingReportSummary:
 
     def test_derived_values_in_summary(self, matching_messy):
         s = matching_messy.summary()
-        assert s["n_missing"] == 2
+        assert s["n_missing"] == 3
         assert s["n_repaired"] == 1
         assert s["n_unknown"] == 1
 
@@ -271,13 +285,74 @@ class TestMatchingReportRender:
 
     def test_full_shows_subject_distribution(self, matching_messy):
         text = matching_messy.render("full")
-        assert "by subject" in text
+        assert ("no rating per subject (before drops): 2 subjects with 0, "
+                "1 subject with 1, 1 subject with 2") in text
 
     def test_division_by_zero_guard(self):
         """Zero cells does not raise."""
         r = MatchingReport(n_cells=0, n_null=0)
         text = r.render()
         assert "0" in text
+
+    def test_headline_lists_parts_that_add_up(self, matching_messy):
+        """'No rating' is null + marker + unknown, and says so."""
+        text = matching_messy.render()
+        assert ("no rating  : 3 (37.5%): 1 arrived null, 1 matched a missing "
+                "marker, 1 unknown treated as empty") in text
+
+    def test_headline_is_just_zero_when_nothing_missing(self, matching_clean):
+        lines = matching_clean.render().splitlines()
+        assert "    no rating  : 0" in lines
+
+    def test_headline_omits_unknown_part_when_none(self):
+        r = MatchingReport(n_cells=4, n_null=1, missing_matched={"NA": 1})
+        assert "unknown" not in r.render()
+
+    def test_per_rater_unknown_is_part_of_the_count(self, matching_messy):
+        # 8 cells over 2 raters: 4 rows each.
+        assert "ann: 2 rated, 2 with no rating, 1 of them unknown" in matching_messy.render("full")
+
+
+class TestMatchingReportAddsUp:
+    """
+    "No rating" means one thing everywhere: a cell that ended up empty. Before
+    2.1.0 the headline left out unknowns treated as empty while the per-rater
+    lines counted them, so one report gave two totals. The report now refuses
+    to exist when its breakdowns disagree with its totals.
+    """
+
+    def _kwargs(self, **overrides):
+        kwargs = dict(
+            n_cells=8, n_null=1, missing_matched={"NA": 1},
+            unknown_values={"???": 1},
+            per_rater_null={"bob": 1},
+            per_rater_missing={"ann": 2, "bob": 1},
+            per_rater_unknown={"ann": 1},
+            subject_missing_distribution={0: 2, 1: 1, 2: 1},
+        )
+        kwargs.update(overrides)
+        return kwargs
+
+    def test_consistent_report_accepted(self):
+        assert MatchingReport(**self._kwargs()).n_missing == 3
+
+    @pytest.mark.parametrize("overrides, name", [
+        (dict(per_rater_missing={"ann": 1, "bob": 1}), "per_rater_missing"),
+        (dict(per_rater_null={"bob": 2}), "per_rater_null"),
+        (dict(per_rater_unknown={"ann": 0}), "per_rater_unknown"),
+        (dict(subject_missing_distribution={0: 3, 2: 1}), "subject_missing_distribution"),
+    ])
+    def test_breakdown_that_disagrees_is_refused(self, overrides, name):
+        with pytest.raises(ValueError, match=f"{name} adds up to"):
+            MatchingReport(**self._kwargs(**overrides))
+
+    def test_more_empty_cells_than_cells_refused(self):
+        with pytest.raises(ValueError, match="out of 2 cells"):
+            MatchingReport(n_cells=2, n_null=3)
+
+    def test_breakdowns_not_recorded_are_not_checked(self):
+        """A report with only totals is incomplete, not inconsistent."""
+        assert MatchingReport(n_cells=8, n_null=2).n_missing == 2
 
 
 # ============================================================================ #
@@ -359,9 +434,29 @@ class TestCategoryReportRender:
             rare_threshold=10,
         )
         text = r.render()
-        assert "rare" in text
-        assert "exclude" in text
-        assert "not estimable" in text
+        assert "exclude 1% (rare)" in text
+        assert "estimates involving it are imprecise" in text
+
+    @pytest.mark.parametrize("verbosity", ["summary", "full"])
+    def test_no_line_looks_like_a_category(self, verbosity):
+        """'rare' and 'unused' mark a row; they never sit where a name would."""
+        r = CategoryReport(
+            counts={"include": 200, "exclude": 3, "maybe": 0},
+            policy="keep", unused=("maybe",), rare_threshold=10,
+        )
+        names = [line.strip().split()[0] for line in r.render(verbosity).splitlines()[1:] if line.strip()]
+        assert not {"rare", "unused", "rare:", "unused:"} & set(names)
+
+    def test_full_marks_rows(self):
+        r = CategoryReport(
+            counts={"include": 200, "exclude": 3, "maybe": 0},
+            policy="keep", unused=("maybe",), rare_threshold=10,
+        )
+        lines = r.render("full").splitlines()
+        assert next(l for l in lines if l.strip().startswith("exclude")).endswith("(rare)")
+        assert next(l for l in lines if l.strip().startswith("maybe")).endswith("(unused, kept)")
+        include = next(l for l in lines if l.strip().startswith("include"))
+        assert "(rare)" not in include and "(unused" not in include
 
     def test_all_zero_counts_no_division_error(self):
         """All zero counts should not raise (total or 1 guard)."""
@@ -411,7 +506,7 @@ class TestCleaningReportProperties:
             shape_in=(0, 2),
             shape_out=(0, 2),
             matching=MatchingReport(n_cells=0, n_null=0),
-            drops=DropReport(method="raters_first"),
+            drops=DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2),
             categories=CategoryReport(counts={"a": 0, "b": 0}, policy="keep"),
         )
         assert r.survived == 0.0
@@ -446,7 +541,7 @@ class TestCleaningReportProperties:
             shape_in=(4, 2),
             shape_out=(4, 2),
             matching=MatchingReport(n_cells=8, n_null=0),
-            drops=DropReport(method="raters_first"),
+            drops=DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2),
             categories=CategoryReport(
                 counts={"a": 4, "b": 4, "c": 0},
                 policy="drop",
@@ -467,8 +562,25 @@ class TestCleaningReportSummary:
             "survived", "semantics_changed",
             "declared_semantics", "effective_semantics",
             "matching", "drops", "categories",
+            "_package_version", "cleaner_config",
         }
         assert set(s.keys()) == expected
+
+    def test_record_carries_its_config_and_version(self, report_stable):
+        """The saved record says how the data was cleaned, and by which release."""
+        from interrater import __version__
+        from interrater.cleaners.cleaner_config import CleanerConfig
+
+        s = report_stable.summary()
+        assert s["_package_version"] == __version__
+        assert CleanerConfig.from_dict(s["cleaner_config"]) == report_stable.config
+
+    def test_record_survives_yaml(self, report_changed, tmp_path):
+        import yaml
+
+        path = tmp_path / "report.yaml"
+        report_changed.to_yaml(path)
+        assert yaml.safe_load(path.read_text())["cleaner_config"] == report_changed.config.to_dict()
 
     def test_shape_is_list(self, report_stable):
         """Tuples become lists for JSON compatibility."""
@@ -541,7 +653,7 @@ class TestCleaningReportRender:
             shape_in=(4, 2),
             shape_out=(4, 2),
             matching=MatchingReport(n_cells=8, n_null=0),
-            drops=DropReport(method="raters_first"),
+            drops=DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2),
             categories=CategoryReport(
                 counts={"a": 4, "b": 4, "c": 0},
                 policy="drop",
@@ -606,3 +718,51 @@ class TestRepr:
     def test_cleaning_report(self, report_stable):
         r = repr(report_stable)
         assert r.startswith("CleaningReport")
+
+
+# ============================================================================ #
+#  Wording                                                                     #
+# ============================================================================ #
+
+
+class TestReportWording:
+    """Plain plurals, pass lines that say what they removed, labels and totals."""
+
+    @pytest.mark.parametrize("verbosity", ["summary", "full"])
+    def test_no_bracketed_plurals(self, report_changed, verbosity):
+        assert "(s)" not in report_changed.render(verbosity)
+        assert "(es)" not in report_changed.render(verbosity)
+
+    def test_pass_lines_say_what_was_removed(self):
+        r = DropReport(
+            method="iterate", min_ratings_per_rater=2, min_ratings_per_subject=2,
+            passes=(DropPass(1, 1, 0), DropPass(2, 0, 0)),
+            dropped_raters={"carol": 1},
+        )
+        text = r.render("full")
+        assert "pass 1: removed 1 rater and 0 subjects" in text
+        assert "pass 2: nothing removed" in text
+        assert "-0" not in text
+
+    def test_held_counts_read_as_sentences(self, drops_some):
+        assert "2 subjects holding 1 rating" in drops_some.render()
+
+    def test_categories_header_counts_cleaned_ratings(self, categories_all_used):
+        assert categories_all_used.render().splitlines()[0] == (
+            "Categories (cleaned data: 200 ratings)"
+        )
+
+    def test_label_shown_when_it_adds_something(self):
+        r = CategoryReport(
+            counts={"1": 62, "0": 1, "-1": 259}, policy="error",
+            labels={"1": "include", "0": "uncertain", "-1": "Exclude"},
+        )
+        text = r.render("full")
+        assert "1 (include)" in text and "-1 (Exclude)" in text
+
+    def test_label_differing_only_in_case_not_repeated(self):
+        r = CategoryReport(
+            counts={"include": 5, "exclude": 5}, policy="error",
+            labels={"include": "Include", "exclude": "Exclude"},
+        )
+        assert "(Include)" not in r.render("full")
