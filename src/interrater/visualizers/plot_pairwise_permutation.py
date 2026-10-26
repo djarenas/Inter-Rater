@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import textwrap
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from ..intermediates.results.permutation_results.permutation_result import (
+    INDEPENDENT_MEAN_CAVEAT,
+)
 
 if TYPE_CHECKING:
     from ..intermediates.results import PairwisePermutationResult
@@ -125,12 +130,15 @@ def plot_pairwise_permutation(
 
     mean_ci = result.bootstrap_ci_of_mean
     if mean_ci is not None and mean_ci.is_defined:
+        label = (
+            f"Mean {mean_ci.confidence_level:.0%} CI "
+            f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
+        )
+        if result.bootstrap_mean_method == "independent":
+            label += "\n" + textwrap.fill(INDEPENDENT_MEAN_CAVEAT, 43)
         ax.axhspan(
             mean_ci.lower, mean_ci.upper, alpha=0.15, color="steelblue",
-            label=(
-                f"Mean {mean_ci.confidence_level:.0%} CI "
-                f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
-            ),
+            label=label,
             zorder=0,
         )
 
@@ -190,29 +198,26 @@ def plot_pairwise_permutation(
             # bounds -- every draw failed, so no method ran. There is
             # nothing to draw for one, so the marker carries the news
             # instead.
-            has_interval = True
-            if result.bootstrap_cis_per_pair is not None:
-                pair_ci = result.bootstrap_cis_per_pair.get(pair_key)
-                if pair_ci is not None:
-                    has_interval = pair_ci.is_defined
-                    if not has_interval:
-                        any_undefined_ci = True
-                if pair_ci is not None and has_interval:
-                    ci_lo, ci_hi = pair_ci.lower, pair_ci.upper
-                    ax.plot(
-                        [x_pos, x_pos], [ci_lo, ci_hi],
-                        color="gray", linewidth=1.0, zorder=2,
-                    )
-                    # Small caps on whiskers
-                    cap_w = 0.04
-                    ax.plot(
-                        [x_pos - cap_w, x_pos + cap_w], [ci_lo, ci_lo],
-                        color="gray", linewidth=1.0, zorder=2,
-                    )
-                    ax.plot(
-                        [x_pos - cap_w, x_pos + cap_w], [ci_hi, ci_hi],
-                        color="gray", linewidth=1.0, zorder=2,
-                    )
+            pair_ci = result.bootstrap_cis_per_pair[pair_key]
+            has_interval = pair_ci.is_defined
+            if not has_interval:
+                any_undefined_ci = True
+            else:
+                ci_lo, ci_hi = pair_ci.lower, pair_ci.upper
+                ax.plot(
+                    [x_pos, x_pos], [ci_lo, ci_hi],
+                    color="gray", linewidth=1.0, zorder=2,
+                )
+                # Small caps on whiskers
+                cap_w = 0.04
+                ax.plot(
+                    [x_pos - cap_w, x_pos + cap_w], [ci_lo, ci_lo],
+                    color="gray", linewidth=1.0, zorder=2,
+                )
+                ax.plot(
+                    [x_pos - cap_w, x_pos + cap_w], [ci_hi, ci_hi],
+                    color="gray", linewidth=1.0, zorder=2,
+                )
 
             # Point — color and marker identify the partner rater, and an
             # unfilled face says the interval was attempted and came back
@@ -268,11 +273,10 @@ def plot_pairwise_permutation(
         # Include CI bounds if present. Undefined intervals are skipped --
         # min() against a NaN returns whichever argument came first, so one
         # of them would set the axis limits at random.
-        if result.bootstrap_cis_per_pair is not None:
-            for pair_ci in result.bootstrap_cis_per_pair.values():
-                if pair_ci.is_defined:
-                    data_min = min(data_min, pair_ci.lower)
-                    data_max = max(data_max, pair_ci.upper)
+        for pair_ci in result.bootstrap_cis_per_pair.values():
+            if pair_ci.is_defined:
+                data_min = min(data_min, pair_ci.lower)
+                data_max = max(data_max, pair_ci.upper)
         if mean_ci is not None and mean_ci.is_defined:
             data_min = min(data_min, mean_ci.lower)
             data_max = max(data_max, mean_ci.upper)

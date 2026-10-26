@@ -7,7 +7,12 @@ from pathlib import Path
 
 import numpy as np
 
+from ..contracts import INDEX_DTYPE
+
 _MIN_CATEGORIES = 2
+
+# Ratings store a category's position in INDEX_DTYPE, so a position must fit
+_MAX_CATEGORIES = int(np.iinfo(INDEX_DTYPE).max)
 
 
 class Categories(ABC):
@@ -70,6 +75,13 @@ class Categories(ABC):
                 f"{name} needs at least {_MIN_CATEGORIES} categories, got "
                 f"{len(self.names)}. A single category cannot produce "
                 f"agreement or disagreement."
+            )
+
+        if len(self.names) > _MAX_CATEGORIES:
+            raise ValueError(
+                f"{name} supports at most {_MAX_CATEGORIES} categories, got "
+                f"{len(self.names)}. Ratings store each category's position "
+                f"as {INDEX_DTYPE}, which cannot hold a larger one."
             )
 
         seen: set[str] = set()

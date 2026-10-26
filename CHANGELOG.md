@@ -82,6 +82,11 @@ version does not warn you, so this section does.
 - Each injection step is seeded with `[random_state, step_position]`.
   Chained steps with the same seed used to produce identical raters;
   injected raters now differ from 2.0, single steps included.
+- `summary()` replaces `bootstrap_n`, `bootstrap_mean` and `bootstrap_std`
+  with `bootstrap_draws_mean` and `bootstrap_se`, over the usable draws; the
+  counts are in the interval's summary. Results refuse draws that disagree
+  with their interval.
+- Per-pair and per-subset intervals are required on permutation results.
 
 ### Added
 
@@ -165,6 +170,10 @@ version does not warn you, so this section does.
 - The drop report gave each removed rater and subject its count before any
   dropping, not when it was removed, so a casualty of a cascade could appear
   to meet the minimum.
+- `bootstrap_mean` and `bootstrap_std` were NaN if any draw was undefined.
+  The standard error now divides by n − 1.
+- Pairwise and subset results said "bootstrap was not performed" when draws
+  were not stored above the limit; they now name the limit.
 
 ## [2.0.0] - 2026-10-11
 

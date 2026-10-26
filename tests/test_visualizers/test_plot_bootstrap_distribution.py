@@ -159,8 +159,15 @@ def test_parametric_null_refused(ratings):
 
 def test_all_draws_undefined_refused(ratings):
     result = _fleiss(ratings, n_resamples=300, ci_method="percentile")
+    # Draws and interval must agree, so both say every draw failed
     empty = dataclasses.replace(
-        result, bootstrap_distribution=np.full(300, np.nan),
+        result,
+        bootstrap_distribution=np.full(300, np.nan),
+        confidence_interval=dataclasses.replace(
+            result.confidence_interval,
+            lower=float("nan"), upper=float("nan"),
+            n_failed=300, method_used=None,
+        ),
     )
     with pytest.raises(ValueError, match="every one of the 300"):
         plot_bootstrap_distribution(empty)

@@ -15,8 +15,8 @@ PermutationResult               coefficient_name, ci_method, balance_profile
 | Class                       | What It Holds                                                                 | Why It Exists                                                        |
 |-----------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------|
 | `PermutationResult`         | coefficient_name, ci_method, balance_profile                                   | Shared base. Deliberately carries no point estimate -- see below.    |
-| `PairwisePermutationResult` | pairwise_values, subjects_per_pair, n_pairs, mean_over_pairs; optionally bootstrap_mean_method, bootstrap_ci_of_mean, bootstrap_distribution_of_mean, bootstrap_cis_per_pair, bootstrap_distributions_per_pair | All C(n,2) pairwise coefficients, with per-pair overlap counts.      |
-| `SubsetPermutationResult`   | subset_values, subjects_per_subset, n_subsets, subset_k, mean_over_subsets; the same five optional bootstrap fields, per subset | Leave-one-out or leave-k-out at a single k.                          |
+| `PairwisePermutationResult` | pairwise_values, subjects_per_pair, n_pairs, mean_over_pairs, bootstrap_cis_per_pair; bootstrap_distributions_per_pair when n_pairs <= 20; optionally bootstrap_mean_method, bootstrap_ci_of_mean, bootstrap_distribution_of_mean | All C(n,2) pairwise coefficients, with per-pair overlap counts.      |
+| `SubsetPermutationResult`   | subset_values, subjects_per_subset, n_subsets, subset_k, mean_over_subsets, bootstrap_cis_per_subset; bootstrap_distributions_per_subset when n_subsets <= 120; the same three optional fields for the mean | Leave-one-out or leave-k-out at a single k.                          |
 | `MultiKSubsetResult`        | per_k_results (dict[int, SubsetPermutationResult]), ks                          | Stability curve: how the coefficient moves as more raters are removed. |
 
 ## No single point estimate
@@ -112,10 +112,16 @@ iterating yields them in sorted order. The `ks` field lists them.
 `get_bootstrap_distributions_per_pair()` and
 `get_bootstrap_distributions_per_subset()` return the raw draw arrays, for
 callers who want to plot or re-analyse the distributions rather than read the
-summarised interval.
+summarised interval. The per-pair and per-subset bootstrap always runs, so
+every pair or subset has its interval; the raw draws are kept only up to 20
+pairs or 120 subsets, to bound memory, and above that the accessor says so.
 
 `summary()` on each class returns plain types, and each interval appears as
 its own nested `summary()` dict -- the full record, not just the two bounds.
+When the mean was bootstrapped, `bootstrap_draws_mean` and `bootstrap_se`
+describe its usable draws, as in `PointEstimateResult`. The mean's draws must
+agree with the mean's interval, and each stored pair's or subset's draws
+with that unit's interval.
 
 ## Dependencies
 

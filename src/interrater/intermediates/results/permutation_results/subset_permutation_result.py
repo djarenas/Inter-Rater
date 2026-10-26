@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..ci_results import BootstrapCIResult
 from .permutation_result import PermutationResult
 
@@ -65,7 +66,7 @@ class SubsetPermutationResult(PermutationResult):
     - bootstrap_mean_method: "correlated" or "independent"
     - bootstrap_ci_of_mean: CI on the mean
     - bootstrap_distribution_of_mean: raw draws of the mean
-    - bootstrap_cis_per_subset: CI per subset (always stored if bootstrapped)
+    - bootstrap_cis_per_subset: CI per subset (always computed and stored)
     - bootstrap_distributions_per_subset: raw draws per subset (only when
       n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS, to bound memory)
 
@@ -104,16 +105,18 @@ class SubsetPermutationResult(PermutationResult):
         Which procedure produced the mean-level bootstrap:
         "correlated" (same resampled subjects across all subsets in each
         draw, preserving subset correlations) or "independent" (each subset
-        bootstrapped separately). None if bootstrap was not performed.
+        bootstrapped separately). None if no bootstrap of the mean was
+        requested.
     bootstrap_ci_of_mean : BootstrapCIResult | None
         Bootstrap CI on the mean, carrying which method ran and how many
-        draws failed. None means no bootstrap was performed, which is a
-        different statement from an interval whose ``method_used`` is None
-        -- that one was attempted and every draw failed.
+        draws failed. None means no bootstrap of the mean was requested,
+        which is a different statement from an interval whose
+        ``method_used`` is None -- that one was attempted and every draw
+        failed.
     bootstrap_distribution_of_mean : np.ndarray | None
         Raw bootstrap draws of the mean (shape: n_bootstraps,). None if
-        bootstrap was not performed.
-    bootstrap_cis_per_subset : dict[tuple[int, ...], BootstrapCIResult] | None
+        no bootstrap of the mean was requested.
+    bootstrap_cis_per_subset : dict[tuple[int, ...], BootstrapCIResult]
         Bootstrap CI per subset, one interval object each. Subsets do not
         fail alike, and here that is routine rather than exceptional: a
         subset with fewer than two measurable subjects has nothing to
@@ -121,14 +124,13 @@ class SubsetPermutationResult(PermutationResult):
         its siblings on the same data return ordinary intervals. Each one
         carries its own counts and its own method, so that difference
         survives into the result instead of arriving as an indistinguishable
-        pair of NaNs. Always stored if bootstrap was performed, regardless
-        of n_subsets. None if bootstrap was not performed.
+        pair of NaNs. Always present: the analyzer config requires
+        n_resamples >= 1, so the per-subset bootstrap always runs.
     bootstrap_distributions_per_subset : dict[tuple[int, ...], np.ndarray] | None
-        Raw bootstrap draws per subset. Only stored when
-        n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS. None if not stored or
-        if bootstrap was not performed. Use
-        get_bootstrap_distributions_per_subset() for safe access with a
-        helpful error when distributions were not stored.
+        Raw bootstrap draws per subset. Stored exactly when
+        n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS, None above it, to bound
+        memory. Use get_bootstrap_distributions_per_subset() for access
+        with a helpful error when they were not stored.
     """
 
     # Attribute declaration
@@ -149,7 +151,7 @@ class SubsetPermutationResult(PermutationResult):
     bootstrap_mean_method: str | None
     bootstrap_ci_of_mean: BootstrapCIResult | None
     bootstrap_distribution_of_mean: np.ndarray | None
-    bootstrap_cis_per_subset: dict | None   # values are BootstrapCIResult
+    bootstrap_cis_per_subset: dict   # values are BootstrapCIResult
     bootstrap_distributions_per_subset: dict | None
 
     # Constructor ------------------------------------------------------------ #
@@ -272,27 +274,27 @@ class SubsetPermutationResult(PermutationResult):
                     f"{type(self.bootstrap_ci_of_mean).__name__}"
                 )
 
-        # Validate bootstrap_cis_per_subset
-        if self.bootstrap_cis_per_subset is not None:
-            if not isinstance(self.bootstrap_cis_per_subset, dict):
+        # Validate bootstrap_cis_per_subset. Always present: the per-subset
+        # bootstrap cannot be turned off (n_resamples >= 1).
+        if not isinstance(self.bootstrap_cis_per_subset, dict):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: bootstrap_cis_per_subset must be "
+                f"a dict (the per-subset bootstrap always runs), got "
+                f"{type(self.bootstrap_cis_per_subset).__name__}"
+            )
+        if set(self.bootstrap_cis_per_subset.keys()) != set(
+            self.subset_values.keys()
+        ):
+            raise ValueError(
+                f"{_ERROR_PREFIX}: bootstrap_cis_per_subset must have "
+                f"the same keys as subset_values"
+            )
+        for key, ci in self.bootstrap_cis_per_subset.items():
+            if not isinstance(ci, BootstrapCIResult):
                 raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_cis_per_subset must be "
-                    f"dict, got "
-                    f"{type(self.bootstrap_cis_per_subset).__name__}"
+                    f"{_ERROR_PREFIX}: bootstrap CI for subset {key} "
+                    f"must be BootstrapCIResult, got {type(ci).__name__}"
                 )
-            if set(self.bootstrap_cis_per_subset.keys()) != set(
-                self.subset_values.keys()
-            ):
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_cis_per_subset must have "
-                    f"the same keys as subset_values"
-                )
-            for key, ci in self.bootstrap_cis_per_subset.items():
-                if not isinstance(ci, BootstrapCIResult):
-                    raise TypeError(
-                        f"{_ERROR_PREFIX}: bootstrap CI for subset {key} "
-                        f"must be BootstrapCIResult, got {type(ci).__name__}"
-                    )
 
         # Validate bootstrap_distribution_of_mean
         if self.bootstrap_distribution_of_mean is not None:
@@ -342,6 +344,39 @@ class SubsetPermutationResult(PermutationResult):
                         f"subset {key} must be a 1-D np.ndarray"
                     )
 
+        # The mean's draws and interval describe one bootstrap, and so do
+        # each subset's, when its draws are stored.
+        try:
+            check_draws_match_interval(
+                self.bootstrap_distribution_of_mean,
+                self.bootstrap_ci_of_mean,
+                draws_name="bootstrap_distribution_of_mean",
+                interval_name="bootstrap_ci_of_mean",
+            )
+            if self.bootstrap_distributions_per_subset is not None:
+                for key, draws in self.bootstrap_distributions_per_subset.items():
+                    check_draws_match_interval(
+                        draws,
+                        self.bootstrap_cis_per_subset[key],
+                        draws_name=f"subset {key}",
+                        interval_name="its interval",
+                    )
+        except ValueError as exc:
+            raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
+
+        # Distributions are stored exactly when n_subsets is at or below
+        # the limit, so a missing one has one explanation.
+        should_store = self.n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS
+        stored = self.bootstrap_distributions_per_subset is not None
+        if stored != should_store:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: bootstrap_distributions_per_subset must "
+                f"be stored when n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS "
+                f"({MAX_SUBSETS_FOR_DISTRIBUTIONS}) and None above it; got "
+                f"n_subsets={self.n_subsets} with distributions "
+                f"{'stored' if stored else 'missing'}"
+            )
+
         # Call parent validation
         try:
             super().__post_init__()
@@ -365,21 +400,11 @@ class SubsetPermutationResult(PermutationResult):
         them. It describes the mean only -- a subset that had nothing to
         resample says so in its own entry of bootstrap_cis_per_subset.
         """
-        if self.bootstrap_ci_of_mean is not None:
-            detail = str(self.bootstrap_ci_of_mean)
-        elif self.bootstrap_distribution_of_mean is not None:
-            n_boot = len(self.bootstrap_distribution_of_mean)
-            detail = f"no CI on the mean (n={n_boot})"
-        else:
-            detail = ""
-
-        if self.bootstrap_mean_method is not None:
-            detail = (
-                f"{detail}, {self.bootstrap_mean_method}" if detail
-                else self.bootstrap_mean_method
-            )
-
-        ci_line = f"\n{detail}" if detail else ""
+        ci_line = (
+            f"\n{self.bootstrap_ci_of_mean}, {self.bootstrap_mean_method}"
+            if self.bootstrap_ci_of_mean is not None
+            else ""
+        )
 
         return (
             f"Subset (k={self.subset_k}, {self.coefficient_name}): "
@@ -395,10 +420,9 @@ class SubsetPermutationResult(PermutationResult):
         """
         Return per-subset bootstrap distributions, or raise if not stored.
 
-        Per-subset distributions are only stored when
-        n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS to bound memory. This
-        method provides a helpful error when distributions were not
-        stored, rather than silently returning None.
+        The per-subset bootstrap always runs, but its raw draws are only
+        stored when n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS, to bound
+        memory. This method says so rather than returning None.
 
         Returns
         -------
@@ -408,23 +432,15 @@ class SubsetPermutationResult(PermutationResult):
         Raises
         ------
         RuntimeError
-            If distributions were not stored (n_subsets exceeded threshold)
-            or bootstrap was not performed.
+            If n_subsets is above MAX_SUBSETS_FOR_DISTRIBUTIONS.
         """
         if self.bootstrap_distributions_per_subset is not None:
             return self.bootstrap_distributions_per_subset
-        if self.bootstrap_mean_method is None:
-            raise RuntimeError(
-                f"{_ERROR_PREFIX}: per-subset bootstrap distributions are "
-                f"not available because bootstrap was not performed"
-            )
         raise RuntimeError(
             f"{_ERROR_PREFIX}: per-subset bootstrap distributions were not "
             f"stored because n_subsets ({self.n_subsets}) > "
             f"MAX_SUBSETS_FOR_DISTRIBUTIONS ({MAX_SUBSETS_FOR_DISTRIBUTIONS}). "
-            f"Per-subset CIs are still available via bootstrap_cis_per_subset. "
-            f"To store raw distributions, re-run with a higher threshold "
-            f"or fewer raters."
+            f"Per-subset CIs are in bootstrap_cis_per_subset."
         )
 
     def summary(self) -> dict:
@@ -434,11 +450,14 @@ class SubsetPermutationResult(PermutationResult):
         Returns
         -------
         dict
-            Parent keys (coefficient_name, ci_method, balance) plus
+            Parent keys (coefficient_name, ci_method, balance); the
             observed statistics (subset_values, subjects_per_subset,
-            n_subsets, subset_k, mean_over_subsets) and bootstrap
-            statistics (bootstrap_mean_method, mean_ci_lower,
-            mean_ci_upper, bootstrap_n, etc.).
+            n_subsets, subset_k, mean_over_subsets); bootstrap_cis_per_subset;
+            and, when the mean was bootstrapped, bootstrap_mean_method,
+            mean_ci (with its draw counts), mean_ci_lower, mean_ci_upper,
+            bootstrap_draws_mean and bootstrap_se (the mean and standard
+            error of the usable draws of the mean, None when too few are
+            usable).
             Tuple keys are converted to strings for JSON compatibility.
         """
         result = super().summary()
@@ -463,22 +482,15 @@ class SubsetPermutationResult(PermutationResult):
             result["mean_ci_lower"] = self.bootstrap_ci_of_mean.lower
             result["mean_ci_upper"] = self.bootstrap_ci_of_mean.upper
 
-        if self.bootstrap_cis_per_subset is not None:
-            result["bootstrap_cis_per_subset"] = {
-                str(k): v.summary()
-                for k, v in self.bootstrap_cis_per_subset.items()
-            }
+        result["bootstrap_cis_per_subset"] = {
+            str(k): v.summary()
+            for k, v in self.bootstrap_cis_per_subset.items()
+        }
 
         if self.bootstrap_distribution_of_mean is not None:
-            result["bootstrap_n"] = len(
-                self.bootstrap_distribution_of_mean
-            )
-            result["bootstrap_mean"] = float(
-                np.mean(self.bootstrap_distribution_of_mean)
-            )
-            result["bootstrap_std"] = float(
-                np.std(self.bootstrap_distribution_of_mean)
-            )
+            mean, se = draw_moments(self.bootstrap_distribution_of_mean)
+            result["bootstrap_draws_mean"] = mean
+            result["bootstrap_se"] = se
 
         # Per-subset distributions are NOT included in summary (too large).
         # Access them directly via the field.

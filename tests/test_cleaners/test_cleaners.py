@@ -25,6 +25,8 @@ Key behaviours:
 - The report counts everything: nulls, missing, repairs, unknowns, drops.
 """
 
+import io
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -618,6 +620,54 @@ class TestColumnMatching:
         sem = RatingsSemantics(raters=["ann", "bob"], categories=two_cat, n_subjects=10)
         with pytest.raises(ValueError, match="row"):
             RatingsCleaner(df, sem)
+
+
+class TestDecimalColumns:
+    """A rater column read as decimals is refused before anything is matched.
+
+    pandas reads a numeric column with a blank cell as float64, so '1'
+    arrives as 1.0 and can never match the category '1'.
+    """
+
+    CSV = "a,b\n1,1\n0,\n-1,-1\n1,0\n0,0\n"
+
+    @pytest.fixture
+    def numeric_semantics(self):
+        return RatingsSemantics(
+            raters=["a", "b"], categories=UnorderedCategories(["1", "0", "-1"])
+        )
+
+    def test_blank_cell_makes_a_decimal_column_refused(self, numeric_semantics):
+        df = pd.read_csv(io.StringIO(self.CSV))
+        assert df["b"].dtype.kind == "f"
+        with pytest.raises(TypeError, match=r"\['b'\] were read as decimal"):
+            RatingsCleaner(df, numeric_semantics)
+
+    def test_message_says_how_to_read_the_file(self, numeric_semantics):
+        df = pd.read_csv(io.StringIO(self.CSV))
+        with pytest.raises(TypeError, match=r"dtype=str"):
+            RatingsCleaner(df, numeric_semantics)
+
+    def test_refused_even_when_the_values_would_match(self):
+        """Decimal categories that happen to match are refused too: the
+        column has already lost how its values were written."""
+        sem = RatingsSemantics(
+            raters=["a", "b"], categories=UnorderedCategories(["0.5", "1.5"])
+        )
+        df = pd.DataFrame({"a": [0.5, 1.5, 0.5], "b": [0.5, 1.5, 1.5]})
+        with pytest.raises(TypeError, match="decimal"):
+            RatingsCleaner(df, sem)
+
+    def test_read_as_text_cleans(self, numeric_semantics):
+        df = pd.read_csv(io.StringIO(self.CSV), dtype=str)
+        ratings = RatingsCleaner(df, numeric_semantics).ratings
+        assert ratings.n_raters == 2
+
+    def test_whole_number_column_still_accepted(self, numeric_semantics):
+        """No blank cell, so pandas keeps integers and they match."""
+        df = pd.DataFrame({"a": [1, 0, -1, 1], "b": [1, 0, -1, 0]})
+        ratings = RatingsCleaner(df, numeric_semantics).ratings
+        assert ratings.n_subjects == 4
 
 
 # ============================================================================ #

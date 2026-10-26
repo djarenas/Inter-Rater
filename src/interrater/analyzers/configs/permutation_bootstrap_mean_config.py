@@ -22,12 +22,11 @@ class PermutationBootstrapMeanConfig:
     - "correlated": resample subjects once per draw, compute all
       combinations on the same resampled data, then average. Preserves
       the correlation structure between combinations that share a rater.
-      Does not require per-combination bootstrap in the nested
-      config_of_coefficient.
     - "independent": each combination is bootstrapped separately (via
-      the nested config_of_coefficient's bootstrap settings), and the
-      mean is assembled from those independent draws. Requires
-      per-combination bootstrap to be enabled in config_of_coefficient.
+      the nested config_of_coefficient's bootstrap settings, which
+      always run), and the mean is assembled from those independent
+      draws. Needs at least 2 draws per combination, so the parent
+      config refuses it when config_of_coefficient.n_resamples < 2.
 
     For the "independent" method, reproducible per-combination seeds
     are derived from ``random_state`` using ``np.random.SeedSequence``.
@@ -41,7 +40,8 @@ class PermutationBootstrapMeanConfig:
     ci_method : str
         How CIs are computed: "percentile" or "bca". Default
         "percentile". Permutation results have no closed-form null
-        variance, so "parametric_null" is not available.
+        variance, so "parametric_null" is not available. "bca" needs
+        method "correlated" (see the check in __post_init__).
     alpha : float
         Significance level for CIs. Default 0.05 (95% CI).
     random_state : int | None
@@ -108,6 +108,20 @@ class PermutationBootstrapMeanConfig:
                 f"'bca', got '{self.ci_method}'. Permutation results "
                 f"have no closed-form null variance, so "
                 f"'parametric_null' is not available."
+            )
+
+        # BCa's acceleration comes from a jackknife that must leave out the
+        # same units the bootstrap resamples. The independent mean resamples
+        # each combination separately and mixes the draws, so no single
+        # leave-one-out matches it.
+        if self.method == "independent" and self.ci_method == "bca":
+            raise ValueError(
+                f"{_ERROR_PREFIX}: method 'independent' cannot use "
+                f"ci_method='bca'. BCa's acceleration needs a jackknife that "
+                f"leaves out the units the bootstrap resamples; the "
+                f"independent mean resamples each combination separately "
+                f"and mixes the draws, so no jackknife matches it. Use "
+                f"ci_method='percentile', or method='correlated'."
             )
 
         # Validate alpha

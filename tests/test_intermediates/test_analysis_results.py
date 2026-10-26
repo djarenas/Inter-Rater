@@ -20,6 +20,7 @@ Each class section: Construction → Validation → __str__ → summary().
 Hand-verifiable values throughout. No randomness.
 """
 
+import itertools
 import warnings
 
 import numpy as np
@@ -50,9 +51,11 @@ from interrater.intermediates.results.permutation_results.permutation_result imp
     PermutationResult,
 )
 from interrater.intermediates.results.permutation_results.pairwise_permutation_result import (
+    MAX_PAIRS_FOR_DISTRIBUTIONS,
     PairwisePermutationResult,
 )
 from interrater.intermediates.results.permutation_results.subset_permutation_result import (
+    MAX_SUBSETS_FOR_DISTRIBUTIONS,
     SubsetPermutationResult,
 )
 from interrater.intermediates.results.permutation_results.multi_k_subset_result import (
@@ -108,6 +111,21 @@ def _undefined_ci(**overrides) -> BootstrapCIResult:
     return BootstrapCIResult(**base)
 
 
+def _draws_for(ci: BootstrapCIResult) -> np.ndarray:
+    """Draws that agree with ``ci``: n_resamples of them, n_failed NaN."""
+    draws = np.full(ci.n_resamples, np.nan)
+    if ci.n_usable:
+        low, high = (ci.lower, ci.upper) if ci.is_defined else (0.0, 0.0)
+        draws[ci.n_failed:] = np.linspace(low, high, ci.n_usable)
+    return draws
+
+
+def _pe(point, ci=None, balance_profile=None) -> PointEstimateResult:
+    """A PointEstimateResult whose draws, if any, agree with its interval."""
+    draws = _draws_for(ci) if isinstance(ci, BootstrapCIResult) else None
+    return PointEstimateResult(point, ci, draws, balance_profile)
+
+
 def _bp() -> BalanceProfile:
     """Balanced profile: 4 subjects, 3 categories, 3 raters each."""
     return BalanceProfile.from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
@@ -139,6 +157,44 @@ def _bp_with_n_raters(n_raters: int = 3) -> BalanceProfile:
     )
 
 
+# -- Per-pair and per-subset bootstrap, as every analysis produces it ------- #
+# The per-unit bootstrap always runs (n_resamples >= 1), so every result has
+# an interval per unit, and its draws whenever the units fit under the
+# storage limit.
+
+
+def _cis_for(values) -> dict:
+    """One interval per unit, keyed like ``values``."""
+    if not isinstance(values, dict):
+        return {}
+    return {key: _ci(0.40, 0.60) for key in values}
+
+
+def _dists_for(values) -> dict:
+    """Draws per unit that agree with ``_cis_for(values)``."""
+    return _dists_matching(_cis_for(values))
+
+
+def _dists_matching(cis) -> dict:
+    """Draws per unit that agree with each unit's interval in ``cis``.
+
+    Anything that is not an interval gets a placeholder; the result refuses
+    the interval first, so the placeholder is never compared.
+    """
+    if not isinstance(cis, dict):
+        return {}
+    return {
+        key: _draws_for(ci) if isinstance(ci, BootstrapCIResult)
+        else np.array([0.5])
+        for key, ci in cis.items()
+    }
+
+
+def _many_units(n_raters: int, k: int) -> dict:
+    """Every k-subset of n_raters, each valued 0.5."""
+    return {s: 0.5 for s in itertools.combinations(range(n_raters), k)}
+
+
 # -- Pairwise test data: 3 raters → C(3,2) = 3 pairs ----------------------- #
 
 PAIRS = {(0, 1): 0.6, (0, 2): 0.4, (1, 2): 0.5}
@@ -147,7 +203,7 @@ PAIRWISE_MEAN = 0.5  # (0.6 + 0.4 + 0.5) / 3
 
 
 def _pairwise_kwargs(**overrides):
-    """Defaults for PairwisePermutationResult without bootstrap."""
+    """Defaults for PairwisePermutationResult without a bootstrap of the mean."""
     base = dict(
         coefficient_name="cohen_kappa",
         ci_method="percentile",
@@ -159,29 +215,26 @@ def _pairwise_kwargs(**overrides):
         bootstrap_mean_method=None,
         bootstrap_ci_of_mean=None,
         bootstrap_distribution_of_mean=None,
-        bootstrap_cis_per_pair=None,
-        bootstrap_distributions_per_pair=None,
     )
     base.update(overrides)
+    base.setdefault("bootstrap_cis_per_pair", _cis_for(base["pairwise_values"]))
+    base.setdefault(
+        "bootstrap_distributions_per_pair",
+        _dists_matching(base["bootstrap_cis_per_pair"]),
+    )
     return base
 
 
 def _pairwise_with_bootstrap(**overrides):
     """Defaults for PairwisePermutationResult with correlated bootstrap."""
-    boot_dist = np.array([0.48, 0.50, 0.52])
-    base = _pairwise_kwargs(
-        bootstrap_mean_method="correlated",
-        bootstrap_ci_of_mean=_ci(0.45, 0.55),
-        bootstrap_distribution_of_mean=boot_dist,
-        bootstrap_cis_per_pair={
-            (0, 1): _ci(0.50, 0.70),
-            (0, 2): _ci(0.30, 0.50),
-            (1, 2): _ci(0.40, 0.60),
-        },
-        bootstrap_distributions_per_pair=None,
-    )
-    base.update(overrides)
-    return base
+    # Overrides go in before the per-unit draws are built, so draws
+    # follow any per-unit intervals a test supplies.
+    return _pairwise_kwargs(**{
+        "bootstrap_mean_method": "correlated",
+        "bootstrap_ci_of_mean": _ci(0.45, 0.55, n_resamples=3),
+        "bootstrap_distribution_of_mean": np.array([0.48, 0.50, 0.52]),
+        **overrides,
+    })
 
 
 # -- Subset test data: k=2 (same structure as pairs) and k=3 --------------- #
@@ -196,7 +249,7 @@ SUBSET_K3_MEAN = 0.55
 
 
 def _subset_kwargs(**overrides):
-    """Defaults for SubsetPermutationResult (k=2) without bootstrap."""
+    """Defaults for SubsetPermutationResult (k=2) without a bootstrap of the mean."""
     base = dict(
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
@@ -209,29 +262,26 @@ def _subset_kwargs(**overrides):
         bootstrap_mean_method=None,
         bootstrap_ci_of_mean=None,
         bootstrap_distribution_of_mean=None,
-        bootstrap_cis_per_subset=None,
-        bootstrap_distributions_per_subset=None,
     )
     base.update(overrides)
+    base.setdefault("bootstrap_cis_per_subset", _cis_for(base["subset_values"]))
+    base.setdefault(
+        "bootstrap_distributions_per_subset",
+        _dists_matching(base["bootstrap_cis_per_subset"]),
+    )
     return base
 
 
 def _subset_with_bootstrap(**overrides):
     """Defaults for SubsetPermutationResult (k=2) with correlated bootstrap."""
-    boot_dist = np.array([0.48, 0.50, 0.52])
-    base = _subset_kwargs(
-        bootstrap_mean_method="correlated",
-        bootstrap_ci_of_mean=_ci(0.45, 0.55),
-        bootstrap_distribution_of_mean=boot_dist,
-        bootstrap_cis_per_subset={
-            (0, 1): _ci(0.50, 0.70),
-            (0, 2): _ci(0.30, 0.50),
-            (1, 2): _ci(0.40, 0.60),
-        },
-        bootstrap_distributions_per_subset=None,
-    )
-    base.update(overrides)
-    return base
+    # Overrides go in before the per-unit draws are built, so draws
+    # follow any per-unit intervals a test supplies.
+    return _subset_kwargs(**{
+        "bootstrap_mean_method": "correlated",
+        "bootstrap_ci_of_mean": _ci(0.45, 0.55, n_resamples=3),
+        "bootstrap_distribution_of_mean": np.array([0.48, 0.50, 0.52]),
+        **overrides,
+    })
 
 
 def _multi_k_kwargs(**overrides):
@@ -253,8 +303,8 @@ def _multi_k_kwargs(**overrides):
         bootstrap_mean_method=None,
         bootstrap_ci_of_mean=None,
         bootstrap_distribution_of_mean=None,
-        bootstrap_cis_per_subset=None,
-        bootstrap_distributions_per_subset=None,
+        bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
+        bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
     )
     result_k3 = SubsetPermutationResult(
         coefficient_name="fleiss_kappa",
@@ -268,8 +318,8 @@ def _multi_k_kwargs(**overrides):
         bootstrap_mean_method=None,
         bootstrap_ci_of_mean=None,
         bootstrap_distribution_of_mean=None,
-        bootstrap_cis_per_subset=None,
-        bootstrap_distributions_per_subset=None,
+        bootstrap_cis_per_subset=_cis_for(SUBSETS_K3),
+        bootstrap_distributions_per_subset=_dists_for(SUBSETS_K3),
     )
     base = dict(
         coefficient_name="fleiss_kappa",
@@ -304,23 +354,23 @@ class TestPointEstimateResultConstruction:
         assert r.balance_profile is None
 
     def test_with_ci(self):
-        """Point estimate with confidence interval."""
+        """Point estimate with a bootstrap interval and its draws."""
         ci = _ci(0.3, 0.7)
         r = PointEstimateResult(
             point=0.5,
             confidence_interval=ci,
-            bootstrap_distribution=None,
+            bootstrap_distribution=_draws_for(ci),
             balance_profile=None,
         )
         assert r.confidence_interval is ci
         assert r.confidence_interval.as_tuple() == (0.3, 0.7)
 
     def test_with_bootstrap(self):
-        """Point estimate with bootstrap distribution."""
+        """Point estimate with bootstrap distribution and its interval."""
         boot = np.array([0.4, 0.5, 0.6])
         r = PointEstimateResult(
             point=0.5,
-            confidence_interval=None,
+            confidence_interval=_ci(0.4, 0.6, n_resamples=3),
             bootstrap_distribution=boot,
             balance_profile=None,
         )
@@ -343,7 +393,7 @@ class TestPointEstimateResultConstruction:
         bp = _bp()
         r = PointEstimateResult(
             point=0.5,
-            confidence_interval=_ci(0.3, 0.7),
+            confidence_interval=_ci(0.3, 0.7, n_resamples=5),
             bootstrap_distribution=boot,
             balance_profile=bp,
         )
@@ -368,7 +418,7 @@ class TestPointEstimateResultConstruction:
 
     def test_with_undefined_ci(self):
         """An interval that produced no bounds is still an interval."""
-        r = PointEstimateResult(0.5, _undefined_ci(), None, None)
+        r = _pe(0.5, _undefined_ci())
         assert r.confidence_interval.is_defined is False
         assert r.point_outside_interval is False
 
@@ -450,19 +500,19 @@ class TestPointEstimateResultPointOutsideInterval:
 
     def test_point_below_interval_is_allowed(self):
         with pytest.warns(UserWarning, match="falls outside its own interval"):
-            r = PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+            r = _pe(0.2, _ci(0.3, 0.7))
         assert r.point == 0.2
         assert r.point_outside_interval is True
 
     def test_point_above_interval_is_allowed(self):
         with pytest.warns(UserWarning, match="falls outside its own interval"):
-            r = PointEstimateResult(0.8, _ci(0.3, 0.7), None, None)
+            r = _pe(0.8, _ci(0.3, 0.7))
         assert r.point_outside_interval is True
 
     def test_point_inside_does_not_warn(self):
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            r = PointEstimateResult(0.5, _ci(0.3, 0.7), None, None)
+            r = _pe(0.5, _ci(0.3, 0.7))
         assert r.point_outside_interval is False
 
     def test_boundary_counts_as_inside(self):
@@ -470,12 +520,12 @@ class TestPointEstimateResultPointOutsideInterval:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             assert (
-                PointEstimateResult(0.3, _ci(0.3, 0.7), None, None)
+                _pe(0.3, _ci(0.3, 0.7))
                 .point_outside_interval
                 is False
             )
             assert (
-                PointEstimateResult(0.7, _ci(0.3, 0.7), None, None)
+                _pe(0.7, _ci(0.3, 0.7))
                 .point_outside_interval
                 is False
             )
@@ -484,7 +534,7 @@ class TestPointEstimateResultPointOutsideInterval:
         """No bounds means no comparison to make -- not a violation."""
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            r = PointEstimateResult(0.5, _undefined_ci(), None, None)
+            r = _pe(0.5, _undefined_ci())
         assert r.point_outside_interval is False
 
     def test_no_interval_is_not_outside(self):
@@ -496,19 +546,19 @@ class TestPointEstimateResultPointOutsideInterval:
     def test_marker_appears_in_str(self):
         """Channel two: visible to anyone who prints the result."""
         with pytest.warns(UserWarning):
-            r = PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+            r = _pe(0.2, _ci(0.3, 0.7))
         assert "POINT OUTSIDE INTERVAL" in str(r)
 
     def test_flag_appears_in_summary(self):
         """Channel three: visible to anyone who serializes it."""
         with pytest.warns(UserWarning):
-            r = PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+            r = _pe(0.2, _ci(0.3, 0.7))
         assert r.summary()["point_outside_interval"] is True
 
     def test_warning_names_the_two_explanations(self):
         """The warning has to be actionable, not just alarming."""
         with pytest.warns(UserWarning) as caught:
-            PointEstimateResult(0.2, _ci(0.3, 0.7), None, None)
+            _pe(0.2, _ci(0.3, 0.7))
         message = str(caught[0].message)
         assert "bias correction" in message
         assert "degenerate" in message
@@ -524,7 +574,7 @@ class TestPointEstimateResultStr:
 
     def test_with_ci(self):
         """Point + CI. The interval renders itself."""
-        s = str(PointEstimateResult(0.523, _ci(0.481, 0.565), None, None))
+        s = str(_pe(0.523, _ci(0.481, 0.565)))
         assert s == "= 0.523 [0.481, 0.565] (95% CI, percentile, n=1000)"
 
     def test_ci_qualifiers_travel_with_the_interval(self):
@@ -533,7 +583,7 @@ class TestPointEstimateResultStr:
             0.481, 0.565,
             method_intended="bca", method_used="percentile", n_failed=12,
         )
-        s = str(PointEstimateResult(0.523, fallen, None, None))
+        s = str(_pe(0.523, fallen))
         assert "percentile [bca requested]" in s
         assert "12 failed" in s
 
@@ -544,14 +594,8 @@ class TestPointEstimateResultStr:
         assert "n=1000" in s
         assert "n_bootstrap" not in s
 
-    def test_bootstrap_without_ci(self):
-        """Bootstrap count shown when no interval came of it."""
-        boot = np.array([0.5])
-        s = str(PointEstimateResult(0.5, None, boot, None))
-        assert "n_bootstrap=1" in s
-
     def test_undefined_ci_says_so(self):
-        s = str(PointEstimateResult(0.5, _undefined_ci(), None, None))
+        s = str(_pe(0.5, _undefined_ci()))
         assert "[undefined]" in s
         assert "no method ran" in s
 
@@ -566,7 +610,7 @@ class TestPointEstimateResultSummary:
 
     def test_with_ci(self):
         """CI adds the interval's own summary plus hoisted bounds."""
-        d = PointEstimateResult(0.5, _ci(0.3, 0.7), None, None).summary()
+        d = _pe(0.5, _ci(0.3, 0.7)).summary()
         assert d["point"] == 0.5
         assert d["ci_lower"] == 0.3
         assert d["ci_upper"] == 0.7
@@ -575,12 +619,15 @@ class TestPointEstimateResultSummary:
         assert d["ci"]["n_failed"] == 0
 
     def test_with_bootstrap(self):
-        """Bootstrap adds n, mean, std."""
+        """Draws add their mean and standard error; counts live in 'ci'."""
         boot = np.array([1.0, 2.0, 3.0])
-        d = PointEstimateResult(2.0, _ci(1.0, 3.0), boot, None).summary()
-        assert d["bootstrap_n"] == 3
-        assert abs(d["bootstrap_mean"] - 2.0) < 1e-12
-        assert abs(d["bootstrap_std"] - np.std(boot)) < 1e-12
+        d = PointEstimateResult(
+            2.0, _ci(1.0, 3.0, n_resamples=3), boot, None
+        ).summary()
+        assert abs(d["bootstrap_draws_mean"] - 2.0) < 1e-12
+        assert abs(d["bootstrap_se"] - 1.0) < 1e-12
+        assert d["ci"]["n_resamples"] == 3
+        assert "bootstrap_n" not in d
 
     def test_with_balance_profile(self):
         """Balance profile adds nested 'balance' dict."""
@@ -593,13 +640,94 @@ class TestPointEstimateResultSummary:
         """Full summary has all keys."""
         boot = np.array([0.4, 0.5, 0.6])
         bp = _bp()
-        d = PointEstimateResult(0.5, _ci(0.4, 0.6), boot, bp).summary()
+        d = PointEstimateResult(
+            0.5, _ci(0.4, 0.6, n_resamples=3), boot, bp
+        ).summary()
         expected_keys = {
             "point", "ci", "ci_lower", "ci_upper", "point_outside_interval",
-            "bootstrap_n", "bootstrap_mean", "bootstrap_std",
+            "bootstrap_draws_mean", "bootstrap_se",
             "balance",
         }
         assert set(d.keys()) == expected_keys
+
+
+class TestPointEstimateResultDrawsMatchInterval:
+    """Draws and interval are two views of one bootstrap; I refuse a mismatch."""
+
+    def test_draws_without_interval_refused(self):
+        with pytest.raises(ValueError, match="not a BootstrapCIResult"):
+            PointEstimateResult(0.5, None, np.array([0.4, 0.5, 0.6]), None)
+
+    def test_draws_with_parametric_interval_refused(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            ci = ParametricCIResult(
+                lower=0.401, upper=0.639, alpha=0.05, variance_source="null",
+            )
+        with pytest.raises(ValueError, match="ParametricCIResult"):
+            PointEstimateResult(0.52, ci, np.array([0.5, 0.5]), None)
+
+    def test_bootstrap_interval_without_draws_refused(self):
+        with pytest.raises(ValueError, match="comes with the draws"):
+            PointEstimateResult(0.5, _ci(0.3, 0.7), None, None)
+
+    def test_draw_count_must_match(self):
+        with pytest.raises(ValueError, match="has 3 draws but .* resampled 1000"):
+            PointEstimateResult(0.5, _ci(0.3, 0.7), np.array([0.4, 0.5, 0.6]), None)
+
+    def test_failed_count_must_match(self):
+        draws = np.array([np.nan, 0.4, 0.5, 0.6])
+        with pytest.raises(ValueError, match="1 unusable .* counted 0 failed"):
+            PointEstimateResult(0.5, _ci(0.3, 0.7, n_resamples=4), draws, None)
+
+    def test_infinite_draw_counts_as_failed(self):
+        """Same rule as the interval: usable means finite."""
+        draws = np.array([np.inf, 0.4, 0.5, 0.6])
+        ci = _ci(0.4, 0.6, n_resamples=4, n_failed=1)
+        assert PointEstimateResult(0.5, ci, draws, None).point == 0.5
+
+    def test_every_draw_failed_is_consistent(self):
+        ci = _undefined_ci()
+        r = PointEstimateResult(0.5, ci, np.full(200, np.nan), None)
+        assert r.confidence_interval.is_defined is False
+
+    def test_error_prefix(self):
+        with pytest.raises(ValueError, match=r"\[PointEstimateResult\] Error"):
+            PointEstimateResult(0.5, _ci(0.3, 0.7), None, None)
+
+
+class TestPointEstimateResultDrawMoments:
+    """bootstrap_draws_mean and bootstrap_se use the usable draws only."""
+
+    def test_nan_draws_do_not_poison_the_summary(self):
+        """One NaN draw used to make both numbers NaN."""
+        draws = np.array([np.nan, 1.0, 2.0, 3.0])
+        ci = _ci(1.0, 3.0, n_resamples=4, n_failed=1)
+        d = PointEstimateResult(2.0, ci, draws, None).summary()
+        assert d["bootstrap_draws_mean"] == 2.0
+        assert d["bootstrap_se"] == 1.0
+
+    def test_se_divides_by_n_minus_1(self):
+        """Efron & Tibshirani (1993) eq. 6.6."""
+        draws = np.array([0.0, 1.0])
+        d = PointEstimateResult(
+            0.5, _ci(0.0, 1.0, n_resamples=2), draws, None
+        ).summary()
+        assert abs(d["bootstrap_se"] - np.sqrt(0.5)) < 1e-12
+
+    def test_every_draw_failed_gives_none(self):
+        d = PointEstimateResult(
+            0.5, _undefined_ci(), np.full(200, np.nan), None
+        ).summary()
+        assert d["bootstrap_draws_mean"] is None
+        assert d["bootstrap_se"] is None
+
+    def test_one_usable_draw_has_a_mean_but_no_se(self):
+        draws = np.array([np.nan, 0.5])
+        ci = _ci(0.5, 0.5, n_resamples=2, n_failed=1)
+        d = PointEstimateResult(0.5, ci, draws, None).summary()
+        assert d["bootstrap_draws_mean"] == 0.5
+        assert d["bootstrap_se"] is None
 
 
 # ============================================================================ #
@@ -1160,11 +1288,13 @@ class TestPermutationResult:
 class TestPairwisePermutationResultConstruction:
     """Valid construction with and without bootstrap."""
 
-    def test_no_bootstrap(self):
+    def test_without_mean_bootstrap(self):
         r = PairwisePermutationResult(**_pairwise_kwargs())
         assert r.n_pairs == 3
         assert r.mean_over_pairs == PAIRWISE_MEAN
         assert r.bootstrap_mean_method is None
+        # The per-pair bootstrap always runs
+        assert len(r.bootstrap_cis_per_pair) == r.n_pairs
 
     def test_with_bootstrap(self):
         r = PairwisePermutationResult(**_pairwise_with_bootstrap())
@@ -1298,6 +1428,24 @@ class TestPairwisePermutationResultValidation:
                 bootstrap_distribution_of_mean=np.array([]),
             ))
 
+    def test_per_pair_cis_required(self):
+        """The per-pair bootstrap always runs, so None is refused."""
+        with pytest.raises(TypeError, match="always runs"):
+            PairwisePermutationResult(**_pairwise_kwargs(bootstrap_cis_per_pair=None))
+
+    def test_distributions_required_at_or_below_limit(self):
+        with pytest.raises(ValueError, match="must be stored when"):
+            PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=None))
+
+    def test_distributions_refused_above_limit(self):
+        values = _many_units(7, 2)
+        with pytest.raises(ValueError, match="None above it"):
+            PairwisePermutationResult(**_pairwise_kwargs(
+                pairwise_values=values,
+                subjects_per_pair={key: 10 for key in values},
+                n_pairs=len(values),
+            ))
+
     def test_bootstrap_cis_per_pair_keys_mismatch(self):
         with pytest.raises(
             ValueError,
@@ -1334,29 +1482,33 @@ class TestPairwisePermutationResultAccessor:
 
     def test_returns_distributions_when_stored(self):
         """When distributions are stored, accessor returns them."""
-        dists = {
-            (0, 1): np.array([0.5, 0.6]),
-            (0, 2): np.array([0.3, 0.4]),
-            (1, 2): np.array([0.4, 0.5]),
-        }
+        dists = _dists_for(PAIRS)
         r = PairwisePermutationResult(**_pairwise_with_bootstrap(
             bootstrap_distributions_per_pair=dists,
         ))
         result = r.get_bootstrap_distributions_per_pair()
         assert result is dists
 
-    def test_raises_when_no_bootstrap(self):
-        """RuntimeError when bootstrap was not performed."""
-        r = PairwisePermutationResult(**_pairwise_kwargs())
-        with pytest.raises(RuntimeError, match="bootstrap was not performed"):
-            r.get_bootstrap_distributions_per_pair()
+    def test_raises_above_the_storage_limit(self):
+        """The one reason draws can be missing: too many pairs to store.
 
-    def test_raises_when_not_stored(self):
-        """RuntimeError with threshold info when distributions not stored."""
-        r = PairwisePermutationResult(**_pairwise_with_bootstrap())
-        # bootstrap was performed but distributions_per_pair is None
-        with pytest.raises(RuntimeError, match="MAX_PAIRS_FOR_DISTRIBUTIONS"):
+        It must not claim the bootstrap was not performed -- it always is.
+        """
+        values = _many_units(7, 2)
+        assert len(values) > MAX_PAIRS_FOR_DISTRIBUTIONS
+        r = PairwisePermutationResult(**_pairwise_kwargs(
+            pairwise_values=values,
+            subjects_per_pair={key: 10 for key in values},
+            n_pairs=len(values),
+            bootstrap_distributions_per_pair=None,
+        ))
+        with pytest.raises(RuntimeError) as exc:
             r.get_bootstrap_distributions_per_pair()
+        message = str(exc.value)
+        assert f"n_pairs ({len(values)}) > MAX_PAIRS_FOR_DISTRIBUTIONS" in message
+        assert "bootstrap_cis_per_pair" in message
+        assert "not performed" not in message
+        assert "higher threshold" not in message
 
 
 class TestPairwisePermutationResultStr:
@@ -1390,20 +1542,23 @@ class TestPairwisePermutationResultSummary:
         assert d["bootstrap_mean_method"] == "correlated"
         assert d["mean_ci_lower"] == 0.45
         assert d["mean_ci_upper"] == 0.55
-        assert "bootstrap_n" in d
-        assert d["pair_distributions_stored"] is False
+        # Draws of the mean are 0.48, 0.50, 0.52
+        assert d["bootstrap_draws_mean"] == pytest.approx(0.50)
+        assert d["bootstrap_se"] == pytest.approx(0.02)
+        assert "bootstrap_n" not in d
+        assert d["pair_distributions_stored"] is True
+        assert len(d["bootstrap_cis_per_pair"]) == 3
 
     def test_pair_distributions_stored_flag(self):
-        """When bootstrap_distributions_per_pair is populated, flag is True."""
-        dists = {
-            (0, 1): np.array([0.5, 0.6]),
-            (0, 2): np.array([0.3, 0.4]),
-            (1, 2): np.array([0.4, 0.5]),
-        }
-        d = PairwisePermutationResult(**_pairwise_with_bootstrap(
-            bootstrap_distributions_per_pair=dists,
+        """Above the storage limit the flag is False."""
+        values = _many_units(7, 2)
+        d = PairwisePermutationResult(**_pairwise_kwargs(
+            pairwise_values=values,
+            subjects_per_pair={key: 10 for key in values},
+            n_pairs=len(values),
+            bootstrap_distributions_per_pair=None,
         )).summary()
-        assert d["pair_distributions_stored"] is True
+        assert d["pair_distributions_stored"] is False
 
 
 # ============================================================================ #
@@ -1414,12 +1569,14 @@ class TestPairwisePermutationResultSummary:
 class TestSubsetPermutationResultConstruction:
     """Valid construction with and without bootstrap."""
 
-    def test_no_bootstrap(self):
+    def test_without_mean_bootstrap(self):
         r = SubsetPermutationResult(**_subset_kwargs())
         assert r.subset_k == 2
         assert r.n_subsets == 3
         assert r.mean_over_subsets == SUBSET_K2_MEAN
         assert r.bootstrap_mean_method is None
+        # The per-subset bootstrap always runs
+        assert len(r.bootstrap_cis_per_subset) == r.n_subsets
 
     def test_with_bootstrap(self):
         r = SubsetPermutationResult(**_subset_with_bootstrap())
@@ -1571,6 +1728,24 @@ class TestSubsetPermutationResultValidation:
                 bootstrap_distribution_of_mean=np.array([]),
             ))
 
+    def test_per_subset_cis_required(self):
+        """The per-subset bootstrap always runs, so None is refused."""
+        with pytest.raises(TypeError, match="always runs"):
+            SubsetPermutationResult(**_subset_kwargs(bootstrap_cis_per_subset=None))
+
+    def test_distributions_required_at_or_below_limit(self):
+        with pytest.raises(ValueError, match="must be stored when"):
+            SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=None))
+
+    def test_distributions_refused_above_limit(self):
+        values = _many_units(17, 2)
+        with pytest.raises(ValueError, match="None above it"):
+            SubsetPermutationResult(**_subset_kwargs(
+                subset_values=values,
+                subjects_per_subset={key: 10 for key in values},
+                n_subsets=len(values),
+            ))
+
     def test_bootstrap_cis_per_subset_keys_mismatch(self):
         with pytest.raises(
             ValueError,
@@ -1607,30 +1782,33 @@ class TestSubsetPermutationResultAccessor:
 
     def test_returns_distributions_when_stored(self):
         """When distributions are stored, accessor returns them."""
-        dists = {
-            (0, 1): np.array([0.5, 0.6]),
-            (0, 2): np.array([0.3, 0.4]),
-            (1, 2): np.array([0.4, 0.5]),
-        }
+        dists = _dists_for(SUBSETS_K2)
         r = SubsetPermutationResult(**_subset_with_bootstrap(
             bootstrap_distributions_per_subset=dists,
         ))
         result = r.get_bootstrap_distributions_per_subset()
         assert result is dists
 
-    def test_raises_when_no_bootstrap(self):
-        """RuntimeError when bootstrap was not performed."""
-        r = SubsetPermutationResult(**_subset_kwargs())
-        with pytest.raises(RuntimeError, match="bootstrap was not performed"):
-            r.get_bootstrap_distributions_per_subset()
+    def test_raises_above_the_storage_limit(self):
+        """The one reason draws can be missing: too many subsets to store.
 
-    def test_raises_when_not_stored(self):
-        """RuntimeError with threshold info when distributions not stored."""
-        r = SubsetPermutationResult(**_subset_with_bootstrap())
-        with pytest.raises(
-            RuntimeError, match="MAX_SUBSETS_FOR_DISTRIBUTIONS"
-        ):
+        It must not claim the bootstrap was not performed -- it always is.
+        """
+        values = _many_units(17, 2)
+        assert len(values) > MAX_SUBSETS_FOR_DISTRIBUTIONS
+        r = SubsetPermutationResult(**_subset_kwargs(
+            subset_values=values,
+            subjects_per_subset={key: 10 for key in values},
+            n_subsets=len(values),
+            bootstrap_distributions_per_subset=None,
+        ))
+        with pytest.raises(RuntimeError) as exc:
             r.get_bootstrap_distributions_per_subset()
+        message = str(exc.value)
+        assert f"n_subsets ({len(values)}) > MAX_SUBSETS_FOR_DISTRIBUTIONS" in message
+        assert "bootstrap_cis_per_subset" in message
+        assert "not performed" not in message
+        assert "higher threshold" not in message
 
 
 class TestSubsetPermutationResultStr:
@@ -1665,20 +1843,129 @@ class TestSubsetPermutationResultSummary:
         assert d["bootstrap_mean_method"] == "correlated"
         assert d["mean_ci_lower"] == 0.45
         assert d["mean_ci_upper"] == 0.55
-        assert "bootstrap_n" in d
-        assert d["subset_distributions_stored"] is False
+        # Draws of the mean are 0.48, 0.50, 0.52
+        assert d["bootstrap_draws_mean"] == pytest.approx(0.50)
+        assert d["bootstrap_se"] == pytest.approx(0.02)
+        assert "bootstrap_n" not in d
+        assert d["subset_distributions_stored"] is True
+        assert len(d["bootstrap_cis_per_subset"]) == 3
 
     def test_subset_distributions_stored_flag(self):
-        """When distributions_per_subset is populated, flag is True."""
-        dists = {
-            (0, 1): np.array([0.5, 0.6]),
-            (0, 2): np.array([0.3, 0.4]),
-            (1, 2): np.array([0.4, 0.5]),
-        }
-        d = SubsetPermutationResult(**_subset_with_bootstrap(
-            bootstrap_distributions_per_subset=dists,
+        """Above the storage limit the flag is False."""
+        values = _many_units(17, 2)
+        d = SubsetPermutationResult(**_subset_kwargs(
+            subset_values=values,
+            subjects_per_subset={key: 10 for key in values},
+            n_subsets=len(values),
+            bootstrap_distributions_per_subset=None,
         )).summary()
-        assert d["subset_distributions_stored"] is True
+        assert d["subset_distributions_stored"] is False
+
+
+# -- Draws agree with intervals: pairwise and subset alike ------------------ #
+
+_PERMUTATION_KINDS = [
+    pytest.param(
+        (PairwisePermutationResult, _pairwise_kwargs, "pair", PAIRS),
+        id="pairwise",
+    ),
+    pytest.param(
+        (SubsetPermutationResult, _subset_kwargs, "subset", SUBSETS_K2),
+        id="subset",
+    ),
+]
+
+
+@pytest.mark.parametrize("kind", _PERMUTATION_KINDS)
+class TestPermutationDrawsMatchIntervals:
+    """The mean's draws agree with the mean's interval; each stored unit's
+    draws agree with that unit's interval."""
+
+    def test_mean_draws_without_interval_refused(self, kind):
+        cls, kwargs, _, _ = kind
+        with pytest.raises(ValueError, match="not a BootstrapCIResult"):
+            cls(**kwargs(
+                bootstrap_mean_method="correlated",
+                bootstrap_distribution_of_mean=np.array([0.5, 0.5]),
+            ))
+
+    def test_mean_interval_without_draws_refused(self, kind):
+        cls, kwargs, _, _ = kind
+        with pytest.raises(ValueError, match="comes with the draws"):
+            cls(**kwargs(
+                bootstrap_mean_method="correlated",
+                bootstrap_ci_of_mean=_ci(0.45, 0.55),
+            ))
+
+    def test_mean_draw_count_must_match(self, kind):
+        cls, kwargs, _, _ = kind
+        with pytest.raises(ValueError, match="has 2 draws but .* resampled 1000"):
+            cls(**kwargs(
+                bootstrap_mean_method="correlated",
+                bootstrap_ci_of_mean=_ci(0.45, 0.55),
+                bootstrap_distribution_of_mean=np.array([0.5, 0.5]),
+            ))
+
+    def test_mean_failed_count_must_match(self, kind):
+        cls, kwargs, _, _ = kind
+        with pytest.raises(ValueError, match="1 unusable .* counted 0 failed"):
+            cls(**kwargs(
+                bootstrap_mean_method="correlated",
+                bootstrap_ci_of_mean=_ci(0.45, 0.55, n_resamples=3),
+                bootstrap_distribution_of_mean=np.array([np.nan, 0.5, 0.5]),
+            ))
+
+    def test_every_mean_draw_failed_is_consistent(self, kind):
+        cls, kwargs, _, _ = kind
+        r = cls(**kwargs(
+            bootstrap_mean_method="correlated",
+            bootstrap_ci_of_mean=_undefined_ci(),
+            bootstrap_distribution_of_mean=np.full(200, np.nan),
+        ))
+        d = r.summary()
+        assert d["bootstrap_draws_mean"] is None
+        assert d["bootstrap_se"] is None
+
+    def test_nan_mean_draw_does_not_poison_the_summary(self, kind):
+        """One NaN draw of the mean used to make both numbers NaN."""
+        cls, kwargs, _, _ = kind
+        d = cls(**kwargs(
+            bootstrap_mean_method="correlated",
+            bootstrap_ci_of_mean=_ci(0.45, 0.55, n_resamples=4, n_failed=1),
+            bootstrap_distribution_of_mean=np.array([np.nan, 0.4, 0.5, 0.6]),
+        )).summary()
+        assert d["bootstrap_draws_mean"] == pytest.approx(0.5)
+        assert d["bootstrap_se"] == pytest.approx(0.1)
+
+    def test_unit_draw_count_must_match(self, kind):
+        cls, kwargs, unit, values = kind
+        draws = _dists_for(values)
+        draws[(0, 2)] = np.array([0.4, 0.5, 0.6])
+        with pytest.raises(
+            ValueError,
+            match=rf"{unit} \(0, 2\) has 3 draws but its interval resampled 1000",
+        ):
+            cls(**kwargs(**{f"bootstrap_distributions_per_{unit}": draws}))
+
+    def test_unit_failed_count_must_match(self, kind):
+        cls, kwargs, unit, values = kind
+        draws = _dists_for(values)
+        draws[(0, 2)] = draws[(0, 2)].copy()
+        draws[(0, 2)][0] = np.nan
+        with pytest.raises(
+            ValueError, match=rf"{unit} \(0, 2\) has 1 unusable"
+        ):
+            cls(**kwargs(**{f"bootstrap_distributions_per_{unit}": draws}))
+
+    def test_one_unit_failing_entirely_is_consistent(self, kind):
+        """A unit with nothing to resample sits beside healthy ones."""
+        cls, kwargs, unit, values = kind
+        cis = _cis_for(values)
+        cis[(1, 2)] = _undefined_ci(n_resamples=1000, n_failed=1000)
+        r = cls(**kwargs(**{f"bootstrap_cis_per_{unit}": cis}))
+        stored = getattr(r, f"bootstrap_distributions_per_{unit}")
+        assert np.isnan(stored[(1, 2)]).all()
+        assert np.isfinite(stored[(0, 1)]).all()
 
 
 # ============================================================================ #
@@ -1711,8 +1998,8 @@ class TestMultiKSubsetResultConstruction:
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=None,
-            bootstrap_distributions_per_subset=None,
+            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
+            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         r = MultiKSubsetResult(
             coefficient_name="fleiss_kappa",
@@ -1789,8 +2076,8 @@ class TestMultiKSubsetResultValidation:
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=None,
-            bootstrap_distributions_per_subset=None,
+            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
+            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         with pytest.raises(ValueError, match="coefficient_name="):
             MultiKSubsetResult(
@@ -1817,8 +2104,8 @@ class TestMultiKSubsetResultValidation:
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=None,
-            bootstrap_distributions_per_subset=None,
+            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
+            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         with pytest.raises(ValueError, match="different balance_profile"):
             MultiKSubsetResult(
@@ -1844,8 +2131,8 @@ class TestMultiKSubsetResultValidation:
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=None,
-            bootstrap_distributions_per_subset=None,
+            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
+            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         with pytest.raises(ValueError, match="subset_k=2, expected 3"):
             MultiKSubsetResult(
@@ -1906,14 +2193,14 @@ class TestMultiKSubsetResultStr:
             subset_k=2,
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method="correlated",
-            bootstrap_ci_of_mean=_ci(0.45, 0.55),
+            bootstrap_ci_of_mean=_ci(0.45, 0.55, n_resamples=3),
             bootstrap_distribution_of_mean=boot_dist,
-            bootstrap_cis_per_subset={
+            bootstrap_cis_per_subset=(cis_k2 := {
                 (0, 1): _ci(0.50, 0.70),
                 (0, 2): _ci(0.30, 0.50),
                 (1, 2): _ci(0.40, 0.60),
-            },
-            bootstrap_distributions_per_subset=None,
+            }),
+            bootstrap_distributions_per_subset=_dists_matching(cis_k2),
         )
         result_k3 = SubsetPermutationResult(
             coefficient_name="fleiss_kappa",
@@ -1927,8 +2214,8 @@ class TestMultiKSubsetResultStr:
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=None,
-            bootstrap_distributions_per_subset=None,
+            bootstrap_cis_per_subset=_cis_for(SUBSETS_K3),
+            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K3),
         )
         r = MultiKSubsetResult(
             coefficient_name="fleiss_kappa",
@@ -1940,7 +2227,7 @@ class TestMultiKSubsetResultStr:
         s = str(r)
         assert "95% CI: [0.450, 0.550]" in s
         assert "correlated" in s
-        # k=3 was never bootstrapped, so it says nothing about an interval
+        # k=3 has no bootstrap of the mean, so it says nothing about one
         assert "k=3: mean=0.550 (1 subsets)" in s
 
     def test_undefined_interval_is_named_not_omitted(self):
@@ -1969,7 +2256,9 @@ class TestMultiKSubsetResultStr:
             balance_profile=bp,
             bootstrap_mean_method="correlated",
             bootstrap_ci_of_mean=_ci(0.45, 0.55, n_failed=312),
-            bootstrap_distribution_of_mean=np.array([0.48, 0.50, 0.52]),
+            bootstrap_distribution_of_mean=_draws_for(
+                _ci(0.45, 0.55, n_failed=312)
+            ),
         ))
         r = MultiKSubsetResult(
             coefficient_name="fleiss_kappa",

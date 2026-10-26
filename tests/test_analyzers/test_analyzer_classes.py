@@ -1240,6 +1240,42 @@ class TestBalanceProfilePropagation:
 
 
 # ------------------------------------------------------------------ #
+# Bootstrap summary with failed draws                                  #
+# ------------------------------------------------------------------ #
+
+
+class TestBootstrapSummaryWithFailedDraws:
+    """A draw whose coefficient is undefined must not poison the summary.
+
+    Six subjects, one of them with a disagreement: a resample that misses
+    it has every rating in one category, so its coefficient is NaN. That
+    happens in (5/6)^6 = 33% of draws.
+    """
+
+    def _result(self):
+        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
+        from interrater.analyzers.configs.fleiss_kappa_config import FleissKappaConfig
+
+        cats = UnorderedCategories(names=("A", "B"), labels={"A": "A", "B": "B"})
+        sem = RatingsSemantics(raters=3, categories=cats)
+        index = np.zeros((6, 3), dtype=np.int8)
+        index[0] = [1, 1, 0]
+        ratings = Ratings(category_index=index, semantics=sem)
+        config = FleissKappaConfig(n_resamples=1000, random_state=42)
+        return FleissKappaAnalyzer(ratings, config).estimate()
+
+    def test_summary_uses_the_usable_draws(self):
+        result = self._result()
+        draws = result.bootstrap_distribution
+        assert result.confidence_interval.n_failed == 329
+        d = result.summary()
+        assert d["bootstrap_draws_mean"] == pytest.approx(np.nanmean(draws))
+        assert d["bootstrap_se"] == pytest.approx(np.nanstd(draws, ddof=1))
+        assert round(d["bootstrap_draws_mean"], 3) == 0.394
+        assert round(d["bootstrap_se"], 3) == 0.062
+
+
+# ------------------------------------------------------------------ #
 # CI method stored in result                                           #
 # ------------------------------------------------------------------ #
 

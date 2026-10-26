@@ -39,6 +39,13 @@ the data. A `PointEstimateResult` *holds* one. Putting intervals beside the
 results rather than under them keeps that relationship visible, and keeps
 `summary()`'s contract meaning one thing.
 
+**Draws and their interval must agree.** A result that stores bootstrap
+draws also holds the interval made from them, and refuses to be built if the
+two disagree: draws come exactly with a `BootstrapCIResult`, one per
+resample it counted, with as many non-finite draws as it counted failed.
+The check lives in `_bootstrap_draws.py`, shared by every result that holds
+draws.
+
 ## The two classes at this level
 
 | Class                  | What It Holds                                                    | Why It Exists                                                      |

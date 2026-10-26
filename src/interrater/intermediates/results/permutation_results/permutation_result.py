@@ -12,6 +12,13 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[PermutationResult] Error"
 
+# Shown wherever an "independent" mean interval is shown, so that the text
+# and the plots say the same thing about it.
+INDEPENDENT_MEAN_CAVEAT = (
+    "independent bootstrap: ignores the correlation between combinations "
+    "that share raters, so it tends to be too narrow"
+)
+
 
 @dataclass(frozen=True)
 class PermutationResult(AnalysisResult):

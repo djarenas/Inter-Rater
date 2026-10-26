@@ -138,7 +138,7 @@ For all C(n, 2) pairwise analyses. Validates:
 - `subset_k` must be None (pairwise is always k=2)
 - `coefficient_to_compute` must be in PAIRWISE_PERMUTATION_COEFFICIENTS
 - `config_of_coefficient` must be the correct type for the coefficient
-- Cross-validates: "independent" bootstrap method requires per-pair bootstrap enabled (n_resamples >= 2)
+- Cross-validates: the "independent" mean needs at least 2 per-pair draws (n_resamples >= 2)
 
 ### SubsetPermutationConfig
 
@@ -170,7 +170,7 @@ Controls bootstrapping of the mean coefficient across combinations.
 
 - `method` (str) -- "correlated" (resample subjects, recompute all combinations) or "independent" (assemble mean from independently-drawn per-combination values)
 - `n_bootstraps` (int) -- number of bootstrap draws for the mean
-- `ci_method` (str, default "percentile") -- "percentile" or "bca" (parametric_null rejected)
+- `ci_method` (str, default "percentile") -- "percentile" or "bca" (parametric_null rejected). "bca" needs `method="correlated"`: its acceleration comes from a jackknife over the units the bootstrap resamples, and no jackknife matches the independent mean.
 - `alpha` (float, default 0.05) -- significance level
 - `random_state` (int | None, default None) -- random seed
 

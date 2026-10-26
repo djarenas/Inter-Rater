@@ -516,6 +516,20 @@ class TestPairwiseComputationB:
             assert isinstance(dist, np.ndarray)
             assert dist.shape == (100,)
 
+    def test_per_pair_draws_not_stored_says_why(self):
+        """Above the limit, with no bootstrap of the mean, the accessor
+        names the storage limit. It used to say the bootstrap was not
+        performed, while every pair had its interval."""
+        ratings = _make_ratings(30, 7)  # 21 pairs
+        result = PairwisePermutationAnalysis(
+            ratings, _pairwise_config(n_resamples=20)
+        ).run()
+        assert result.n_pairs > MAX_PAIRS_FOR_DISTRIBUTIONS
+        assert result.bootstrap_mean_method is None
+        assert len(result.bootstrap_cis_per_pair) == 21
+        with pytest.raises(RuntimeError, match="not stored because n_pairs"):
+            result.get_bootstrap_distributions_per_pair()
+
     def test_reproducible_with_same_seed(self):
         """Same random_state should produce identical results."""
         ratings = _make_ratings(20, 3)
@@ -931,6 +945,20 @@ class TestSubsetComputationB:
         assert 4 <= MAX_SUBSETS_FOR_DISTRIBUTIONS
         assert r.bootstrap_distributions_per_subset is not None
 
+    def test_per_subset_draws_not_stored_says_why(self):
+        """Above the limit, with no bootstrap of the mean, the accessor
+        names the storage limit rather than claiming no bootstrap ran."""
+        ratings = _make_ratings(30, 12)  # C(12,3) = 220 subsets
+        result = SubsetPermutationAnalysis(
+            ratings, _subset_config(n_resamples=20, subset_k=3)
+        ).run()
+        r = result.per_k_results[3]
+        assert r.n_subsets > MAX_SUBSETS_FOR_DISTRIBUTIONS
+        assert r.bootstrap_mean_method is None
+        assert len(r.bootstrap_cis_per_subset) == 220
+        with pytest.raises(RuntimeError, match="not stored because n_subsets"):
+            r.get_bootstrap_distributions_per_subset()
+
     def test_reproducible_with_same_seed(self):
         """Same random_state should produce identical results."""
         ratings = _make_ratings(20, 4)
@@ -1058,7 +1086,35 @@ class TestResultSummary:
         assert "bootstrap_mean_method" in s
         assert "mean_ci_lower" in s
         assert "mean_ci_upper" in s
-        assert "bootstrap_n" in s
+        assert "bootstrap_draws_mean" in s
+        assert "bootstrap_se" in s
+        assert "bootstrap_n" not in s
+
+    def test_pairwise_summary_ignores_undefined_draws_of_the_mean(self):
+        """A draw of the mean is NaN when every pair is undefined in it.
+
+        Six subjects, two with a disagreement; a resample missing both has
+        every rating in one category, so every pair -- and the mean -- is
+        NaN. The summary must describe the usable draws, as the interval
+        does, not turn NaN.
+        """
+        cats = UnorderedCategories(["C0", "C1"])
+        sem = RatingsSemantics(raters=["a", "b", "c"], categories=cats)
+        index = np.zeros((6, 3), dtype=np.int8)
+        index[0] = [1, 1, 0]
+        index[1] = [0, 1, 1]
+        ratings = Ratings(category_index=index, semantics=sem)
+        config = _pairwise_config(
+            n_resamples=20, bootstrap_mean="correlated", mean_n_bootstraps=400
+        )
+        result = PairwisePermutationAnalysis(ratings, config).run()
+        draws = result.bootstrap_distribution_of_mean
+        n_nan = int(np.isnan(draws).sum())
+        assert n_nan > 0
+        assert result.bootstrap_ci_of_mean.n_failed == n_nan
+        s = result.summary()
+        assert s["bootstrap_draws_mean"] == pytest.approx(np.nanmean(draws))
+        assert s["bootstrap_se"] == pytest.approx(np.nanstd(draws, ddof=1))
 
     def test_pairwise_str(self):
         """__str__ should not raise and should contain key info."""

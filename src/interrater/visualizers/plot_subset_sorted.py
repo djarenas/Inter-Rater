@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import textwrap
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from ..intermediates.results.permutation_results.permutation_result import (
+    INDEPENDENT_MEAN_CAVEAT,
+)
 
 if TYPE_CHECKING:
     from ..intermediates.results import SubsetPermutationResult
@@ -117,18 +122,13 @@ def plot_subset_sorted(
     # Per-subset intervals, in the same sorted order
     # ------------------------------------------------------------------ #
 
-    # None means no bootstrap was performed. An interval that is not
-    # is_defined means one was, and every draw of it failed -- two
-    # different findings that must not be drawn the same way.
-    if result.bootstrap_cis_per_subset is not None:
-        subset_cis = [
-            result.bootstrap_cis_per_subset.get(subset)
-            for subset in subset_keys
-        ]
-    else:
-        subset_cis = [None] * n_subsets
+    # Every subset has an interval. One that is not is_defined was
+    # attempted and every draw failed, so it is drawn differently.
+    subset_cis = [
+        result.bootstrap_cis_per_subset[subset] for subset in subset_keys
+    ]
 
-    ci_undefined = [ci is not None and not ci.is_defined for ci in subset_cis]
+    ci_undefined = [not ci.is_defined for ci in subset_cis]
     any_undefined_ci = any(ci_undefined)
 
     # ------------------------------------------------------------------ #
@@ -157,12 +157,15 @@ def plot_subset_sorted(
 
     mean_ci = result.bootstrap_ci_of_mean
     if mean_ci is not None and mean_ci.is_defined:
+        label = (
+            f"Mean {mean_ci.confidence_level:.0%} CI "
+            f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
+        )
+        if result.bootstrap_mean_method == "independent":
+            label += "\n" + textwrap.fill(INDEPENDENT_MEAN_CAVEAT, 43)
         ax.axhspan(
             mean_ci.lower, mean_ci.upper, alpha=0.15, color="steelblue",
-            label=(
-                f"Mean {mean_ci.confidence_level:.0%} CI "
-                f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
-            ),
+            label=label,
             zorder=0,
         )
 
@@ -171,7 +174,7 @@ def plot_subset_sorted(
     # ------------------------------------------------------------------ #
 
     for i, ci in enumerate(subset_cis):
-        if ci is None or not ci.is_defined:
+        if not ci.is_defined:
             continue
         ci_lo, ci_hi = ci.lower, ci.upper
         ax.plot(
@@ -271,7 +274,7 @@ def plot_subset_sorted(
         data_max = max(all_values)
         # Include CI bounds if present
         for ci in subset_cis:
-            if ci is not None and ci.is_defined:
+            if ci.is_defined:
                 data_min = min(data_min, ci.lower)
                 data_max = max(data_max, ci.upper)
         if mean_ci is not None and mean_ci.is_defined:

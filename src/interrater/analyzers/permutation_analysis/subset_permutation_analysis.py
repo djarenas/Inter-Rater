@@ -54,7 +54,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
     Computations A, B, and C, and returns a ``MultiKSubsetResult``
     wrapping one ``SubsetPermutationResult`` per k.
 
-    A runs always. B runs if ``config_of_coefficient.n_resamples > 0``.
+    A and B run always (the analyzer config requires n_resamples >= 1).
     C runs if ``bootstrap_mean_config`` is not None.
 
     Attributes
@@ -220,13 +220,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             self._compute_observed(k)
         )
 
-        # Computation B -- if per-subset bootstrap requested
-        subset_distributions = None
-        subset_cis = None
-        if coc.n_resamples > 0:
-            subset_distributions, subset_cis = (
-                self._compute_per_subset_bootstrap(k, subset_values)
-            )
+        # Computation B -- always
+        subset_distributions, subset_cis = (
+            self._compute_per_subset_bootstrap(k, subset_values)
+        )
 
         # Computation C -- if mean bootstrap requested
         mean_distribution = None
@@ -240,10 +237,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         # Decide whether to store per-subset distributions
         n_subsets = len(subset_values)
-        store_distributions = (
-            subset_distributions is not None
-            and n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS
-        )
+        store_distributions = n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS
 
         return SubsetPermutationResult(
             coefficient_name=self.config.coefficient_to_compute,
@@ -430,7 +424,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
     def _compute_mean_bootstrap(
         self,
         k: int,
-        subset_distributions: dict | None,
+        subset_distributions: dict,
         mean_over_subsets: float,
     ) -> tuple[np.ndarray, tuple[float, float]]:
         """
@@ -447,13 +441,13 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         each draw, pick one value from each subset's bootstrap
         distribution, average. Treats subsets as independent -- the CI
         will be narrower than correlated and may underestimate variance.
-        Cost: 0 estimator calls (numpy only). Requires B to have run.
+        Cost: 0 estimator calls (numpy only).
 
         Parameters
         ----------
         k : int
             Subset size.
-        subset_distributions : dict | None
+        subset_distributions : dict
             Per-subset bootstrap distributions from B. Required for the
             independent path; ignored for correlated.
         mean_over_subsets : float
@@ -598,7 +592,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
     def _mean_bootstrap_independent(
         self,
-        subset_distributions: dict | None,
+        subset_distributions: dict,
         n_bootstraps: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
@@ -612,8 +606,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         Parameters
         ----------
-        subset_distributions : dict | None
-            Per-subset distributions from B. Must not be None.
+        subset_distributions : dict
+            Per-subset distributions from B.
         n_bootstraps : int
             Number of bootstrap draws.
         rng : np.random.Generator
@@ -623,21 +617,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         -------
         np.ndarray
             Mean coefficient per draw, shape (n_bootstraps,).
-
-        Raises
-        ------
-        ValueError
-            If subset_distributions is None (B did not run).
         """
-        if subset_distributions is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: 'independent' mean bootstrap "
-                f"requires per-subset bootstrap (n_resamples >= 1 in "
-                f"config_of_coefficient). The config should have "
-                f"caught this -- if you see this error, there is a "
-                f"bug in SubsetPermutationConfig validation."
-            )
-
         subsets = sorted(subset_distributions.keys())
         # Stack per-subset distributions: (n_subsets, n_resamples_per_subset)
         stacked = np.array(

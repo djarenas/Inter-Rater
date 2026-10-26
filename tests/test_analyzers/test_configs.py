@@ -584,6 +584,26 @@ class TestPermutationBootstrapMeanConfig:
                 ci_method="parametric_null",
             )
 
+    def test_independent_with_bca_refused(self):
+        """No jackknife matches the independent mean, so BCa has no
+        acceleration to use. Refused when the config is built."""
+        with pytest.raises(ValueError, match="no jackknife matches it"):
+            PermutationBootstrapMeanConfig(
+                method="independent", n_bootstraps=100, ci_method="bca",
+            )
+
+    def test_independent_with_percentile_accepted(self):
+        cfg = PermutationBootstrapMeanConfig(
+            method="independent", n_bootstraps=100, ci_method="percentile",
+        )
+        assert cfg.ci_method == "percentile"
+
+    def test_correlated_with_bca_accepted(self):
+        cfg = PermutationBootstrapMeanConfig(
+            method="correlated", n_bootstraps=100, ci_method="bca",
+        )
+        assert cfg.ci_method == "bca"
+
     def test_summary_keys(self):
         cfg = PermutationBootstrapMeanConfig(
             method="independent", n_bootstraps=1000

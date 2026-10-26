@@ -309,6 +309,21 @@ class RatingsCleaner:
                 f"semantics declare {len(expected)}: {expected}."
             )
 
+        # Ratings are matched as text, and a decimal column has lost how its
+        # values were written: '1' became 1.0 and '1.50' became 1.5. pandas
+        # does this to a numeric column with a blank cell. Refused outright
+        # rather than matched, since a match on such a column is luck.
+        decimal = [c for c in columns if frame[c].dtype.kind == "f"]
+        if decimal:
+            raise TypeError(
+                f"{_ERROR_PREFIX}: rater column(s) {decimal} were read as decimal "
+                f"numbers ({frame[decimal[0]].dtype}), usually because a numeric "
+                f"column has blank cells. Decimals lose how a rating was written "
+                f"('1' becomes 1.0, '1.50' becomes 1.5), so they cannot be "
+                f"matched to categories. Read the file as text, e.g. "
+                f"pd.read_csv(path, dtype=str)."
+            )
+
         return subject_ids, columns
 
     def _encode(self, columns: list) -> tuple[np.ndarray, MatchingReport]:

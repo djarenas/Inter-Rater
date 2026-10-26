@@ -26,7 +26,7 @@ class PairwisePermutationConfig(PermutationConfig):
     - config_of_coefficient is the correct config type for that coefficient
     - subset_k must be None (pairwise is fixed at k=2)
     - if bootstrap_mean_config uses the "independent" method,
-      config_of_coefficient must have per-pair bootstrap enabled
+      config_of_coefficient must give at least 2 per-pair draws
       (n_resamples >= 2)
     """
     # Attribute declaration
@@ -88,12 +88,9 @@ class PairwisePermutationConfig(PermutationConfig):
                 f"got {actual_config_class}"
             )
 
-        # Cross-validate: "independent" mean bootstrap requires per-pair
-        # bootstrap enabled in config_of_coefficient.
-        # The "independent" method assembles the mean from independently-
-        # drawn per-pair bootstrap values, so each pair must be
-        # bootstrapped. The "correlated" method does its own subject
-        # resampling and does not depend on per-pair bootstrap.
+        # Cross-validate: the "independent" mean draws one value from
+        # each pair's bootstrap draws, so it needs at least two of them.
+        # The per-pair bootstrap always runs; only its size can fall short.
         if (
             self.bootstrap_mean_config is not None
             and self.bootstrap_mean_config.method == "independent"
@@ -101,8 +98,8 @@ class PairwisePermutationConfig(PermutationConfig):
         ):
             raise ValueError(
                 f"{_ERROR_PREFIX}: bootstrap_mean_config method "
-                f"'independent' requires per-pair bootstrap enabled "
-                f"in config_of_coefficient (n_resamples >= 2), "
+                f"'independent' needs at least 2 per-pair draws "
+                f"(config_of_coefficient.n_resamples >= 2), "
                 f"but n_resamples={self.config_of_coefficient.n_resamples}"
             )
 

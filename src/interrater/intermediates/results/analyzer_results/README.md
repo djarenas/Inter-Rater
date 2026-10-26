@@ -58,6 +58,15 @@ Present on Fleiss, Brennan-Prediger, Krippendorff and Cohen. Absent from
 Scott, Gwet and Conger (always unweighted) and from Light (defined as
 unweighted by Light 1971).
 
+## Draws and the interval
+
+`bootstrap_distribution` is present exactly when the interval is a
+`BootstrapCIResult`, and must agree with its counts (see `../README.md`).
+`summary()` describes the draws with `bootstrap_draws_mean` and
+`bootstrap_se`, computed over the usable (finite) draws, with the standard
+error dividing by n - 1. Either is `None` when too few draws are usable. The
+draw counts are in the interval's own summary, under `ci`.
+
 ## `IndividualMarginalResult` is internal
 
 It validates the invariant Cohen and Conger share -- `balance_profile` and

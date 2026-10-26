@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..analysis_result import AnalysisResult
 from ..ci_results.ci_result import CIResult
 
@@ -46,7 +47,10 @@ class PointEstimateResult(AnalysisResult):
 
     If bootstrap_distribution is provided, it contains all coefficient values
     computed during resampling. This is useful for visualization, diagnostics,
-    and convergence checking.
+    and convergence checking. It and the interval are two views of one
+    bootstrap, so I refuse them if they disagree: draws come exactly with a
+    BootstrapCIResult, one per resample it counted, with as many non-finite
+    draws as it counted failed.
 
     I carry a balance_profile so every result is self-describing: the number
     of subjects, the number of raters, whether the data was balanced, and the
@@ -64,8 +68,9 @@ class PointEstimateResult(AnalysisResult):
         resamples that failed. None if no interval was computed.
     bootstrap_distribution : np.ndarray | None
         Array of shape (n_resamples,) containing coefficient values from each
-        bootstrap resample. None if bootstrap was not performed or not saved.
-        Useful for plotting and diagnostics.
+        bootstrap resample, NaN where a resample's coefficient was undefined.
+        Present exactly when confidence_interval is a BootstrapCIResult; None
+        otherwise (no interval, or a parametric one).
     balance_profile : BalanceProfile | None
         Structural metadata about the data: n_subjects, n_raters, balance
         structure. None if not available at construction time.
@@ -134,6 +139,17 @@ class PointEstimateResult(AnalysisResult):
                     f"{_ERROR_PREFIX}: bootstrap_distribution must have at least 1 value"
                 )
 
+        # My draws and my interval must describe the same bootstrap
+        try:
+            check_draws_match_interval(
+                self.bootstrap_distribution,
+                self.confidence_interval,
+                draws_name="bootstrap_distribution",
+                interval_name="confidence_interval",
+            )
+        except ValueError as exc:
+            raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
+
         # If balance_profile is provided, validate its type
         if self.balance_profile is not None:
             from ...data_profiles.balance_profile import BalanceProfile
@@ -174,7 +190,7 @@ class PointEstimateResult(AnalysisResult):
 
             = 1.000 [0.812, 0.961] (95% CI, bca, n=1000, 61 failed) POINT OUTSIDE INTERVAL
             = 0.523 [0.401, 0.639] (95% CI, null variance -- width assumes kappa = 0)
-            = 0.523 (n_bootstrap=1000)
+            = 0.523
         """
         parts = [f"= {self.point:.3f}"]
 
@@ -182,9 +198,6 @@ class PointEstimateResult(AnalysisResult):
             parts.append(str(self.confidence_interval))
             if self.point_outside_interval:
                 parts.append("POINT OUTSIDE INTERVAL")
-        elif self.bootstrap_distribution is not None:
-            # Only worth saying when no interval came of it
-            parts.append(f"(n_bootstrap={len(self.bootstrap_distribution)})")
 
         return " ".join(parts)
 
@@ -199,9 +212,11 @@ class PointEstimateResult(AnalysisResult):
             Keys: 'point' (float); if confidence_interval is not None, 'ci'
             (the interval's own summary dict) plus 'ci_lower', 'ci_upper' and
             'point_outside_interval' hoisted to the top level, since those are
-            what a reader scans for; optionally 'bootstrap_n',
-            'bootstrap_mean', 'bootstrap_std' if bootstrap_distribution is
-            not None, and optionally 'balance' if balance_profile is not None.
+            what a reader scans for; if bootstrap_distribution is not None,
+            'bootstrap_draws_mean' and 'bootstrap_se' (the mean and standard
+            error of the usable draws, None when too few are usable -- the
+            draw counts are in 'ci'); and 'balance' if balance_profile is
+            not None.
         """
         result = {"point": self.point}
         if self.confidence_interval is not None:
@@ -210,9 +225,9 @@ class PointEstimateResult(AnalysisResult):
             result["ci_upper"] = self.confidence_interval.upper
             result["point_outside_interval"] = self.point_outside_interval
         if self.bootstrap_distribution is not None:
-            result["bootstrap_n"] = len(self.bootstrap_distribution)
-            result["bootstrap_mean"] = float(np.mean(self.bootstrap_distribution))
-            result["bootstrap_std"] = float(np.std(self.bootstrap_distribution))
+            mean, se = draw_moments(self.bootstrap_distribution)
+            result["bootstrap_draws_mean"] = mean
+            result["bootstrap_se"] = se
         if self.balance_profile is not None:
             result["balance"] = self.balance_profile.summary()
         return result

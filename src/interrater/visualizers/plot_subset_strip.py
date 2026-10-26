@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import textwrap
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from ..intermediates.results.permutation_results.permutation_result import (
+    INDEPENDENT_MEAN_CAVEAT,
+)
 
 if TYPE_CHECKING:
     from ..intermediates.results import MultiKSubsetResult
@@ -331,6 +336,14 @@ def plot_subset_strip(
         f"{method_str}",
         fontsize=12,
     )
+
+    # The whiskers carry no legend entry of their own; an independent mean
+    # gets one, so the caveat sits next to the intervals it qualifies.
+    if "independent" in methods and has_any_ci:
+        ax.plot(
+            [], [], color="#4682b4", linewidth=2.0,
+            label="Mean CI: " + textwrap.fill(INDEPENDENT_MEAN_CAVEAT, 43),
+        )
 
     # Y-axis bounds: default [0, 1], widen if data falls outside
     y_min = 0.0

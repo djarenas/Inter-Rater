@@ -47,6 +47,20 @@ class TestCategoriesBaseValidation:
         with pytest.raises(ValueError, match="at least 2"):
             UnorderedCategories(())
 
+    def test_127_categories_accepted(self):
+        """The most a category position stored as int8 can hold."""
+        cats = UnorderedCategories([f"c{i}" for i in range(127)])
+        assert cats.n_categories == 127
+
+    def test_more_than_127_categories_refused(self):
+        """Position 128 and up would not fit the int8 the ratings use."""
+        with pytest.raises(ValueError, match="at most 127 categories, got 128"):
+            UnorderedCategories([f"c{i}" for i in range(128)])
+
+    def test_cap_applies_to_every_kind(self):
+        with pytest.raises(ValueError, match="at most 127"):
+            OrderedCategories([f"c{i}" for i in range(300)], weighting="linear")
+
     def test_duplicate_names(self):
         """Two codes meaning the same thing is never intentional."""
         with pytest.raises(ValueError, match="duplicate"):

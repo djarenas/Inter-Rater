@@ -31,7 +31,7 @@ Cost: C(n,2) estimator calls.
 No config needed beyond the coefficient itself.
 
 
-### Computation B -- Per-subset bootstrap (if config_of_coefficient requests bootstrap)
+### Computation B -- Per-subset bootstrap (always)
 
 For each subset: slice data to the subjects that subset can be measured on,
 resample within those subjects, compute the coefficient each draw.
@@ -43,6 +43,7 @@ Answers: "how stable is *this subset's* coefficient?"
 Cost: C(n,k) x n_resamples estimator calls.
 
 Controlled by: `config_of_coefficient` (n_resamples, alpha, ci_method).
+It always runs: the coefficient's config requires n_resamples >= 1.
 
 #### Which subjects a subset can be measured on
 
@@ -163,7 +164,6 @@ job. Using it for per-pair CIs is a convenience, not a free lunch.
 
 | Configuration              | Estimator calls                            |
 |----------------------------|--------------------------------------------|
-| A only                     | C(n,2)                                     |
 | A + B                      | C(n,2) x (1 + n_resamples)                |
 | A + B + C independent      | C(n,2) x (1 + n_resamples)                |
 | A + B + C correlated       | C(n,2) x (1 + n_resamples + n_bootstraps) |

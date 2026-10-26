@@ -45,7 +45,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
     ``run()``, which executes Computations A, B, and C and returns a
     ``PairwisePermutationResult``.
 
-    A runs always. B runs if ``config_of_coefficient.n_resamples > 0``.
+    A and B run always (the analyzer config requires n_resamples >= 1).
     C runs if ``bootstrap_mean_config`` is not None.
     """
 
@@ -115,13 +115,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             self._compute_observed()
         )
 
-        # Computation B -- if per-pair bootstrap requested
-        pairwise_distributions = None
-        pairwise_cis = None
-        if coc.n_resamples > 0:
-            pairwise_distributions, pairwise_cis = (
-                self._compute_per_pair_bootstrap(pairwise_values)
-            )
+        # Computation B -- always
+        pairwise_distributions, pairwise_cis = (
+            self._compute_per_pair_bootstrap(pairwise_values)
+        )
 
         # Computation C -- if mean bootstrap requested
         mean_distribution = None
@@ -135,10 +132,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         # Decide whether to store per-pair distributions
         n_pairs = len(pairwise_values)
-        store_distributions = (
-            pairwise_distributions is not None
-            and n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS
-        )
+        store_distributions = n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS
 
         return PairwisePermutationResult(
             coefficient_name=self.config.coefficient_to_compute,
@@ -294,7 +288,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
     def _compute_mean_bootstrap(
         self,
-        pairwise_distributions: dict | None,
+        pairwise_distributions: dict,
         mean_over_pairs: float,
     ) -> tuple[np.ndarray, tuple[float, float]]:
         """
@@ -311,11 +305,11 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         each draw, pick one value from each pair's bootstrap
         distribution, average. Treats pairs as independent -- the CI
         will be narrower than correlated and may underestimate variance.
-        Cost: 0 estimator calls (numpy only). Requires B to have run.
+        Cost: 0 estimator calls (numpy only).
 
         Parameters
         ----------
-        pairwise_distributions : dict | None
+        pairwise_distributions : dict
             Per-pair bootstrap distributions from B. Required for the
             independent path; ignored for correlated.
         mean_over_pairs : float
@@ -449,7 +443,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
     def _mean_bootstrap_independent(
         self,
-        pairwise_distributions: dict | None,
+        pairwise_distributions: dict,
         n_bootstraps: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
@@ -463,8 +457,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         Parameters
         ----------
-        pairwise_distributions : dict | None
-            Per-pair distributions from B. Must not be None.
+        pairwise_distributions : dict
+            Per-pair distributions from B.
         n_bootstraps : int
             Number of bootstrap draws.
         rng : np.random.Generator
@@ -474,21 +468,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         -------
         np.ndarray
             Mean coefficient per draw, shape (n_bootstraps,).
-
-        Raises
-        ------
-        ValueError
-            If pairwise_distributions is None (B did not run).
         """
-        if pairwise_distributions is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: 'independent' mean bootstrap "
-                f"requires per-pair bootstrap (n_resamples >= 1 in "
-                f"config_of_coefficient). The config should have "
-                f"caught this -- if you see this error, there is a "
-                f"bug in PairwisePermutationConfig validation."
-            )
-
         pairs = sorted(pairwise_distributions.keys())
         # Stack per-pair distributions: (n_pairs, n_resamples_per_pair)
         stacked = np.array(

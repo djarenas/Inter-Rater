@@ -7,6 +7,8 @@ a `Ratings` object validates itself against.
 ## Categories
 
 Categories own K -- the number of responses a rater was allowed to give.
+K is between 2 and 127: ratings store each category's position as int8,
+so a larger scale is refused when it is declared.
 Three subclasses handle different measurement scales:
 
 | Subclass              | Scale     | Distances                         |

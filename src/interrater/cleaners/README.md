@@ -43,6 +43,11 @@ The pipeline runs in four stages:
 All repair is accounted for. Everything that changes is counted,
 attributed to the rule that caused it, and broken down per rater.
 
+**Read the file as text.** Ratings are matched as strings, so a rater
+column read as decimals is refused before stage 2: pandas turns a numeric
+column with a blank cell into float64, and `1` arrives as `1.0`. Use
+`pd.read_csv(path, dtype=str)`.
+
 ## Private modules
 
 | Module            | What it does                                            |

@@ -29,8 +29,8 @@ class SubsetPermutationConfig(PermutationConfig):
     - coefficient_to_compute is in SUBSET_PERMUTATION_COEFFICIENTS
     - config_of_coefficient is the correct config type for that coefficient
     - subset_k is provided and structurally valid (>= 2 for every k)
-    - if bootstrap_mean_config uses "independent", per-subset bootstrap
-      must be enabled (n_resamples >= 2)
+    - if bootstrap_mean_config uses "independent", config_of_coefficient
+      must give at least 2 per-subset draws (n_resamples >= 2)
 
     The analysis class is responsible for:
     - Normalizing int to [int]
@@ -111,12 +111,9 @@ class SubsetPermutationConfig(PermutationConfig):
                 f"got {actual_config_class}"
             )
 
-        # Cross-validate: "independent" mean bootstrap requires per-subset
-        # bootstrap enabled in config_of_coefficient.
-        # The "independent" method assembles the mean from independently-
-        # drawn per-subset bootstrap values, so each subset must be
-        # bootstrapped. The "correlated" method does its own subject
-        # resampling and does not depend on per-subset bootstrap.
+        # Cross-validate: the "independent" mean draws one value from
+        # each subset's bootstrap draws, so it needs at least two of them.
+        # The per-subset bootstrap always runs; only its size can fall short.
         if (
             self.bootstrap_mean_config is not None
             and self.bootstrap_mean_config.method == "independent"
@@ -124,8 +121,8 @@ class SubsetPermutationConfig(PermutationConfig):
         ):
             raise ValueError(
                 f"{_ERROR_PREFIX}: bootstrap_mean_config method "
-                f"'independent' requires per-subset bootstrap enabled "
-                f"in config_of_coefficient (n_resamples >= 2), "
+                f"'independent' needs at least 2 per-subset draws "
+                f"(config_of_coefficient.n_resamples >= 2), "
                 f"but n_resamples={self.config_of_coefficient.n_resamples}"
             )
 
