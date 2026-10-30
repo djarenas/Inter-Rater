@@ -36,6 +36,7 @@ from .krippendorff import (
 )
 from .rater_combinations import (
     leave_one_rater_out,
+    mean_over_same_subsets,
     mean_over_subsets,
     over_pairs,
     over_subsets,
@@ -69,6 +70,7 @@ __all__ = [
     "leave_one_rater_out",
     "subjects_per_leave_one_out",
     "mean_over_subsets",
+    "mean_over_same_subsets",
     "pairable_ratings",
     "observed_disagreement",
     "expected_disagreement",

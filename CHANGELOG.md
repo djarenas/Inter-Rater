@@ -197,6 +197,11 @@ version does not warn you, so this section does.
 - A permutation config with `ci_method: parametric_null` was accepted and
   failed once the analysis had started; it is refused when the config is
   built.
+- A bootstrap draw of the mean over pairs or subsets that lost one of them
+  (undefined in that resample) averaged the rest, a different quantity
+  counted as an ordinary draw. It is now counted as failed, as for a single
+  coefficient; the jackknife for BCa follows the same rule. Example values
+  are unchanged.
 
 ## [2.0.0] - 2026-10-11
 

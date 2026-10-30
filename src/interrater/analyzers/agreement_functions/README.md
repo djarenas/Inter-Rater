@@ -384,6 +384,12 @@ recomputes every subset within each draw preserves the correlation without
 having to model it. The function returns a point estimate and leaves intervals
 to the resampler.
 
+``mean_over_same_subsets(values, subsets)`` is the resampler's version: the
+mean over exactly the subsets defined at the point estimate, or NaN if any of
+them is undefined in this resample. Skipping it instead would average the
+others -- a different quantity -- so the resample is NaN and counted as failed,
+as for a single coefficient.
+
 
 ## Unbalanced data: the p_j choice
 

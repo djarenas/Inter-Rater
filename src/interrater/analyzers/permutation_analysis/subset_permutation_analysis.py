@@ -231,8 +231,13 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         mean_method = None
         if bmc is not None:
             mean_method = bmc.method
+            # The subsets the point estimate averaged. Every draw uses
+            # exactly these, so it estimates the same quantity.
+            defined_subsets = sorted(
+                s for s, v in subset_values.items() if not np.isnan(v)
+            )
             mean_distribution, mean_ci = self._compute_mean_bootstrap(
-                k, subset_distributions, mean_over_subsets
+                k, subset_distributions, mean_over_subsets, defined_subsets
             )
 
         # Decide whether to store per-subset distributions
@@ -426,6 +431,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         k: int,
         subset_distributions: dict,
         mean_over_subsets: float,
+        defined_subsets: list,
     ) -> tuple[np.ndarray, tuple[float, float]]:
         """
         Computation C: mean bootstrap.
@@ -452,6 +458,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             independent path; ignored for correlated.
         mean_over_subsets : float
             Point estimate of the mean from A, used for CI computation.
+        defined_subsets : list
+            The subsets defined at the point estimate. A draw in which any
+            of them is undefined is NaN, so the interval counts it as failed
+            rather than averaging the other subsets.
 
         Returns
         -------
@@ -470,11 +480,11 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         if bmc.method == "correlated":
             mean_distribution = self._mean_bootstrap_correlated(
-                k, n_resamples, rng
+                k, defined_subsets, n_resamples, rng
             )
         elif bmc.method == "independent":
             mean_distribution = self._mean_bootstrap_independent(
-                subset_distributions, n_resamples, rng
+                subset_distributions, defined_subsets, n_resamples, rng
             )
         else:
             raise ValueError(
@@ -488,7 +498,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         # resamples from the per-subset distributions and never touches a
         # subject, so there is nothing to leave out.
         jackknife_fn = (
-            (lambda: self._mean_jackknife_correlated(k))
+            (lambda: self._mean_jackknife_correlated(k, defined_subsets))
             if bmc.method == "correlated" else None
         )
 
@@ -502,7 +512,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         return mean_distribution, mean_ci
 
-    def _mean_jackknife_correlated(self, k: int) -> np.ndarray:
+    def _mean_jackknife_correlated(
+        self, k: int, defined_subsets: list
+    ) -> np.ndarray:
         """
         Leave-one-subject-out means, for the correlated mean's acceleration.
 
@@ -516,15 +528,18 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ----------
         k : int
             Subset size, passed through to over_subsets.
+        defined_subsets : list
+            The subsets defined at the point estimate; see
+            ``mean_over_same_subsets``.
 
         Returns
         -------
         np.ndarray
-            Shape (n_subjects,). NaN entries mark subsets whose mean was
-            undefined.
+            Shape (n_subjects,). NaN entries mark leave-one-out data on which
+            a defined subset became undefined.
         """
         from ..agreement_functions.rater_combinations import (
-            mean_over_subsets as _mean_over,
+            mean_over_same_subsets,
             over_subsets,
         )
 
@@ -532,14 +547,15 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         all_rows = np.arange(n_subjects)
 
         return np.array([
-            _mean_over(
+            mean_over_same_subsets(
                 over_subsets(
                     self.estimator_input.take_subjects(
                         np.delete(all_rows, i)
                     ),
                     self.estimator,
                     k,
-                )
+                ),
+                defined_subsets,
             )
             for i in range(n_subjects)
         ], dtype=np.float64)
@@ -547,6 +563,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
     def _mean_bootstrap_correlated(
         self,
         k: int,
+        defined_subsets: list,
         n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
@@ -562,6 +579,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ----------
         k : int
             Subset size.
+        defined_subsets : list
+            The subsets defined at the point estimate. A draw in which any
+            of them is undefined is NaN, not the mean of the others.
         n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
@@ -573,7 +593,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             Mean coefficient per draw, shape (n_resamples,).
         """
         from ..agreement_functions.rater_combinations import (
-            mean_over_subsets,
+            mean_over_same_subsets,
             over_subsets,
         )
 
@@ -590,28 +610,33 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             sub_values = over_subsets(
                 resampled_data, self.estimator, k
             )
-            mean_draws[b] = mean_over_subsets(sub_values)
+            mean_draws[b] = mean_over_same_subsets(sub_values, defined_subsets)
 
         return mean_draws
 
     def _mean_bootstrap_independent(
         self,
         subset_distributions: dict,
+        defined_subsets: list,
         n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
         """
         Independent mean bootstrap: sample from B's per-subset distributions.
 
-        For each draw: pick one value from each subset's bootstrap
-        distribution, average across subsets (NaN-skipping). Treats subsets
-        as independent, so the CI will typically be narrower than
-        correlated -- on real data, too narrow.
+        For each draw: pick one value from each defined subset's bootstrap
+        distribution and average them. A draw that picks a failed (NaN)
+        value for any subset is NaN, so it counts as failed rather than
+        averaging the other subsets. Treats subsets as independent, so the
+        CI will typically be narrower than correlated -- on real data, too
+        narrow.
 
         Parameters
         ----------
         subset_distributions : dict
             Per-subset distributions from B.
+        defined_subsets : list
+            The subsets defined at the point estimate.
         n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
@@ -622,7 +647,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         np.ndarray
             Mean coefficient per draw, shape (n_resamples,).
         """
-        subsets = sorted(subset_distributions.keys())
+        subsets = defined_subsets
+        if not subsets:
+            return np.full(n_resamples, np.nan)
         # Stack per-subset distributions: (n_subsets, n_resamples_per_subset)
         stacked = np.array(
             [subset_distributions[s] for s in subsets]
@@ -638,7 +665,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         sampled = stacked[
             np.arange(n_subsets)[np.newaxis, :], indices
         ]
-        # NaN-skipping mean across subsets for each draw
-        mean_draws = np.nanmean(sampled, axis=1).astype(np.float64)
+        # Mean across subsets; any NaN makes the draw NaN
+        mean_draws = sampled.mean(axis=1).astype(np.float64)
 
         return mean_draws

@@ -61,6 +61,7 @@ from interrater.analyzers.agreement_functions.krippendorff import (
 from interrater.analyzers.agreement_functions.rater_combinations import (
     MAX_SUBSETS,
     leave_one_rater_out,
+    mean_over_same_subsets,
     mean_over_subsets,
     over_pairs,
     over_subsets,
@@ -775,6 +776,31 @@ class TestMeanOverSubsets:
         result = leave_one_rater_out(THREE_RATER_INPUT, _po_estimator)
         # mean(1/2, 3/4, 3/4) = 2/3.
         assert abs(mean_over_subsets(result) - 2 / 3) < TOL
+
+
+class TestMeanOverSameSubsets:
+    """I test mean_over_same_subsets: the point's subsets, or NaN."""
+
+    def test_mean_of_the_listed_subsets(self):
+        values = {(0, 1): 0.5, (0, 2): 0.5, (1, 2): 0.0}
+        assert abs(mean_over_same_subsets(values, [(0, 1), (0, 2), (1, 2)]) - 1 / 3) < TOL
+
+    def test_one_listed_subset_undefined_gives_nan(self):
+        """Averaging the rest would be a different quantity."""
+        values = {(0, 1): 0.5, (0, 2): float("nan"), (1, 2): 0.0}
+        assert math.isnan(mean_over_same_subsets(values, [(0, 1), (0, 2), (1, 2)]))
+
+    def test_unlisted_subsets_ignored(self):
+        """A subset undefined at the point stays out, even when defined here."""
+        values = {(0, 1): 0.5, (0, 2): 0.9, (1, 2): 0.0}
+        assert abs(mean_over_same_subsets(values, [(0, 1), (1, 2)]) - 0.25) < TOL
+
+    def test_unlisted_nan_does_not_matter(self):
+        values = {(0, 1): 0.5, (0, 2): float("nan"), (1, 2): 0.0}
+        assert abs(mean_over_same_subsets(values, [(0, 1), (1, 2)]) - 0.25) < TOL
+
+    def test_empty_list_gives_nan(self):
+        assert math.isnan(mean_over_same_subsets({(0, 1): 0.5}, []))
 
 
 # ========================================================================== #

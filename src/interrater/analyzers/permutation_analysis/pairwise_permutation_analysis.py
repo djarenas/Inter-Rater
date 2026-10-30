@@ -126,8 +126,13 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         mean_method = None
         if bmc is not None:
             mean_method = bmc.method
+            # The pairs the point estimate averaged. Every draw uses exactly
+            # these, so it estimates the same quantity.
+            defined_pairs = sorted(
+                p for p, v in pairwise_values.items() if not np.isnan(v)
+            )
             mean_distribution, mean_ci = self._compute_mean_bootstrap(
-                pairwise_distributions, mean_over_pairs
+                pairwise_distributions, mean_over_pairs, defined_pairs
             )
 
         # Decide whether to store per-pair distributions
@@ -290,6 +295,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         self,
         pairwise_distributions: dict,
         mean_over_pairs: float,
+        defined_pairs: list,
     ) -> tuple[np.ndarray, tuple[float, float]]:
         """
         Computation C: mean bootstrap.
@@ -314,6 +320,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             independent path; ignored for correlated.
         mean_over_pairs : float
             Point estimate of the mean from A, used for CI computation.
+        defined_pairs : list
+            The pairs defined at the point estimate. A draw in which any of
+            them is undefined is NaN, so the interval counts it as failed
+            rather than averaging the other pairs.
 
         Returns
         -------
@@ -332,11 +342,11 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         if bmc.method == "correlated":
             mean_distribution = self._mean_bootstrap_correlated(
-                n_resamples, rng
+                defined_pairs, n_resamples, rng
             )
         elif bmc.method == "independent":
             mean_distribution = self._mean_bootstrap_independent(
-                pairwise_distributions, n_resamples, rng
+                pairwise_distributions, defined_pairs, n_resamples, rng
             )
         else:
             raise ValueError(
@@ -350,7 +360,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         # resamples from the per-pair distributions and never touches a
         # subject, so there is nothing to leave out.
         jackknife_fn = (
-            self._mean_jackknife_correlated
+            (lambda: self._mean_jackknife_correlated(defined_pairs))
             if bmc.method == "correlated" else None
         )
 
@@ -364,7 +374,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         return mean_distribution, mean_ci
 
-    def _mean_jackknife_correlated(self) -> np.ndarray:
+    def _mean_jackknife_correlated(self, defined_pairs: list) -> np.ndarray:
         """
         Leave-one-subject-out means, for the correlated mean's acceleration.
 
@@ -374,14 +384,20 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         The unit left out matches the unit resampled, which is what makes the
         acceleration describe the right quantity.
 
+        Parameters
+        ----------
+        defined_pairs : list
+            The pairs defined at the point estimate; see
+            ``mean_over_same_subsets``.
+
         Returns
         -------
         np.ndarray
-            Shape (n_subjects,). NaN entries mark subsets whose mean was
-            undefined.
+            Shape (n_subjects,). NaN entries mark leave-one-out data on which
+            a defined pair became undefined.
         """
         from ..agreement_functions.rater_combinations import (
-            mean_over_subsets,
+            mean_over_same_subsets,
             over_pairs,
         )
 
@@ -389,19 +405,21 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         all_rows = np.arange(n_subjects)
 
         return np.array([
-            mean_over_subsets(
+            mean_over_same_subsets(
                 over_pairs(
                     self.estimator_input.take_subjects(
                         np.delete(all_rows, i)
                     ),
                     self.estimator,
-                )
+                ),
+                defined_pairs,
             )
             for i in range(n_subjects)
         ], dtype=np.float64)
 
     def _mean_bootstrap_correlated(
         self,
+        defined_pairs: list,
         n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
@@ -415,6 +433,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         Parameters
         ----------
+        defined_pairs : list
+            The pairs defined at the point estimate. A draw in which any of
+            them is undefined is NaN, not the mean of the others.
         n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
@@ -426,7 +447,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             Mean coefficient per draw, shape (n_resamples,).
         """
         from ..agreement_functions.rater_combinations import (
-            mean_over_subsets,
+            mean_over_same_subsets,
             over_pairs,
         )
 
@@ -441,28 +462,33 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 resampled_rows
             )
             pair_values = over_pairs(resampled_data, self.estimator)
-            mean_draws[b] = mean_over_subsets(pair_values)
+            mean_draws[b] = mean_over_same_subsets(pair_values, defined_pairs)
 
         return mean_draws
 
     def _mean_bootstrap_independent(
         self,
         pairwise_distributions: dict,
+        defined_pairs: list,
         n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
         """
         Independent mean bootstrap: sample from B's per-pair distributions.
 
-        For each draw: pick one value from each pair's bootstrap
-        distribution, average across pairs (NaN-skipping). Treats pairs
-        as independent, so the CI will typically be narrower than
-        correlated -- on real data, too narrow.
+        For each draw: pick one value from each defined pair's bootstrap
+        distribution and average them. A draw that picks a failed (NaN)
+        value for any pair is NaN, so it counts as failed rather than
+        averaging the other pairs. Treats pairs as independent, so the CI
+        will typically be narrower than correlated -- on real data, too
+        narrow.
 
         Parameters
         ----------
         pairwise_distributions : dict
             Per-pair distributions from B.
+        defined_pairs : list
+            The pairs defined at the point estimate.
         n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
@@ -473,7 +499,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         np.ndarray
             Mean coefficient per draw, shape (n_resamples,).
         """
-        pairs = sorted(pairwise_distributions.keys())
+        pairs = defined_pairs
+        if not pairs:
+            return np.full(n_resamples, np.nan)
         # Stack per-pair distributions: (n_pairs, n_resamples_per_pair)
         stacked = np.array(
             [pairwise_distributions[p] for p in pairs]
@@ -489,7 +517,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         sampled = stacked[
             np.arange(n_pairs)[np.newaxis, :], indices
         ]
-        # NaN-skipping mean across pairs for each draw
-        mean_draws = np.nanmean(sampled, axis=1).astype(np.float64)
+        # Mean across pairs; any NaN makes the draw NaN
+        mean_draws = sampled.mean(axis=1).astype(np.float64)
 
         return mean_draws

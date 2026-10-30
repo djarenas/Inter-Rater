@@ -114,6 +114,15 @@ interval method, level and seed are the coefficient's own
 (`config_of_coefficient`), so the mean and the per-pair intervals are built
 the same way. The independent mean needs `ci_method: percentile` there.
 
+#### Every draw averages the same pairs
+
+The point estimate averages the pairs defined on the real data. Each draw
+of the mean -- correlated or independent -- averages exactly those pairs,
+and a draw in which any of them is undefined is NaN, counted as failed, as
+for a single coefficient. Averaging the others instead would make that draw
+a different quantity. The correlated jackknife follows the same rule. See
+`mean_over_same_subsets` in `agreement_functions`.
+
 #### BCa is available for the correlated mean only
 
 BCa's acceleration is the standardised skewness of leave-one-out estimates,

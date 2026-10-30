@@ -248,3 +248,35 @@ def mean_over_subsets(values: dict) -> float:
     if not usable.any():
         return float("nan")
     return float(array[usable].mean())
+
+
+def mean_over_same_subsets(values: dict, subsets: list) -> float:
+    """
+    The mean over exactly these subsets, or NaN if any of them is undefined.
+
+    A bootstrap or jackknife value of the mean has to estimate the same
+    quantity as the point estimate: the average over the subsets that were
+    defined on the real data. ``mean_over_subsets`` skips whatever is
+    undefined, so a resample that loses one subset would average the others
+    -- a different quantity, counted as an ordinary draw. Here such a
+    resample is NaN, and the interval counts it as failed, as it does for a
+    single coefficient. Subsets not listed are ignored even when defined.
+
+    Parameters
+    ----------
+    values : dict
+        Coefficient per subset, as from ``over_subsets`` or ``over_pairs``.
+    subsets : list
+        The subsets to average: those defined at the point estimate.
+
+    Returns
+    -------
+    float
+        Their mean, or NaN if any is NaN or the list is empty.
+    """
+    if not subsets:
+        return float("nan")
+    array = np.array([values[s] for s in subsets], dtype=np.float64)
+    if np.isnan(array).any():
+        return float("nan")
+    return float(array.mean())
