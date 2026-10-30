@@ -299,7 +299,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         **Correlated:** Resample subjects globally. For each draw,
         recompute all C(n,2) pair coefficients on the same resampled
         subjects, then average. Preserves the correlation between pairs
-        sharing a rater. Cost: n_bootstraps x C(n,2).
+        sharing a rater. Cost: n_resamples x C(n,2).
 
         **Independent:** Sample from B's per-pair distributions. For
         each draw, pick one value from each pair's bootstrap
@@ -319,20 +319,24 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         -------
         tuple[np.ndarray, tuple[float, float]]
             (mean_distribution, mean_ci)
-            distribution: shape (n_bootstraps,)
+            distribution: shape (n_resamples,)
             ci: (lower, upper)
         """
+        # The mean uses the coefficient's draw count, interval method, level
+        # and seed. The per-combination draws use child streams spawned from
+        # that seed, so the mean's stream is distinct from all of them.
         bmc = self.config.bootstrap_mean_config
-        n_bootstraps = bmc.n_bootstraps
-        rng = np.random.default_rng(bmc.random_state)
+        coc = self.config.config_of_coefficient
+        n_resamples = coc.n_resamples
+        rng = np.random.default_rng(coc.random_state)
 
         if bmc.method == "correlated":
             mean_distribution = self._mean_bootstrap_correlated(
-                n_bootstraps, rng
+                n_resamples, rng
             )
         elif bmc.method == "independent":
             mean_distribution = self._mean_bootstrap_independent(
-                pairwise_distributions, n_bootstraps, rng
+                pairwise_distributions, n_resamples, rng
             )
         else:
             raise ValueError(
@@ -353,8 +357,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         mean_ci = self._compute_ci(
             mean_distribution,
             mean_over_pairs,
-            bmc.ci_method,
-            bmc.alpha,
+            coc.ci_method,
+            coc.alpha,
             jackknife_fn=jackknife_fn,
         )
 
@@ -398,7 +402,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
     def _mean_bootstrap_correlated(
         self,
-        n_bootstraps: int,
+        n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
         """
@@ -411,7 +415,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         Parameters
         ----------
-        n_bootstraps : int
+        n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
             Seeded random number generator.
@@ -419,7 +423,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         Returns
         -------
         np.ndarray
-            Mean coefficient per draw, shape (n_bootstraps,).
+            Mean coefficient per draw, shape (n_resamples,).
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_subsets,
@@ -427,9 +431,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         )
 
         n_subjects = self.estimator_input.n_subjects
-        mean_draws = np.empty(n_bootstraps, dtype=np.float64)
+        mean_draws = np.empty(n_resamples, dtype=np.float64)
 
-        for b in range(n_bootstraps):
+        for b in range(n_resamples):
             resampled_rows = rng.choice(
                 n_subjects, size=n_subjects, replace=True
             )
@@ -444,7 +448,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
     def _mean_bootstrap_independent(
         self,
         pairwise_distributions: dict,
-        n_bootstraps: int,
+        n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
         """
@@ -459,7 +463,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         ----------
         pairwise_distributions : dict
             Per-pair distributions from B.
-        n_bootstraps : int
+        n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
             Seeded random number generator.
@@ -467,7 +471,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         Returns
         -------
         np.ndarray
-            Mean coefficient per draw, shape (n_bootstraps,).
+            Mean coefficient per draw, shape (n_resamples,).
         """
         pairs = sorted(pairwise_distributions.keys())
         # Stack per-pair distributions: (n_pairs, n_resamples_per_pair)
@@ -479,7 +483,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         # Vectorized: draw one index per pair per bootstrap draw
         indices = rng.integers(
-            0, n_per_pair, size=(n_bootstraps, n_pairs)
+            0, n_per_pair, size=(n_resamples, n_pairs)
         )
         # sampled[b, p] = stacked[p, indices[b, p]]
         sampled = stacked[

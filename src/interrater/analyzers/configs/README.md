@@ -132,6 +132,8 @@ PermutationConfig is a separate hierarchy (not a child of GroupCoefficientConfig
 - `subset_k` (int | list[int] | str | None, default None) -- subset size(s) for subset permutation
 - `bootstrap_mean_config` (PermutationBootstrapMeanConfig | None, default None) -- mean-level bootstrap configuration
 
+Refuses `ci_method='parametric_null'` in `config_of_coefficient`: combinations sharing a rater are correlated, so no closed-form variance describes them.
+
 ### PairwisePermutationConfig
 
 For all C(n, 2) pairwise analyses. Validates:
@@ -166,13 +168,16 @@ All numeric fields have bool-first type guards (bool subclasses int in Python, s
 
 ### PermutationBootstrapMeanConfig
 
-Controls bootstrapping of the mean coefficient across combinations.
+Chooses how the mean coefficient across combinations is bootstrapped.
 
 - `method` (str) -- "correlated" (resample subjects, recompute all combinations) or "independent" (assemble mean from independently-drawn per-combination values)
-- `n_bootstraps` (int) -- number of bootstrap draws for the mean
-- `ci_method` (str, default "percentile") -- "percentile" or "bca" (parametric_null rejected). "bca" needs `method="correlated"`: its acceleration comes from a jackknife over the units the bootstrap resamples, and no jackknife matches the independent mean.
-- `alpha` (float, default 0.05) -- significance level
-- `random_state` (int | None, default None) -- random seed
+
+That is its only setting. The draw count, interval method, level and seed are
+the ones in `config_of_coefficient`, so one run has one of each. The
+independent mean needs `ci_method: percentile` there: BCa's acceleration
+comes from a jackknife over the units the bootstrap resamples, and no
+jackknife matches the independent mean. Any key other than `method` is
+refused.
 
 ## Using Configurations
 

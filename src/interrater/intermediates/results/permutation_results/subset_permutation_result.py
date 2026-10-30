@@ -114,7 +114,7 @@ class SubsetPermutationResult(PermutationResult):
         ``method_used`` is None -- that one was attempted and every draw
         failed.
     bootstrap_distribution_of_mean : np.ndarray | None
-        Raw bootstrap draws of the mean (shape: n_bootstraps,). None if
+        Raw bootstrap draws of the mean (shape: n_resamples,). None if
         no bootstrap of the mean was requested.
     bootstrap_cis_per_subset : dict[tuple[int, ...], BootstrapCIResult]
         Bootstrap CI per subset, one interval object each. Subsets do not

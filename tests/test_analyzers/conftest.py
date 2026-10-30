@@ -313,11 +313,7 @@ def pairwise_cohen_config_correlated_mean():
         config_of_coefficient=CohenKappaConfig(
             n_resamples=50, random_state=42
         ),
-        bootstrap_mean_config=PermutationBootstrapMeanConfig(
-            method="correlated",
-            n_bootstraps=30,
-            random_state=99,
-        ),
+        bootstrap_mean_config=PermutationBootstrapMeanConfig(method="correlated"),
     )
 
 
@@ -329,11 +325,7 @@ def pairwise_cohen_config_independent_mean():
         config_of_coefficient=CohenKappaConfig(
             n_resamples=50, random_state=42
         ),
-        bootstrap_mean_config=PermutationBootstrapMeanConfig(
-            method="independent",
-            n_bootstraps=30,
-            random_state=99,
-        ),
+        bootstrap_mean_config=PermutationBootstrapMeanConfig(method="independent"),
     )
 
 
@@ -362,11 +354,7 @@ def subset_fleiss_config_correlated_mean():
             n_resamples=50, random_state=42
         ),
         subset_k=2,
-        bootstrap_mean_config=PermutationBootstrapMeanConfig(
-            method="correlated",
-            n_bootstraps=30,
-            random_state=99,
-        ),
+        bootstrap_mean_config=PermutationBootstrapMeanConfig(method="correlated"),
     )
 
 
@@ -379,9 +367,5 @@ def subset_fleiss_config_independent_mean():
             n_resamples=50, random_state=42
         ),
         subset_k=2,
-        bootstrap_mean_config=PermutationBootstrapMeanConfig(
-            method="independent",
-            n_bootstraps=30,
-            random_state=99,
-        ),
+        bootstrap_mean_config=PermutationBootstrapMeanConfig(method="independent"),
     )

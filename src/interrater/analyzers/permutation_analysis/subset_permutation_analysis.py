@@ -435,7 +435,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         **Correlated:** Resample subjects globally. For each draw,
         recompute all C(n,k) subset coefficients on the same resampled
         subjects, then average. Preserves the correlation between subsets
-        sharing raters. Cost: n_bootstraps x C(n,k).
+        sharing raters. Cost: n_resamples x C(n,k).
 
         **Independent:** Sample from B's per-subset distributions. For
         each draw, pick one value from each subset's bootstrap
@@ -457,20 +457,24 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         -------
         tuple[np.ndarray, tuple[float, float]]
             (mean_distribution, mean_ci)
-            distribution: shape (n_bootstraps,)
+            distribution: shape (n_resamples,)
             ci: (lower, upper)
         """
+        # The mean uses the coefficient's draw count, interval method, level
+        # and seed. The per-combination draws use child streams spawned from
+        # that seed, so the mean's stream is distinct from all of them.
         bmc = self.config.bootstrap_mean_config
-        n_bootstraps = bmc.n_bootstraps
-        rng = np.random.default_rng(bmc.random_state)
+        coc = self.config.config_of_coefficient
+        n_resamples = coc.n_resamples
+        rng = np.random.default_rng(coc.random_state)
 
         if bmc.method == "correlated":
             mean_distribution = self._mean_bootstrap_correlated(
-                k, n_bootstraps, rng
+                k, n_resamples, rng
             )
         elif bmc.method == "independent":
             mean_distribution = self._mean_bootstrap_independent(
-                subset_distributions, n_bootstraps, rng
+                subset_distributions, n_resamples, rng
             )
         else:
             raise ValueError(
@@ -491,8 +495,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         mean_ci = self._compute_ci(
             mean_distribution,
             mean_over_subsets,
-            bmc.ci_method,
-            bmc.alpha,
+            coc.ci_method,
+            coc.alpha,
             jackknife_fn=jackknife_fn,
         )
 
@@ -543,7 +547,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
     def _mean_bootstrap_correlated(
         self,
         k: int,
-        n_bootstraps: int,
+        n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
         """
@@ -558,7 +562,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ----------
         k : int
             Subset size.
-        n_bootstraps : int
+        n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
             Seeded random number generator.
@@ -566,7 +570,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Returns
         -------
         np.ndarray
-            Mean coefficient per draw, shape (n_bootstraps,).
+            Mean coefficient per draw, shape (n_resamples,).
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_subsets,
@@ -574,9 +578,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         )
 
         n_subjects = self.estimator_input.n_subjects
-        mean_draws = np.empty(n_bootstraps, dtype=np.float64)
+        mean_draws = np.empty(n_resamples, dtype=np.float64)
 
-        for b in range(n_bootstraps):
+        for b in range(n_resamples):
             resampled_rows = rng.choice(
                 n_subjects, size=n_subjects, replace=True
             )
@@ -593,7 +597,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
     def _mean_bootstrap_independent(
         self,
         subset_distributions: dict,
-        n_bootstraps: int,
+        n_resamples: int,
         rng: np.random.Generator,
     ) -> np.ndarray:
         """
@@ -608,7 +612,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ----------
         subset_distributions : dict
             Per-subset distributions from B.
-        n_bootstraps : int
+        n_resamples : int
             Number of bootstrap draws.
         rng : np.random.Generator
             Seeded random number generator.
@@ -616,7 +620,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Returns
         -------
         np.ndarray
-            Mean coefficient per draw, shape (n_bootstraps,).
+            Mean coefficient per draw, shape (n_resamples,).
         """
         subsets = sorted(subset_distributions.keys())
         # Stack per-subset distributions: (n_subsets, n_resamples_per_subset)
@@ -628,7 +632,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         # Vectorized: draw one index per subset per bootstrap draw
         indices = rng.integers(
-            0, n_per_subset, size=(n_bootstraps, n_subsets)
+            0, n_per_subset, size=(n_resamples, n_subsets)
         )
         # sampled[b, s] = stacked[s, indices[b, s]]
         sampled = stacked[

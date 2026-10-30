@@ -173,8 +173,7 @@ from interrater import (PairwisePermutationAnalysis, PairwisePermutationConfig,
 pairwise = PairwisePermutationAnalysis(ratings, PairwisePermutationConfig(
     coefficient_to_compute="cohen_kappa",
     config_of_coefficient=CohenKappaConfig(n_resamples=4000, random_state=42, ci_method="bca"),
-    bootstrap_mean_config=PermutationBootstrapMeanConfig(
-        method="correlated", n_bootstraps=4000, random_state=42, ci_method="bca"),
+    bootstrap_mean_config=PermutationBootstrapMeanConfig(method="correlated"),
 )).run()
 
 pairwise.pairwise_values      # (0,1) 0.539  (0,2) 0.453  (0,3) 0.425

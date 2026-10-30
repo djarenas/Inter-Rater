@@ -61,9 +61,7 @@ def ratings():
 
 
 def _mean_config(method):
-    return PermutationBootstrapMeanConfig(
-        method=method, n_bootstraps=100, random_state=42,
-    )
+    return PermutationBootstrapMeanConfig(method=method)
 
 
 def _pairwise(ratings, method):

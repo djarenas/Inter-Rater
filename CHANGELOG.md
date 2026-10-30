@@ -87,6 +87,18 @@ version does not warn you, so this section does.
   counts are in the interval's summary. Results refuse draws that disagree
   with their interval.
 - Per-pair and per-subset intervals are required on permutation results.
+- The cleaner refuses rater columns read as decimals (pandas does this to a
+  numeric column with a blank cell), with a hint to read the file with
+  `dtype=str`. They used to fail as unknown values, with advice that would
+  have emptied the column.
+- `PermutationBootstrapMeanConfig` takes only `method`. The mean's draw count,
+  `ci_method`, `alpha` and seed come from `config_of_coefficient`, as the
+  per-combination intervals' do; any other key is refused. Example values
+  are unchanged.
+- The independent mean requires `config_of_coefficient.ci_method:
+  percentile`. BCa's acceleration needs a jackknife over the units the
+  bootstrap resamples, and none matches the independent mean; it is refused
+  when the config is built.
 
 ### Added
 
@@ -134,6 +146,9 @@ version does not warn you, so this section does.
   cleaner config and the package version. The rendered report shows rated
   counts per rater, category labels, what each drop pass removed, and plain
   plurals.
+- Pairwise and subset plots note in the legend that an independent mean's
+  interval ignores the correlation between combinations sharing raters, so
+  tends to be too narrow.
 
 ### Fixed
 
@@ -174,6 +189,14 @@ version does not warn you, so this section does.
   The standard error now divides by n − 1.
 - Pairwise and subset results said "bootstrap was not performed" when draws
   were not stored above the limit; they now name the limit.
+- A scale with more than 127 categories is refused when declared. It used
+  to crash the cleaner with a numpy `OverflowError`.
+- The mean's interval was not reproducible by default (its seed defaulted to
+  `None`), and a result could report a different `ci_method` from the one its
+  mean interval used.
+- A permutation config with `ci_method: parametric_null` was accepted and
+  failed once the analysis had started; it is refused when the config is
+  built.
 
 ## [2.0.0] - 2026-10-11
 

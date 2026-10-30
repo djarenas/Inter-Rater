@@ -31,9 +31,9 @@ class PermutationConfig:
     coefficients. Subclasses (PairwisePermutationConfig,
     SubsetPermutationConfig) further validate that the coefficient is
     appropriate for their specific permutation mode, that
-    config_of_coefficient is the right type, and cross-validate
-    bootstrap_mean_config against config_of_coefficient when the
-    "independent" method requires per-combination bootstrap.
+    config_of_coefficient is the right type. I check the "independent"
+    mean against config_of_coefficient, since it draws from the
+    per-combination bootstrap that config controls.
 
     Attributes
     ----------
@@ -54,8 +54,9 @@ class PermutationConfig:
     bootstrap_mean_config : PermutationBootstrapMeanConfig | None, default None
         Configuration for bootstrapping the mean coefficient across
         combinations. None means no mean-level bootstrap. When present,
-        controls the procedure ("correlated" or "independent"),
-        n_bootstraps, ci_method, alpha, and random_state for the mean.
+        it chooses the procedure ("correlated" or "independent"); the
+        draw count, interval method, level and seed are the ones in
+        config_of_coefficient.
     """
 
     # Attribute declaration
@@ -133,6 +134,46 @@ class PermutationConfig:
                     f"got {type(self.bootstrap_mean_config).__name__}"
                 )
 
+        # Every interval here is a bootstrap interval. A closed-form null
+        # variance does not apply: combinations sharing a rater are
+        # correlated, so there is no formula for their spread. Refused now,
+        # rather than once the analysis has started.
+        if self.config_of_coefficient.ci_method == "parametric_null":
+            raise ValueError(
+                f"{_ERROR_PREFIX}: config_of_coefficient.ci_method="
+                f"'parametric_null' is not available for permutation "
+                f"analyses: combinations sharing a rater are correlated, so "
+                f"no closed-form variance describes them. Use 'percentile' "
+                f"or 'bca'."
+            )
+
+        if self.bootstrap_mean_config is not None:
+            # The independent mean draws one value from each combination's
+            # bootstrap draws, so it needs at least two of them; and BCa's
+            # acceleration needs a jackknife over the units the bootstrap
+            # resamples, which no jackknife matches here.
+            if self.bootstrap_mean_config.method == "independent":
+                coc = self.config_of_coefficient
+                if coc.n_resamples < 2:
+                    raise ValueError(
+                        f"{_ERROR_PREFIX}: bootstrap_mean_config method "
+                        f"'independent' needs at least 2 draws per "
+                        f"combination (config_of_coefficient.n_resamples "
+                        f">= 2), but n_resamples={coc.n_resamples}"
+                    )
+                if coc.ci_method != "percentile":
+                    raise ValueError(
+                        f"{_ERROR_PREFIX}: bootstrap_mean_config method "
+                        f"'independent' needs "
+                        f"config_of_coefficient.ci_method='percentile', got "
+                        f"'{coc.ci_method}'. BCa's acceleration needs a "
+                        f"jackknife that leaves out the units the bootstrap "
+                        f"resamples; the independent mean resamples each "
+                        f"combination separately and mixes the draws, so no "
+                        f"jackknife matches it. Use 'percentile', or method "
+                        f"'correlated'."
+                    )
+
 
     # Public API ------------------------------------------------------------- #
 
@@ -187,7 +228,7 @@ class PermutationConfig:
             bmc = data_dict["bootstrap_mean_config"]
             if isinstance(bmc, dict):
                 data_dict["bootstrap_mean_config"] = (
-                    PermutationBootstrapMeanConfig(**bmc)
+                    PermutationBootstrapMeanConfig.from_dict(bmc)
                 )
 
         return data_dict

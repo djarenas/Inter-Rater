@@ -408,11 +408,7 @@ def pairwise_config():
             ),
         )
         if mean_method is not None:
-            kwargs["bootstrap_mean_config"] = PermutationBootstrapMeanConfig(
-                method=mean_method,
-                n_bootstraps=_INTEGRATION_RESAMPLES,
-                random_state=99,
-            )
+            kwargs["bootstrap_mean_config"] = PermutationBootstrapMeanConfig(method=mean_method)
         return PairwisePermutationConfig(**kwargs)
 
     return _make

@@ -552,66 +552,33 @@ class TestLightKappaConfig:
 
 
 class TestPermutationBootstrapMeanConfig:
-    """Tests for PermutationBootstrapMeanConfig."""
+    """Tests for PermutationBootstrapMeanConfig: the method, and nothing else."""
 
     def test_construction(self):
-        cfg = PermutationBootstrapMeanConfig(
-            method="correlated", n_bootstraps=500
-        )
+        cfg = PermutationBootstrapMeanConfig(method="correlated")
         assert cfg.method == "correlated"
-        assert cfg.n_bootstraps == 500
-        assert cfg.ci_method == "percentile"
-        assert cfg.alpha == 0.05
-        assert cfg.random_state is None
 
     def test_method_invalid_rejected(self):
         with pytest.raises(ValueError, match="method"):
-            PermutationBootstrapMeanConfig(
-                method="invalid", n_bootstraps=500
-            )
-
-    def test_n_bootstraps_zero_rejected(self):
-        with pytest.raises(ValueError, match="n_bootstraps"):
-            PermutationBootstrapMeanConfig(
-                method="correlated", n_bootstraps=0
-            )
-
-    def test_ci_method_parametric_null_rejected(self):
-        with pytest.raises(ValueError, match="parametric_null.*not available"):
-            PermutationBootstrapMeanConfig(
-                method="correlated",
-                n_bootstraps=500,
-                ci_method="parametric_null",
-            )
-
-    def test_independent_with_bca_refused(self):
-        """No jackknife matches the independent mean, so BCa has no
-        acceleration to use. Refused when the config is built."""
-        with pytest.raises(ValueError, match="no jackknife matches it"):
-            PermutationBootstrapMeanConfig(
-                method="independent", n_bootstraps=100, ci_method="bca",
-            )
-
-    def test_independent_with_percentile_accepted(self):
-        cfg = PermutationBootstrapMeanConfig(
-            method="independent", n_bootstraps=100, ci_method="percentile",
-        )
-        assert cfg.ci_method == "percentile"
-
-    def test_correlated_with_bca_accepted(self):
-        cfg = PermutationBootstrapMeanConfig(
-            method="correlated", n_bootstraps=100, ci_method="bca",
-        )
-        assert cfg.ci_method == "bca"
+            PermutationBootstrapMeanConfig(method="invalid")
 
     def test_summary_keys(self):
-        cfg = PermutationBootstrapMeanConfig(
-            method="independent", n_bootstraps=1000
-        )
-        s = cfg.summary()
-        assert set(s.keys()) == {
-            "method", "n_bootstraps", "ci_method", "alpha", "random_state",
-        }
+        cfg = PermutationBootstrapMeanConfig(method="independent")
+        assert cfg.summary() == {"method": "independent"}
+
+    def test_unknown_key_refused_from_yaml(self):
+        """Anything but method is refused, with a pointer to where the
+        draw count, interval method, level and seed are set."""
+        with pytest.raises(
+            ValueError, match="only key is 'method'.*config_of_coefficient"
+        ):
+            PermutationBootstrapMeanConfig.from_dict(
+                {"method": "correlated", "n_bootstraps": 4000}
+            )
+
+    def test_from_yaml_shape(self):
+        cfg = PermutationBootstrapMeanConfig.from_dict({"method": "correlated"})
+        assert cfg == PermutationBootstrapMeanConfig(method="correlated")
 
 
 class TestPermutationConfig:
@@ -680,16 +647,75 @@ class TestPairwisePermutationConfig:
             )
 
     def test_independent_bootstrap_requires_resamples(self):
-        """Independent method needs per-pair bootstrap (n_resamples >= 2)."""
-        bmc = PermutationBootstrapMeanConfig(
-            method="independent", n_bootstraps=100
-        )
+        """Independent method needs at least 2 draws per pair."""
+        bmc = PermutationBootstrapMeanConfig(method="independent")
         with pytest.raises(ValueError, match="independent.*n_resamples"):
             PairwisePermutationConfig(
                 coefficient_to_compute="cohen_kappa",
                 config_of_coefficient=CohenKappaConfig(n_resamples=1),
                 bootstrap_mean_config=bmc,
             )
+
+    @pytest.mark.parametrize("config_cls, coefficient, extra", [
+        (PairwisePermutationConfig, "cohen_kappa", {}),
+        (SubsetPermutationConfig, "fleiss_kappa", {"subset_k": 2}),
+    ])
+    def test_independent_with_bca_refused(self, config_cls, coefficient, extra):
+        """No jackknife matches the independent mean, so BCa has no
+        acceleration to use. Refused when the config is built."""
+        coc_cls = CohenKappaConfig if coefficient == "cohen_kappa" else FleissKappaConfig
+        with pytest.raises(ValueError, match="no jackknife matches it"):
+            config_cls(
+                coefficient_to_compute=coefficient,
+                config_of_coefficient=coc_cls(ci_method="bca"),
+                bootstrap_mean_config=PermutationBootstrapMeanConfig(method="independent"),
+                **extra,
+            )
+
+    @pytest.mark.parametrize("config_cls, coefficient, extra", [
+        (PairwisePermutationConfig, "cohen_kappa", {}),
+        (SubsetPermutationConfig, "fleiss_kappa", {"subset_k": 2}),
+    ])
+    def test_parametric_null_refused(self, config_cls, coefficient, extra):
+        """No closed-form variance describes correlated combinations.
+        Refused when the config is built, not once the analysis runs."""
+        coc_cls = CohenKappaConfig if coefficient == "cohen_kappa" else FleissKappaConfig
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)  # the config's own notice
+            coc = coc_cls(ci_method="parametric_null")
+        with pytest.raises(ValueError, match="'parametric_null' is not available"):
+            config_cls(
+                coefficient_to_compute=coefficient,
+                config_of_coefficient=coc,
+                **extra,
+            )
+
+    def test_independent_with_percentile_accepted(self):
+        cfg = PairwisePermutationConfig(
+            coefficient_to_compute="cohen_kappa",
+            config_of_coefficient=CohenKappaConfig(ci_method="percentile"),
+            bootstrap_mean_config=PermutationBootstrapMeanConfig(method="independent"),
+        )
+        assert cfg.bootstrap_mean_config.method == "independent"
+
+    def test_correlated_with_bca_accepted(self):
+        cfg = PairwisePermutationConfig(
+            coefficient_to_compute="cohen_kappa",
+            config_of_coefficient=CohenKappaConfig(ci_method="bca"),
+            bootstrap_mean_config=PermutationBootstrapMeanConfig(method="correlated"),
+        )
+        assert cfg.config_of_coefficient.ci_method == "bca"
+
+    def test_extra_key_in_mean_block_refused(self):
+        """Reading a permutation config refuses extra keys in the mean block."""
+        with pytest.raises(ValueError, match="only key is 'method'"):
+            PairwisePermutationConfig.build_from_dict({
+                "coefficient_to_compute": "cohen_kappa",
+                "config_of_coefficient": {"n_resamples": 100},
+                "bootstrap_mean_config": {
+                    "method": "correlated", "n_bootstraps": 4000,
+                },
+            })
 
     def test_nested_removed_weights_key_refused(self):
         """An old key inside config_of_coefficient gets the 2.1.0 message too."""

@@ -105,8 +105,6 @@ def _pairwise_config(
     random_state: int = 42,
     ci_method: str = "percentile",
     bootstrap_mean: str | None = None,
-    mean_n_bootstraps: int = 50,
-    mean_random_state: int = 99,
 ) -> PairwisePermutationConfig:
     """Build a PairwisePermutationConfig for testing."""
     config_map = {
@@ -121,11 +119,7 @@ def _pairwise_config(
     )
     bmc = None
     if bootstrap_mean is not None:
-        bmc = PermutationBootstrapMeanConfig(
-            method=bootstrap_mean,
-            n_bootstraps=mean_n_bootstraps,
-            random_state=mean_random_state,
-        )
+        bmc = PermutationBootstrapMeanConfig(method=bootstrap_mean)
     return PairwisePermutationConfig(
         coefficient_to_compute=coefficient,
         config_of_coefficient=coc,
@@ -140,8 +134,6 @@ def _subset_config(
     random_state: int = 42,
     ci_method: str = "percentile",
     bootstrap_mean: str | None = None,
-    mean_n_bootstraps: int = 50,
-    mean_random_state: int = 99,
 ) -> SubsetPermutationConfig:
     """Build a SubsetPermutationConfig for testing."""
     config_map = {
@@ -155,11 +147,7 @@ def _subset_config(
     )
     bmc = None
     if bootstrap_mean is not None:
-        bmc = PermutationBootstrapMeanConfig(
-            method=bootstrap_mean,
-            n_bootstraps=mean_n_bootstraps,
-            random_state=mean_random_state,
-        )
+        bmc = PermutationBootstrapMeanConfig(method=bootstrap_mean)
     return SubsetPermutationConfig(
         coefficient_to_compute=coefficient,
         config_of_coefficient=coc,
@@ -608,7 +596,7 @@ class TestPairwiseComputationC:
         """Correlated method should produce mean distribution and CI."""
         ratings = _make_ratings(20, 3)
         config = _pairwise_config(
-            n_resamples=50, bootstrap_mean="correlated", mean_n_bootstraps=100
+            n_resamples=100, bootstrap_mean="correlated"
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.bootstrap_mean_method == "correlated"
@@ -623,7 +611,7 @@ class TestPairwiseComputationC:
         """Independent method should produce mean distribution and CI."""
         ratings = _make_ratings(20, 3)
         config = _pairwise_config(
-            n_resamples=50, bootstrap_mean="independent", mean_n_bootstraps=100
+            n_resamples=100, bootstrap_mean="independent"
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.bootstrap_mean_method == "independent"
@@ -638,15 +626,12 @@ class TestPairwiseComputationC:
         enough data and resamples that it holds reliably.
         """
         ratings = _make_ratings(50, 4, seed=42)
-        n_boot = 500
 
         r_corr = PairwisePermutationAnalysis(
             ratings,
             _pairwise_config(
                 n_resamples=200,
                 bootstrap_mean="correlated",
-                mean_n_bootstraps=n_boot,
-                mean_random_state=42,
             ),
         ).run()
 
@@ -655,8 +640,6 @@ class TestPairwiseComputationC:
             _pairwise_config(
                 n_resamples=200,
                 bootstrap_mean="independent",
-                mean_n_bootstraps=n_boot,
-                mean_random_state=42,
             ),
         ).run()
 
@@ -671,14 +654,44 @@ class TestPairwiseComputationC:
             f"independent ({indep_width:.4f})"
         )
 
+    def test_mean_interval_built_like_the_per_pair_ones(self):
+        """One draw count, interval method and level per run.
+
+        The mean used to have its own, so a result could say "percentile"
+        while its mean interval was BCa at 90%.
+        """
+        ratings = _make_ratings(20, 3)
+        config = _pairwise_config(
+            n_resamples=80, ci_method="bca", bootstrap_mean="correlated",
+        )
+        result = PairwisePermutationAnalysis(ratings, config).run()
+        mean_ci = result.bootstrap_ci_of_mean
+        pair_ci = next(iter(result.bootstrap_cis_per_pair.values()))
+        assert result.ci_method == mean_ci.method_intended == "bca"
+        assert mean_ci.method_intended == pair_ci.method_intended
+        assert mean_ci.alpha == pair_ci.alpha
+        assert mean_ci.n_resamples == pair_ci.n_resamples == 80
+
+    def test_mean_reproducible_by_default(self):
+        """No seed set anywhere: two runs still agree (the default is 42)."""
+        ratings = _make_ratings(20, 3)
+        config = PairwisePermutationConfig(
+            coefficient_to_compute="cohen_kappa",
+            config_of_coefficient=CohenKappaConfig(n_resamples=50),
+            bootstrap_mean_config=PermutationBootstrapMeanConfig(method="correlated"),
+        )
+        r1 = PairwisePermutationAnalysis(ratings, config).run()
+        r2 = PairwisePermutationAnalysis(ratings, config).run()
+        np.testing.assert_array_equal(
+            r1.bootstrap_distribution_of_mean, r2.bootstrap_distribution_of_mean,
+        )
+
     def test_mean_bootstrap_reproducible(self):
         """Same seeds should produce identical mean bootstrap."""
         ratings = _make_ratings(20, 3)
         config = _pairwise_config(
             n_resamples=50,
             bootstrap_mean="correlated",
-            mean_n_bootstraps=100,
-            mean_random_state=42,
         )
         r1 = PairwisePermutationAnalysis(ratings, config).run()
         r2 = PairwisePermutationAnalysis(ratings, config).run()
@@ -980,9 +993,8 @@ class TestSubsetComputationC:
         ratings = _make_ratings(20, 4)
         config = _subset_config(
             subset_k=3,
-            n_resamples=50,
+            n_resamples=100,
             bootstrap_mean="correlated",
-            mean_n_bootstraps=100,
         )
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
@@ -996,9 +1008,8 @@ class TestSubsetComputationC:
         ratings = _make_ratings(20, 4)
         config = _subset_config(
             subset_k=3,
-            n_resamples=50,
+            n_resamples=100,
             bootstrap_mean="independent",
-            mean_n_bootstraps=100,
         )
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
@@ -1079,7 +1090,7 @@ class TestResultSummary:
         """Summary with mean bootstrap should include bootstrap keys."""
         ratings = _make_ratings(20, 3)
         config = _pairwise_config(
-            n_resamples=50, bootstrap_mean="correlated", mean_n_bootstraps=100
+            n_resamples=100, bootstrap_mean="correlated"
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         s = result.summary()
@@ -1105,7 +1116,7 @@ class TestResultSummary:
         index[1] = [0, 1, 1]
         ratings = Ratings(category_index=index, semantics=sem)
         config = _pairwise_config(
-            n_resamples=20, bootstrap_mean="correlated", mean_n_bootstraps=400
+            n_resamples=400, bootstrap_mean="correlated"
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         draws = result.bootstrap_distribution_of_mean
@@ -1120,7 +1131,7 @@ class TestResultSummary:
         """__str__ should not raise and should contain key info."""
         ratings = _make_ratings(20, 3)
         config = _pairwise_config(
-            n_resamples=50, bootstrap_mean="correlated", mean_n_bootstraps=50
+            n_resamples=50, bootstrap_mean="correlated"
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         s = str(result)

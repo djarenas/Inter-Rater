@@ -13,9 +13,5 @@ config_of_coefficient:
     n_new_raters: 1
     random_state: 42
 bootstrap_mean_config:
-  n_bootstraps: 4000
   method: 'correlated'
-  ci_method: 'bca'
-  alpha: 0.05
-  random_state: 42
 

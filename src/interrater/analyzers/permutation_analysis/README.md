@@ -96,7 +96,7 @@ This is the Pythagorean intuition: correlated uncertainties add linearly
 (sum of the sides), so the CI on the mean is wider than if pairs were
 independent.
 
-Cost: n_bootstraps x C(n,2) estimator calls.
+Cost: n_resamples x C(n,2) estimator calls.
 
 **Independent:** Sample from B's pre-computed per-pair distributions,
 average. Treats pairs as if they were independent. Uncertainties add in
@@ -109,7 +109,10 @@ narrow.
 Cost: 0 estimator calls (numpy sampling from B's output). Requires B to
 have run first.
 
-Controlled by: `bootstrap_mean_config` (method, n_bootstraps, alpha).
+Controlled by: `bootstrap_mean_config` (method only). The draw count,
+interval method, level and seed are the coefficient's own
+(`config_of_coefficient`), so the mean and the per-pair intervals are built
+the same way. The independent mean needs `ci_method: percentile` there.
 
 #### BCa is available for the correlated mean only
 
@@ -166,7 +169,7 @@ job. Using it for per-pair CIs is a convenience, not a free lunch.
 |----------------------------|--------------------------------------------|
 | A + B                      | C(n,2) x (1 + n_resamples)                |
 | A + B + C independent      | C(n,2) x (1 + n_resamples)                |
-| A + B + C correlated       | C(n,2) x (1 + n_resamples + n_bootstraps) |
+| A + B + C correlated       | C(n,2) x (1 + 2 x n_resamples)            |
 
 C(n,2) by number of raters:
 
@@ -180,7 +183,7 @@ C(n,2) by number of raters:
 | 10       | 45     |
 | 20       | 190    |
 
-With n_resamples = 4,000 and n_bootstraps = 4,000:
+With n_resamples = 4,000:
 
 | n_raters | A + B          | A + B + C correlated |
 |----------|----------------|----------------------|
