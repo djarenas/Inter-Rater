@@ -20,11 +20,12 @@ All three computations use the same estimator callable
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ...contracts import EMPTY
+from ...contracts import EMPTY, GUARD_MAX_SUBSETS
 from ...intermediates.results.ci_results import BootstrapCIResult
 from .permutation_analysis import IndependentMeanDraws, PermutationAnalysis
 
@@ -75,7 +76,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Initialize subset permutation analysis.
 
         Normalizes ``config.subset_k`` into a sorted list of ints and
-        validates each k against the data (k <= n_raters).
+        validates each k against the data (k <= n_raters). Every k is
+        checked against GUARD_MAX_SUBSETS, and the whole run against
+        config.max_evaluations, before any k runs.
 
         Parameters
         ----------
@@ -89,7 +92,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         TypeError
             If config is not SubsetPermutationConfig.
         ValueError
-            If any k > n_raters.
+            If any k > n_raters, any k gives more than GUARD_MAX_SUBSETS
+            subsets, or the run would compute the coefficient more than
+            config.max_evaluations times.
         """
         from ..configs.subset_permutation_config import (
             SubsetPermutationConfig as _SPC,
@@ -112,6 +117,26 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         # self.ratings, not the argument: the parent has applied any
         # injection, and k may count the injected raters too.
         self.ks = self._normalize_ks(config.subset_k, self.ratings.n_raters)
+
+        # Before anything runs: every k within the subset cap, and the whole
+        # run within max_evaluations. Otherwise subset_k: "all" ran the small
+        # k in full before a large one hit the cap.
+        units_per_k = {
+            k: math.comb(self.ratings.n_raters, k) for k in self.ks
+        }
+        for k, count in units_per_k.items():
+            if count > GUARD_MAX_SUBSETS:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: {self.ratings.n_raters} raters taken "
+                    f"{k} at a time is {count:,} subsets, past the cap of "
+                    f"{GUARD_MAX_SUBSETS:,}. Nothing has run. A smaller "
+                    f"subset_k, or leave-one-out, will usually answer the "
+                    f"same question."
+                )
+        try:
+            self._check_cost(units_per_k, "subsets")
+        except ValueError as e:
+            raise ValueError(f"{_ERROR_PREFIX}: {e}") from e
 
         # The coefficient's own flag, applied to each subset
         self._check_subsets_balanced()

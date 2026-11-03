@@ -342,6 +342,58 @@ class PermutationAnalysis:
 
     # Private helpers ---------------------------------------------------- #
 
+    def _check_cost(self, units_per_k: dict[int, int], unit_word: str) -> None:
+        """
+        Refuse, before anything runs, a run above config.max_evaluations.
+
+        Counts the times the coefficient would be computed: the observed
+        value of each unit, its bootstrap (n_resamples each), and the
+        correlated mean (n_resamples draws over every unit). With BCa each
+        interval adds a jackknife, counted as one evaluation per subject in
+        the panel -- an upper bound, since a unit is jackknifed only over its
+        own subjects. So the count is "at most", and the guard can only
+        refuse a little early, never late. The independent mean adds
+        nothing: it picks from draws already made.
+
+        Parameters
+        ----------
+        units_per_k : dict[int, int]
+            How many pairs or subsets the run will compute, per subset size.
+        unit_word : str
+            "pairs" or "subsets", for the message.
+
+        Raises
+        ------
+        ValueError
+            With the count, what it is made of, and how to lower or allow it.
+        """
+        coc = self.config.config_of_coefficient
+        bmc = self.config.bootstrap_mean_config
+        n_resamples = coc.n_resamples
+        jackknife = self.ratings.n_subjects if coc.ci_method == "bca" else 0
+        correlated = bmc is not None and bmc.method == "correlated"
+
+        units = sum(units_per_k.values())
+        per_unit = 1 + n_resamples + jackknife
+        if correlated:
+            per_unit += n_resamples + jackknife
+        total = units * per_unit
+        if total <= self.config.max_evaluations:
+            return
+
+        parts = [f"{units:,} {unit_word} x {n_resamples:,} resamples"]
+        if correlated:
+            parts.append("the correlated mean")
+        if jackknife:
+            parts.append(f"BCa jackknives over up to {jackknife:,} subjects")
+        raise ValueError(
+            f"{_ERROR_PREFIX}: this run would compute the coefficient up to "
+            f"{total:,} times ({', plus '.join(parts)}), above max_evaluations "
+            f"({self.config.max_evaluations:,}). Lower n_resamples or the "
+            f"number of {unit_word}, or raise max_evaluations in the config "
+            f"to run it on purpose."
+        )
+
     def _resolve_weights(self) -> Weights | None:
         """
         Read the weights from the semantics of the ratings.

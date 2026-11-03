@@ -35,6 +35,7 @@ class PairwisePermutationConfig(PermutationConfig):
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None
     balanced_data_only: bool
     keep_draws: bool
+    max_evaluations: int
 
     # Constructor ------------------------------------------------------------ #
 

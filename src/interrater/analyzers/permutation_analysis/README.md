@@ -232,3 +232,20 @@ With n_resamples = 4,000:
 | 6        | 60,015         | 120,015              |
 | 10       | 180,045        | 360,045              |
 | 20       | 760,190        | 1,520,190            |
+
+### The cost guard
+
+Before anything runs, the analysis counts these calls and refuses a run above
+`max_evaluations` in the config. The default is `GUARD_MAX_EVALUATIONS` in
+`contracts`, 2,000,000: at the measured 50 to 260 microseconds per call, about
+2 to 9 minutes. Raise it to run a larger analysis on purpose.
+
+With BCa, each interval also runs a jackknife; the guard counts it as one call
+per subject in the panel. That is an upper bound -- a pair or subset is
+jackknifed only over its own subjects -- so the guard can refuse a little
+early, never late. The message says "up to" for that reason.
+
+Subset permutation checks every k before the first one runs: each against
+`GUARD_MAX_SUBSETS` (10,000 subsets), and their total against
+`max_evaluations`. Without that, `subset_k: "all"` on 20 raters ran k = 2, 3
+and 4 in full before k = 5 hit the cap.

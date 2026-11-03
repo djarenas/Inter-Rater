@@ -46,20 +46,10 @@ from typing import Callable
 import numpy as np
 
 from ...array_utils import n_per_subject
-from ...contracts import EMPTY, MIN_RATERS
+from ...contracts import EMPTY, GUARD_MAX_SUBSETS, MIN_RATERS
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
 
 _ERROR_PREFIX = "[rater_combinations] Error"
-
-MAX_SUBSETS = 10_000
-"""
-How many subsets a single call will enumerate before refusing.
-
-Subsets grow as a binomial coefficient: ten raters give 45 pairs and 252
-subsets of size five, but twenty raters give 184,756 of size ten. The cap is a
-guard against asking for a number of coefficients nobody intended rather than a
-statement about what is meaningful, so it is deliberately loose.
-"""
 
 Estimator = Callable[[EstimatorInput], float]
 
@@ -91,10 +81,10 @@ def rater_subsets(n_raters: int, size: int) -> list[tuple[int, ...]]:
         )
 
     count = math.comb(n_raters, size)
-    if count > MAX_SUBSETS:
+    if count > GUARD_MAX_SUBSETS:
         raise ValueError(
             f"{_ERROR_PREFIX}: {n_raters} raters taken {size} at a time is "
-            f"{count:,} subsets, past the cap of {MAX_SUBSETS:,}. That is "
+            f"{count:,} subsets, past the cap of {GUARD_MAX_SUBSETS:,}. That is "
             f"almost certainly not what was intended -- a smaller size, or "
             f"leave-one-out, will usually answer the same question."
         )

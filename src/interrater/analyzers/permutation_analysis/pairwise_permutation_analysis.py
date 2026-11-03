@@ -16,6 +16,7 @@ resolved by the parent.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -66,6 +67,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         ------
         TypeError
             If config is not PairwisePermutationConfig.
+        ValueError
+            If the run would compute the coefficient more than
+            config.max_evaluations times.
         """
         from ..configs.pairwise_permutation_config import (
             PairwisePermutationConfig as _PPC,
@@ -84,6 +88,13 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             raise type(e)(
                 f"{_ERROR_PREFIX}: parent init failed: {e}"
             ) from e
+
+        # Before anything runs: refuse a run above max_evaluations
+        n_pairs = math.comb(self.ratings.n_raters, 2)
+        try:
+            self._check_cost({2: n_pairs}, "pairs")
+        except ValueError as e:
+            raise ValueError(f"{_ERROR_PREFIX}: {e}") from e
 
     # Public API --------------------------------------------------------- #
 

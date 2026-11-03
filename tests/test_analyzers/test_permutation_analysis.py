@@ -106,6 +106,7 @@ def _pairwise_config(
     ci_method: str = "percentile",
     bootstrap_mean: str | None = None,
     keep_draws: bool = True,
+    max_evaluations: int | None = None,
 ) -> PairwisePermutationConfig:
     """Build a PairwisePermutationConfig for testing."""
     config_map = {
@@ -126,6 +127,7 @@ def _pairwise_config(
         config_of_coefficient=coc,
         bootstrap_mean_config=bmc,
         keep_draws=keep_draws,
+        **({} if max_evaluations is None else {"max_evaluations": max_evaluations}),
     )
 
 
@@ -139,6 +141,7 @@ def _subset_config(
     balanced_data_only: bool | None = None,
     panel_balanced_data_only: bool = False,
     keep_draws: bool = True,
+    max_evaluations: int | None = None,
 ) -> SubsetPermutationConfig:
     """
     Build a SubsetPermutationConfig for testing.
@@ -167,6 +170,7 @@ def _subset_config(
         bootstrap_mean_config=bmc,
         balanced_data_only=panel_balanced_data_only,
         keep_draws=keep_draws,
+        **({} if max_evaluations is None else {"max_evaluations": max_evaluations}),
     )
 
 
@@ -1415,3 +1419,100 @@ class TestKeepDrawsChangesNoNumber:
         np.testing.assert_allclose(
             r.bootstrap_distribution_of_mean, expected / len(draws),
         )
+
+
+class TestCostGuard:
+    """
+    Before anything runs, the analysis counts the coefficient evaluations a
+    run would make and refuses a run above max_evaluations. The count must
+    be right, so it is checked two ways: at the boundary (the count is
+    allowed, one less is refused), and against the evaluations a run
+    actually makes.
+
+    On complete data every pair or subset is jackknifed over every subject,
+    so the upper bound for BCa is exact there.
+    """
+
+    N_SUBJECTS = 20
+    N_RESAMPLES = 30
+
+    # (mean method, ci_method) -> evaluations per unit
+    CASES = [
+        (None, "percentile", 1 + N_RESAMPLES),
+        ("independent", "percentile", 1 + N_RESAMPLES),
+        ("correlated", "percentile", 1 + 2 * N_RESAMPLES),
+        ("correlated", "bca", 1 + 2 * N_RESAMPLES + 2 * N_SUBJECTS),
+        (None, "bca", 1 + N_RESAMPLES + N_SUBJECTS),
+    ]
+
+    def _pairwise(self, mean, ci_method, limit):
+        return PairwisePermutationAnalysis(
+            _make_ratings(self.N_SUBJECTS, 4),  # 6 pairs, complete
+            _pairwise_config(
+                n_resamples=self.N_RESAMPLES, ci_method=ci_method,
+                bootstrap_mean=mean, max_evaluations=limit,
+            ),
+        )
+
+    def _subsets(self, mean, ci_method, limit):
+        return SubsetPermutationAnalysis(
+            _make_ratings(self.N_SUBJECTS, 4),  # 6 pairs + 4 triples
+            _subset_config(
+                n_resamples=self.N_RESAMPLES, ci_method=ci_method,
+                subset_k=[2, 3], bootstrap_mean=mean, max_evaluations=limit,
+            ),
+        )
+
+    @pytest.mark.parametrize("mean, ci_method, per_unit", CASES)
+    def test_pairwise_boundary(self, mean, ci_method, per_unit):
+        count = 6 * per_unit
+        self._pairwise(mean, ci_method, count)
+        with pytest.raises(ValueError, match=f"up to {count:,} times"):
+            self._pairwise(mean, ci_method, count - 1)
+
+    @pytest.mark.parametrize("mean, ci_method, per_unit", CASES)
+    def test_subset_boundary(self, mean, ci_method, per_unit):
+        count = 10 * per_unit
+        self._subsets(mean, ci_method, count)
+        with pytest.raises(ValueError, match=f"up to {count:,} times"):
+            self._subsets(mean, ci_method, count - 1)
+
+    @pytest.mark.parametrize("mean, ci_method, per_unit", CASES)
+    def test_count_is_what_a_run_does(self, mean, ci_method, per_unit):
+        """Counting the estimator calls of a real run gives the same number."""
+        analysis = self._pairwise(mean, ci_method, None)
+        calls = 0
+        estimator = analysis.estimator
+
+        def counting(data):
+            nonlocal calls
+            calls += 1
+            return estimator(data)
+
+        analysis.estimator = counting
+        analysis.run()
+        assert calls == 6 * per_unit
+
+    def test_message_says_what_to_change(self):
+        with pytest.raises(ValueError) as exc:
+            self._pairwise("correlated", "bca", 10)
+        message = str(exc.value)
+        assert "6 pairs x 30 resamples" in message
+        assert "the correlated mean" in message
+        assert "BCa jackknives over up to 20 subjects" in message
+        assert "raise max_evaluations" in message
+
+    def test_all_subsets_checked_before_any_runs(self):
+        """subset_k: "all" on 20 raters used to run k = 2, 3, 4 in full
+        before k = 5 hit the cap. It now fails at construction."""
+        with pytest.raises(ValueError, match="15,504 subsets.*Nothing has run"):
+            SubsetPermutationAnalysis(
+                _make_ratings(30, 20), _subset_config(n_resamples=10, subset_k="all"),
+            )
+
+    def test_default_allows_the_examples(self):
+        """The shipped examples are far below the default."""
+        ratings = _make_ratings(200, 6)
+        PairwisePermutationAnalysis(ratings, _pairwise_config(
+            n_resamples=4000, bootstrap_mean="correlated",
+        ))

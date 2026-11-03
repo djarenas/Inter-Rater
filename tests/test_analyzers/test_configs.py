@@ -627,6 +627,19 @@ class TestPermutationConfig:
         assert cfg.subset_k is None
         assert cfg.bootstrap_mean_config is None
         assert cfg.keep_draws is True
+        from interrater.contracts import GUARD_MAX_EVALUATIONS
+        assert cfg.max_evaluations == GUARD_MAX_EVALUATIONS
+
+    @pytest.mark.parametrize("value, error", [
+        (True, TypeError), (2.5, TypeError), ("1000", TypeError), (0, ValueError),
+    ])
+    def test_max_evaluations_refused(self, value, error):
+        with pytest.raises(error, match="max_evaluations must be"):
+            PermutationConfig(
+                coefficient_to_compute="cohen_kappa",
+                config_of_coefficient=CohenKappaConfig(),
+                max_evaluations=value,
+            )
 
     def test_keep_draws_non_bool_rejected(self):
         with pytest.raises(TypeError, match="keep_draws must be bool"):
@@ -661,6 +674,7 @@ class TestPermutationConfig:
         assert "subset_k" in s
         assert "bootstrap_mean_config" in s
         assert s["keep_draws"] is True
+        assert "max_evaluations" in s
 
 
 class TestPairwisePermutationConfig:

@@ -119,6 +119,30 @@ prevalence and is not yet in this package; see the roadmap entry on overlap
 adequacy.
 """
 
+# ------------------------------------------------------------------- Guards #
+
+GUARD_MAX_SUBSETS: int = 10_000
+"""Guard against asking for more rater subsets than anyone intended.
+
+How many subsets a single call will enumerate before refusing. Subsets grow
+as a binomial coefficient: ten raters give 45 pairs and 252 subsets of size
+five, but twenty raters give 184,756 of size ten. The cap is a guard against
+asking for a number of coefficients nobody intended rather than a statement
+about what is meaningful, so it is deliberately loose. Fixed: a config cannot
+raise it.
+"""
+
+GUARD_MAX_EVALUATIONS: int = 2_000_000
+"""Guard against a permutation analysis running far longer than expected.
+
+The default for ``max_evaluations`` on the permutation configs: a run that
+would compute the coefficient more times than this is refused before it
+starts, and the config can raise it. Measured at 50 to 260 microseconds per
+evaluation (pairwise Cohen on 200 subjects to Fleiss on subsets of 1,600
+subjects), 2,000,000 is about 2 to 9 minutes. The draws kept at that size are
+at most 16 MB, so the guard bounds memory as well as time.
+"""
+
 # ------------------------------------------------------------ Printing #
 
 MAX_ROWS_PRINTED: int = 100

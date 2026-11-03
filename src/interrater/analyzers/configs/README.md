@@ -132,6 +132,7 @@ PermutationConfig is a separate hierarchy (not a child of GroupCoefficientConfig
 - `subset_k` (int | list[int] | str | None, default None) -- subset size(s) for subset permutation
 - `bootstrap_mean_config` (PermutationBootstrapMeanConfig | None, default None) -- mean-level bootstrap configuration
 - `keep_draws` (bool, default True) -- keep each pair's or subset's bootstrap draws in the result; False tosses them after use, so memory does not grow with the number of units. Values and intervals are the same either way.
+- `max_evaluations` (int, default `GUARD_MAX_EVALUATIONS` in `contracts`, 2,000,000) -- the most times the run may compute the coefficient; a larger run is refused before it starts, with the count. Raise it to run larger analyses on purpose.
 
 Refuses `ci_method='parametric_null'` in `config_of_coefficient`: combinations sharing a rater are correlated, so no closed-form variance describes them.
 

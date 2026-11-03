@@ -387,12 +387,12 @@ extraction -- the denominator every coefficient was actually computed on, and
 the thing that makes results comparable across subsets or reveals that they
 are not.
 
-### The MAX_SUBSETS guard
+### The GUARD_MAX_SUBSETS guard
 
 Subsets grow as a binomial coefficient: ten raters give 45 pairs and 252
 subsets of size five, but twenty raters give 184,756 of size ten.
-``MAX_SUBSETS = 10_000`` is a guard against asking for a number of coefficients
-nobody intended. It is deliberately loose.
+``GUARD_MAX_SUBSETS = 10_000`` (in ``contracts``) is a guard against asking for
+a number of coefficients nobody intended. It is deliberately loose.
 
 ### Summarising
 

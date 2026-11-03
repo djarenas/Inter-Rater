@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
+from ...contracts import GUARD_MAX_EVALUATIONS
 from .permutation_bootstrap_mean_config import PermutationBootstrapMeanConfig
 
 if TYPE_CHECKING:
@@ -70,6 +71,11 @@ class PermutationConfig:
         False tosses each unit's draws once its interval is built and its
         share of the mean added, so memory does not grow with the number of
         units. Every value and interval is the same either way.
+    max_evaluations : int, default GUARD_MAX_EVALUATIONS (2,000,000)
+        The most times the run may compute the coefficient. The analysis
+        counts them before anything runs and refuses a run above this, so a
+        run far longer than expected stops at once with the reason. Raise it
+        to run larger analyses on purpose.
     """
 
     # Attribute declaration
@@ -83,6 +89,7 @@ class PermutationConfig:
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None = None
     balanced_data_only: bool = False
     keep_draws: bool = True
+    max_evaluations: int = GUARD_MAX_EVALUATIONS
 
     # Constructor ------------------------------------------------------------ #
 
@@ -148,6 +155,19 @@ class PermutationConfig:
             raise TypeError(
                 f"{_ERROR_PREFIX}: keep_draws must be bool, "
                 f"got {type(self.keep_draws).__name__}"
+            )
+
+        if isinstance(self.max_evaluations, bool) or not isinstance(
+            self.max_evaluations, int
+        ):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: max_evaluations must be an integer, "
+                f"got {type(self.max_evaluations).__name__}"
+            )
+        if self.max_evaluations < 1:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: max_evaluations must be at least 1, "
+                f"got {self.max_evaluations}"
             )
 
         # Validate bootstrap_mean_config type if provided
@@ -354,7 +374,7 @@ class PermutationConfig:
         -------
         dict
             Keys: coefficient_to_compute, subset_k, balanced_data_only,
-            keep_draws, config_of_coefficient (nested summary),
+            keep_draws, max_evaluations, config_of_coefficient (nested summary),
             bootstrap_mean_config (nested summary or None).
         """
         result = {
@@ -362,6 +382,7 @@ class PermutationConfig:
             "subset_k": self.subset_k,
             "balanced_data_only": self.balanced_data_only,
             "keep_draws": self.keep_draws,
+            "max_evaluations": self.max_evaluations,
             "config_of_coefficient": self.config_of_coefficient.summary(),
             "bootstrap_mean_config": (
                 self.bootstrap_mean_config.summary()

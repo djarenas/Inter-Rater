@@ -61,7 +61,6 @@ from interrater.analyzers.agreement_functions.krippendorff import (
 
 # -- rater_combinations ----------------------------------------------------- #
 from interrater.analyzers.agreement_functions.rater_combinations import (
-    MAX_SUBSETS,
     leave_one_rater_out,
     mean_over_same_subsets,
     mean_over_subsets,
@@ -658,7 +657,7 @@ class TestRaterSubsets:
             rater_subsets(3, 4)
 
     def test_cap_exceeded_raises(self):
-        # C(20, 10) = 184,756 > MAX_SUBSETS (10,000).
+        # C(20, 10) = 184,756 > GUARD_MAX_SUBSETS (10,000).
         with pytest.raises(ValueError, match="past the cap"):
             rater_subsets(20, 10)
 
