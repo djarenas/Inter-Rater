@@ -124,6 +124,24 @@ def within_rater_shuffle(
         yield permuted
 
 
+def column_shuffle(*args, **kwargs):
+    """
+    Renamed ``within_rater_shuffle`` in 2.1.0. Kept so that old code is told
+    the new name instead of failing on an import.
+
+    Raises
+    ------
+    TypeError
+        Always, naming the new function.
+    """
+    raise TypeError(
+        f"{_ERROR_PREFIX}: column_shuffle() was renamed within_rater_shuffle() "
+        f"in 2.1.0: it shuffles each rater's answers across subjects, not the "
+        f"raters themselves. Same arguments; import within_rater_shuffle "
+        f"instead."
+    )
+
+
 def within_subject_shuffle(
     category_index: np.ndarray,
     n_permutations: int = 5000,

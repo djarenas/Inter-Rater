@@ -37,4 +37,3 @@ unused_categories: keep
 insufficient_data_drops:
   min_ratings_per_rater: 10
   min_ratings_per_subject: 2
-  method: iterate

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 
 _ERROR_PREFIX = "[LightKappaConfig] Error"
-_WARNING_PREFIX = "[LightKappaConfig] Warning"  # noqa: F841 -- kept for future use
 
 
 @dataclass(frozen=True)
@@ -52,7 +51,14 @@ class LightKappaConfig(NoWeightIndividualConfig):
 
     Attributes
     ----------
-    (all fields inherited from NoWeightIndividualConfig and parents)
+    balanced_data_only : bool, default True
+        Must be True. The field exists so that every coefficient config
+        accepts the same keys, and a config moved here from Fleiss' kappa
+        is told why False does not apply instead of failing on an unknown
+        key. Light (1971) defines the coefficient for complete data: the
+        analyzer requires every rater to rate every subject, which is
+        stricter than balanced.
+    (all other fields inherited from NoWeightIndividualConfig and parents)
     """
 
     # Attribute declaration
@@ -69,7 +75,9 @@ class LightKappaConfig(NoWeightIndividualConfig):
     rater_jackknife: bool
     # Inherited from parent class NoWeightIndividualConfig (validated to stay at defaults)
     # Populated at this level
-    balanced_data_only: bool = False  # Light's kappa handles unbalanced data (each pair uses shared_rows). Field exists so YAML configs with this key do not crash.
+    # Must be True. Exists so that every coefficient config accepts the same
+    # keys, and a config moved here is told why False does not apply.
+    balanced_data_only: bool = True
 
     # Constructor ------------------------------------------------------------ #
 
@@ -81,6 +89,20 @@ class LightKappaConfig(NoWeightIndividualConfig):
             super().__post_init__()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
+        if not isinstance(self.balanced_data_only, bool):
+            raise TypeError(f"{_ERROR_PREFIX}: balanced_data_only must be bool")
+
+        if not self.balanced_data_only:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: balanced_data_only: false is not available "
+                f"for Light's kappa. It has no approximation for missing "
+                f"ratings: every rater must rate every subject (Light 1971). "
+                f"For data with missing ratings use Fleiss' kappa with "
+                f"balanced_data_only: false, Gwet's AC1, Brennan-Prediger or "
+                f"Krippendorff's alpha, or Cohen's kappa pair by pair in a "
+                f"pairwise permutation analysis."
+            )
 
         # Light has no parametric null variance formula, so reject it as ci_method
         if self.ci_method == "parametric_null":

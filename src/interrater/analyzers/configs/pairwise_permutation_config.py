@@ -25,9 +25,6 @@ class PairwisePermutationConfig(PermutationConfig):
     - coefficient_to_compute is in PAIRWISE_PERMUTATION_COEFFICIENTS
     - config_of_coefficient is the correct config type for that coefficient
     - subset_k must be None (pairwise is fixed at k=2)
-    - if bootstrap_mean_config uses the "independent" method,
-      config_of_coefficient must give at least 2 per-pair draws
-      (n_resamples >= 2)
     """
     # Attribute declaration
 
@@ -36,6 +33,7 @@ class PairwisePermutationConfig(PermutationConfig):
     config_of_coefficient: AnalyzerConfig # In this object, checked that you want an analyzer that is consistent with pairwise permutations
     subset_k: int | None  # Checks that this value is None. Subsets should not happen in Pairwise permutations, but a user may put by mistake from a leftover config
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None
+    balanced_data_only: bool
 
     # Constructor ------------------------------------------------------------ #
 
@@ -86,21 +84,6 @@ class PairwisePermutationConfig(PermutationConfig):
                 f"'{self.coefficient_to_compute}' requires "
                 f"config_of_coefficient to be {expected_config_class}, "
                 f"got {actual_config_class}"
-            )
-
-        # Cross-validate: the "independent" mean draws one value from
-        # each pair's bootstrap draws, so it needs at least two of them.
-        # The per-pair bootstrap always runs; only its size can fall short.
-        if (
-            self.bootstrap_mean_config is not None
-            and self.bootstrap_mean_config.method == "independent"
-            and self.config_of_coefficient.n_resamples < 2
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bootstrap_mean_config method "
-                f"'independent' needs at least 2 per-pair draws "
-                f"(config_of_coefficient.n_resamples >= 2), "
-                f"but n_resamples={self.config_of_coefficient.n_resamples}"
             )
 
     # Public API ------------------------------------------------------------- #

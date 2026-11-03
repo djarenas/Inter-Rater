@@ -426,6 +426,24 @@ class TestWithinRaterShuffleValidation:
             list(within_rater_shuffle(ratings_3x2, n_permutations=0))
 
 
+class TestColumnShuffleRenamed:
+    """The 2.0 name still imports, and a call names the new function."""
+
+    def test_old_name_imports_from_the_package(self):
+        from interrater.analyzers.resampling_functions import column_shuffle  # noqa: F401
+
+    def test_call_names_the_new_function(self, ratings_3x2):
+        from interrater.analyzers.resampling_functions import column_shuffle
+
+        with pytest.raises(TypeError, match=r"renamed within_rater_shuffle\(\) in 2\.1\.0"):
+            column_shuffle(ratings_3x2, n_permutations=1)
+
+    def test_not_listed_as_public(self):
+        import interrater.analyzers.resampling_functions as rf
+
+        assert "column_shuffle" not in rf.__all__
+
+
 class TestWithinRaterShuffleBehavior:
     """Functional tests for within_rater_shuffle."""
 

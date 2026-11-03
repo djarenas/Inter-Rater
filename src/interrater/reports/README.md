@@ -13,7 +13,7 @@ built from that summary so the two cannot drift.
 | Class             | What it records                                          |
 |-------------------|----------------------------------------------------------|
 | `MatchingReport`  | What happened to the strings: nulls, missing markers, repairs, unknowns. Per rater and per subject. |
-| `DropReport`      | What was removed for thinness: which raters, which subjects, in how many passes, and whether the loop converged. |
+| `DropReport`      | What was removed for thinness: which raters, which subjects, and in how many passes. |
 | `DropPass`        | One sweep of the drop loop -- how many raters and subjects fell in that pass. |
 | `CategoryReport`  | Which declared categories were used, which were unused, which are rare (used but too seldom to estimate). |
 | `CleaningReport`  | The composite: all three sub-reports, plus the declared and effective semantics, shapes in and out, and the config that produced it. |

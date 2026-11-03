@@ -15,7 +15,7 @@ Key behaviours:
   values in category range.
 - Subject ids must match row count and must be unique (unless the semantics
   says otherwise).
-- No rater may be entirely idle; no subject may be entirely unrated.
+- No rater may be entirely idle; every subject must be rated at least twice.
 - Arrays are frozen read-only after construction.
 - check_my_balance, check_my_crossing, check_my_pairing delegate to
   array_utils and report structural properties.
@@ -180,7 +180,7 @@ class TestValidationSubjectIds:
 
 
 class TestValidationPresence:
-    """No rater may be entirely idle; no subject entirely unrated."""
+    """No rater may be entirely idle; every subject rated at least twice."""
 
     def test_idle_rater(self, two_cat):
         """A rater who rated nothing at all is rejected."""
@@ -201,6 +201,32 @@ class TestValidationPresence:
         arr[1, :] = EMPTY  # subject1 has no ratings
         with pytest.raises(ValueError, match="rated by nobody"):
             Ratings(arr, simple_semantics)
+
+    def test_subject_rated_once(self, simple_semantics):
+        """A subject rated by one rater joins no comparison either."""
+        arr = SIMPLE_INDEX.copy()
+        arr[2, 1] = EMPTY  # subject2 has one rating
+        with pytest.raises(ValueError, match="1 rated by only one rater"):
+            Ratings(arr, simple_semantics)
+
+    def test_nobody_and_once_in_one_message(self, simple_semantics):
+        arr = SIMPLE_INDEX.copy()
+        arr[1, :] = EMPTY
+        arr[2, 1] = EMPTY
+        with pytest.raises(
+            ValueError, match="1 rated by nobody and 1 rated by only one rater",
+        ):
+            Ratings(arr, simple_semantics)
+
+    def test_two_ratings_is_enough(self, gappy_semantics):
+        """Two of three raters is enough; the third may be absent."""
+        arr = np.array(
+            [[0, 1, EMPTY],
+             [1, EMPTY, 1],
+             [EMPTY, 0, 0]],
+            dtype=INDEX_DTYPE,
+        )
+        assert Ratings(arr, gappy_semantics).n_subjects == 3
 
 
 # -- Structural checks ------------------------------------------------------ #

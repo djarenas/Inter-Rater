@@ -1,4 +1,6 @@
 coefficient_to_compute: 'cohen_kappa'
+# The panel is unbalanced; each pair uses the subjects both raters rated
+balanced_data_only: false
 config_of_coefficient:
   n_resamples: 4000
   alpha: 0.05

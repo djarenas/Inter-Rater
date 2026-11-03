@@ -105,7 +105,7 @@ class WithinSubjectInjector(RaterInjector):
             valid_ratings = row[row != EMPTY]
 
             # Ratings guarantees at least one non-empty per subject
-            # (validate_no_unrated_subjects), but guard defensively.
+            # (validate_subjects_rated_twice), but guard defensively.
             if len(valid_ratings) == 0:
                 raise ValueError(
                     f"{_ERROR_PREFIX}: subject {i} has no valid "

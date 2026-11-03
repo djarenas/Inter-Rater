@@ -6,7 +6,7 @@ from typing import Callable
 
 import numpy as np
 
-from .individual_marginal_analyzer import IndividualMarginalAnalyzer
+from .individual_marginal_analyzer import IndividualMarginalAnalyzer, check_complete
 
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import CongerKappaResult, HypothesisTestResult
@@ -14,12 +14,24 @@ from ..intermediates.data_profiles.balance_profile import BalanceProfile
 from .configs import CongerKappaConfig
 
 from ..intermediates.estimator_parts.estimator_input import EstimatorInput
-from .agreement_functions.individual_marginals import conger_kappa
+from .agreement_functions.individual_marginals import (
+    cohen_kappa_max,
+    conger_kappa,
+    conger_parts,
+    rater_marginals,
+)
+from ..intermediates.data_profiles import AgreementProfile
+from ..intermediates.not_computed import NotComputed
+from ..intermediates.results import AgreementParts
+from ..intermediates.results.analyzer_results.conger_kappa_result import (
+    KAPPA_MAX_NOT_COMPUTED,
+)
 from .resampling_functions.subject_resampling import subject_bootstrap
 from .ci_methods import percentile_ci, bca_ci
 from ..intermediates.results.ci_results import BootstrapCIResult
 
 _ERROR_PREFIX = "[CongerKappaAnalyzer] Error"
+
 
 
 class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
@@ -88,12 +100,13 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def __init__(self, ratings: Ratings, config: CongerKappaConfig) -> None:
         """
-        Initialize Conger's kappa analyzer: validate config.
+        Initialize Conger's kappa analyzer: validate config and data.
 
         Parameters
         ----------
         ratings : Ratings
-            The ratings data to analyze. Must contain at least two raters.
+            The ratings data to analyze. Must contain at least two raters,
+            and every rater must have rated every subject.
         config : CongerKappaConfig
             The analysis configuration for Conger's kappa.
 
@@ -102,7 +115,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         TypeError
             If config is not CongerKappaConfig.
         ValueError
-            If ratings is None.
+            If ratings is None, or any rating is missing (after injection).
         """
         # Call parent __init__ (validates ratings not None, validates config is
         # IndividualMarginalConfig, computes BalanceProfile, builds
@@ -114,6 +127,12 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
 
         # Validate config type
         self._validate_conger_config()
+
+        # Complete data only, checked after any injection
+        try:
+            check_complete(self.ratings.category_index, "Conger's kappa")
+        except ValueError as exc:
+            raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
     # Public API ------------------------------------------------------------- #
 
@@ -149,6 +168,9 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=self._agreement_parts(),
+            kappa_max=self._kappa_max(),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
             ci_method=self.config.ci_method,
         )
 
@@ -188,13 +210,11 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             # Permutation test: shuffle ratings to build null distribution
             from .resampling_functions.permutation_resampling import (
                 within_rater_shuffle,
-                within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
                 "within_rater_shuffle": within_rater_shuffle,
-                "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
 
@@ -262,6 +282,24 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
                 f"{_ERROR_PREFIX}: config must be CongerKappaConfig, "
                 f"got {type(self.config).__name__}"
             )
+
+    def _agreement_parts(self) -> AgreementParts:
+        """
+        Po and Pe from the same function conger_kappa is built from, so the
+        result can check that they rebuild the point estimate.
+        """
+        po, pe = conger_parts(self.estimator_input)
+        return AgreementParts(observed=po, chance=pe, kind="agreement", weighted=False)
+
+    def _kappa_max(self) -> float | NotComputed:
+        """
+        Cohen's ceiling with two raters, where Conger's kappa is Cohen's;
+        NotComputed with more.
+        """
+        if self.estimator_input.category_index.shape[1] != 2:
+            return NotComputed(KAPPA_MAX_NOT_COMPUTED)
+        marginals = rater_marginals(self.estimator_input)
+        return cohen_kappa_max(marginals[0], marginals[1])
 
     def _estimate_from_array(self, category_index: np.ndarray) -> float:
         """

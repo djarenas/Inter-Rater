@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 
 from .. import array_utils as _a
-from ..contracts import EMPTY, MIN_SUBJECTS
+from ..contracts import EMPTY, MIN_RATINGS_PER_SUBJECT, MIN_SUBJECTS
 from ..semantics.ratings_semantics import RatingsSemantics
 
 def _prefix(cls_name: str) -> str:
@@ -158,16 +158,24 @@ def validate_no_idle_raters(
         )
 
 
-def validate_no_unrated_subjects(
+def validate_subjects_rated_twice(
     category_index: np.ndarray, subject_ids: np.ndarray, cls_name: str
 ) -> None:
-    rated   = (category_index != EMPTY).sum(axis=1)
-    unrated = np.flatnonzero(rated == 0)
-    if unrated.size:
+    rated = (category_index != EMPTY).sum(axis=1)
+    short = np.flatnonzero(rated < MIN_RATINGS_PER_SUBJECT)
+    if short.size:
+        unrated = int((rated[short] == 0).sum())
+        once    = short.size - unrated
+        found   = []
+        if unrated:
+            found.append(f"{unrated:,} rated by nobody")
+        if once:
+            found.append(f"{once:,} rated by only one rater")
         raise ValueError(
-            f"{_prefix(cls_name)}: has {unrated.size:,} subject(s) rated by nobody (e.g. "
-            f"{subject_ids[unrated][:3].tolist()}). An all-empty row joins no "
-            f"comparison; drop these in the cleaner."
+            f"{_prefix(cls_name)}: needs at least {MIN_RATINGS_PER_SUBJECT} "
+            f"ratings per subject; has {' and '.join(found)} (e.g. "
+            f"{subject_ids[short][:3].tolist()}). A subject with fewer than two "
+            f"ratings joins no comparison; drop these in the cleaner."
         )
 
 

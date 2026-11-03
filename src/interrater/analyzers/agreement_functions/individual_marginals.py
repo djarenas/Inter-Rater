@@ -179,6 +179,79 @@ def chance_conger(marginals: np.ndarray, weights: Weights | None = None) -> floa
     return pooled - float(marginals.var(axis=0, ddof=1).sum()) / n_raters
 
 
+# Maximum agreement -----------------------------------------------------  #
+
+
+def max_observed_agreement(
+    marginals_a: np.ndarray, marginals_b: np.ndarray, weights: Weights | None = None
+) -> float:
+    """
+    The most observed agreement two raters could reach with these marginals.
+
+    Cohen (1960): when each rater's rates are fixed, agreement cannot exceed
+    the overlap of the two distributions, Sum_j min(p_aj, p_bj). A pair whose
+    rates differ cannot reach kappa = 1 however carefully they rate, and this
+    says how far short they must fall.
+
+    With weights, near misses earn credit too, and the most agreement is the
+    largest weighted agreement of any table whose rows sum to rater a's rates
+    and whose columns sum to rater b's. That is a small transportation
+    problem, solved exactly as a linear program. With identity weights it
+    reduces to the sum of minima, which is used directly.
+
+    Parameters
+    ----------
+    marginals_a, marginals_b : np.ndarray
+        Each rater's proportions over the K categories, summing to 1.
+    weights : Weights | None
+        Agreement weights, 1.0 on the diagonal.
+
+    Returns
+    -------
+    float
+        The maximum of Po.
+    """
+    a = np.asarray(marginals_a, dtype=np.float64)
+    b = np.asarray(marginals_b, dtype=np.float64)
+    if weights is None or weights.is_identity:
+        return float(np.minimum(a, b).sum())
+
+    from scipy.optimize import linprog
+
+    k = a.size
+    # One variable per cell of the K x K table, row-major: x[j, l] at j*K + l
+    rows = np.kron(np.eye(k), np.ones((1, k)))   # Sum_l x[j, l] = a_j
+    cols = np.kron(np.ones((1, k)), np.eye(k))   # Sum_j x[j, l] = b_l
+    solved = linprog(
+        c=-weights.matrix.reshape(-1),
+        A_eq=np.vstack([rows, cols]),
+        b_eq=np.concatenate([a, b]),
+        bounds=(0, None),
+        method="highs",
+    )
+    if not solved.success:
+        raise RuntimeError(
+            f"[max_observed_agreement] the linear program did not solve: "
+            f"{solved.message}"
+        )
+    return float(-solved.fun)
+
+
+def cohen_kappa_max(
+    marginals_a: np.ndarray, marginals_b: np.ndarray, weights: Weights | None = None
+) -> float:
+    """
+    The largest Cohen's kappa these marginals allow (Cohen 1960).
+
+    kappa_max = (Po_max - Pe) / (1 - Pe), with Pe the chance term Cohen's
+    kappa itself uses. Weighted when weights are given.
+    """
+    return agreement_corrected_by_chance(
+        max_observed_agreement(marginals_a, marginals_b, weights),
+        chance_cohen(marginals_a, marginals_b, weights),
+    )
+
+
 # Coefficients -----------------------------------------------------------  #
 
 
@@ -203,16 +276,29 @@ def cohen_kappa(data: EstimatorInput, weights: Weights | None = None) -> float:
     than exceptional: disjoint assignment is a real design, just one that
     cannot produce a pairwise coefficient.
     """
+    return agreement_corrected_by_chance(*cohen_parts(data, weights))
+
+
+def cohen_parts(data: EstimatorInput, weights: Weights | None = None) -> tuple[float, float]:
+    """
+    Po and Pe for Cohen's kappa: the two numbers ``cohen_kappa`` combines.
+
+    Both on the subjects both raters rated, Pe from each rater's marginals on
+    those subjects. (NaN, NaN) when fewer than two subjects are shared, which
+    is when ``cohen_kappa`` is NaN. Kept apart so a result can carry the two
+    terms and check that they rebuild the coefficient; ``cohen_kappa`` is
+    built from this, so the two cannot drift.
+    """
     rows = shared_rows(data, 0, 1)
     if rows.size < 2:
-        return float("nan")
+        return float("nan"), float("nan")
 
     index = data.category_index[rows]
     po    = _observed_pairwise(index, data.n_categories, weights)
 
     marginals = rater_marginals(data, rows)
     pe        = chance_cohen(marginals[0], marginals[1], weights)
-    return agreement_corrected_by_chance(po, pe)
+    return po, pe
 
 
 def conger_kappa(data: EstimatorInput) -> float:
@@ -235,25 +321,31 @@ def conger_kappa(data: EstimatorInput) -> float:
     they diverge the approximation is not holding for that panel, which is
     itself worth knowing.
 
-    Both terms are taken over the subjects rated at least twice, as in every
-    group coefficient: a subject one rater saw alone joins no comparison, so
-    it enters neither the observed agreement nor the raters' marginals. On a
-    full panel that is every subject. On a pair it is the subjects both
-    rated, where Conger's kappa is exactly Cohen's.
+    **Assumes every rater rated every subject, and does not check**, as
+    nothing in this module does. Conger (1980) defines the coefficient for
+    that design: each rater's marginals must come from the same subjects, or
+    their spread measures who saw which subjects rather than how the raters
+    differ. The analysers refuse incomplete data before calling this. On two
+    raters it is exactly Cohen's kappa.
 
     **Takes no weights**, because its weighted form is not implemented. There
     is no parameter to pass one to, which is a TypeError at the call site
     rather than a number that quietly ignored half of what it was given.
     """
+    return agreement_corrected_by_chance(*conger_parts(data))
+
+
+def conger_parts(data: EstimatorInput) -> tuple[float, float]:
+    """
+    Po and Pe for Conger's kappa: the two numbers ``conger_kappa`` combines.
+
+    Assumes complete data, as ``conger_kappa`` does. Kept apart so a result
+    can carry the two terms and check that they rebuild the coefficient;
+    ``conger_kappa`` is built from this, so the two cannot drift.
+    """
     from .group_agreement import observed_agreement
 
-    # Both terms over the same subjects: those rated at least twice, the rule
-    # the group coefficients follow (group_agreement.category_proportions).
-    # observed_agreement already skips the rest, so the marginals must too.
-    compared = np.flatnonzero((data.category_index != EMPTY).sum(axis=1) >= 2)
-    po = observed_agreement(data.nij)
-    pe = chance_conger(rater_marginals(data, compared))
-    return agreement_corrected_by_chance(po, pe)
+    return observed_agreement(data.nij), chance_conger(rater_marginals(data))
 
 
 def light_kappa(data: EstimatorInput) -> float:
@@ -270,10 +362,14 @@ def light_kappa(data: EstimatorInput) -> float:
     it, and comparing the two tells you whether the approximation holds for
     your panel.
 
-    Pairs that share fewer than two subjects produce NaN from ``cohen_kappa``.
-    ``np.nanmean`` excludes those pairs from the mean: the coefficient is the
-    average over the pairs that can be computed. If every pair is NaN (no pair
-    shares at least two subjects), the mean is NaN.
+    **Assumes every rater rated every subject, and does not check**, as
+    nothing in this module does. Light (1971) defines the coefficient for that
+    design; with missing ratings, pairs would be averaged over different
+    subjects. The analysers refuse incomplete data before calling this.
+
+    A pair whose kappa is undefined (every rating in one category, or fewer
+    than two subjects) is NaN from ``cohen_kappa``, and ``np.nanmean`` leaves
+    it out of the mean. If every pair is NaN, the mean is NaN.
 
     **Takes no weights**, following Light (1971). There is no weighted form
     of Light's kappa.
@@ -284,11 +380,27 @@ def light_kappa(data: EstimatorInput) -> float:
         data: Some generalizations and alternatives. Psychological
         Bulletin, 76(5), 365--377.
     """
-    kappas = []
-    for i, j in combinations(range(data.n_raters), 2):
-        pair_data = data.select_raters(np.array([i, j]))
-        kappas.append(cohen_kappa(pair_data))
+    kappas = [
+        agreement_corrected_by_chance(po, pe)
+        for po, pe in light_pair_parts(data).values()
+    ]
     return float(np.nanmean(kappas))
+
+
+def light_pair_parts(data: EstimatorInput) -> dict[tuple[int, int], tuple[float, float]]:
+    """
+    Po and Pe of every pair's Cohen's kappa: what ``light_kappa`` averages.
+
+    Keyed by the pair's column positions, in ``combinations`` order. Assumes
+    complete data, as ``light_kappa`` does. A pair with fewer than two
+    subjects has (NaN, NaN), as in ``cohen_parts``.
+    ``light_kappa`` is built from this, so a result carrying these terms can
+    check that they rebuild it.
+    """
+    return {
+        (i, j): cohen_parts(data.select_raters(np.array([i, j])))
+        for i, j in combinations(range(data.n_raters), 2)
+    }
 
 
 # Helper methods ---------------------------------------------------------  #

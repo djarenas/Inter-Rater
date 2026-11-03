@@ -115,6 +115,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         # injection, and k may count the injected raters too.
         self.ks = self._normalize_ks(config.subset_k, self.ratings.n_raters)
 
+        # The coefficient's own flag, applied to each subset
+        self._check_subsets_balanced()
+
     # Public API --------------------------------------------------------- #
 
     def run(self) -> MultiKSubsetResult:
@@ -148,6 +151,49 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         )
 
     # Private helpers ---------------------------------------------------- #
+
+    def _check_subsets_balanced(self) -> None:
+        """
+        Refuse unbalanced subsets when the coefficient asks for balance.
+
+        ``config_of_coefficient.balanced_data_only`` means what it means in
+        the coefficient's own analyzer -- for Fleiss' kappa, exact formula
+        only -- applied to each subset: the subjects at least two of its
+        raters rated must all have the same number of ratings among them.
+        A balanced panel can still give unbalanced subsets, when subjects
+        went to different raters.
+
+        Raises
+        ------
+        ValueError
+            Naming the first unbalanced subset and how many there are.
+        """
+        if not getattr(self.config.config_of_coefficient, "balanced_data_only", False):
+            return
+        from ..agreement_functions.rater_combinations import rater_subsets
+        from ...contracts import EMPTY
+
+        present = self.ratings.category_index != EMPTY
+        names = [str(r) for r in self.ratings.semantics.raters]
+        unbalanced = []
+        for k in self.ks:
+            for subset in rater_subsets(self.ratings.n_raters, k):
+                counts = present[:, list(subset)].sum(axis=1)
+                counts = counts[counts >= 2]
+                if counts.size and counts.min() != counts.max():
+                    unbalanced.append((subset, int(counts.min()), int(counts.max())))
+        if not unbalanced:
+            return
+        subset, low, high = unbalanced[0]
+        raise ValueError(
+            f"{_ERROR_PREFIX}: config_of_coefficient.balanced_data_only is "
+            f"true, but {len(unbalanced):,} subsets are unbalanced; the first, "
+            f"raters {', '.join(names[r] for r in subset)}, has subjects with "
+            f"{low} to {high} ratings among them. "
+            f"{self.config.coefficient_to_compute} on such a subset is an "
+            f"approximation. Set balanced_data_only: false inside "
+            f"config_of_coefficient to allow it."
+        )
 
     def _normalize_ks(
         self, subset_k: int | list[int] | str, n_raters: int

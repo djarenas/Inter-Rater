@@ -23,6 +23,11 @@ class NijMatrix:
     separately: group coefficients are written around me, and they need me
     to be the thing they read.
 
+    I allow rows with fewer than two ratings. Pairs, subsets and resampling
+    draws build me from part of the data, and a subject can keep only one
+    rating there. Data coming in from outside is held to two ratings per
+    subject by Ratings and by GroupAnalyzer.build_from_nij_matrix, not by me.
+
     Attributes
     ----------
     matrix : np.ndarray

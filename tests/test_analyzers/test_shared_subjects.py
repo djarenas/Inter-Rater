@@ -11,6 +11,8 @@ interval is built around a different quantity from the number it reports.
 Conger's kappa did exactly that before 2.1.0: its observed agreement skipped
 subjects rated once, its chance agreement did not. In one 60-subject
 example a pair's point sat 0.03 away from the centre of its own bootstrap.
+It is now refused on data with missing ratings, so it is tested here only
+for that refusal.
 
 The data is partially crossed on purpose -- 4 raters, about 40% of cells
 empty -- so every pair and subset has subjects only one of its raters saw.
@@ -65,6 +67,15 @@ def _codes() -> np.ndarray:
     return codes[(codes >= 0).sum(axis=1) >= 2]  # every subject compared somewhere
 
 
+def _complete_codes() -> np.ndarray:
+    """As _codes, with every rater rating every subject."""
+    rng = np.random.default_rng(42)
+    truth = rng.integers(0, 3, 80)
+    return np.where(
+        rng.random((80, 4)) < 0.6, truth[:, None], rng.integers(0, 3, (80, 4)),
+    ).astype(np.int8)
+
+
 def _ratings(codes: np.ndarray) -> Ratings:
     return Ratings(
         category_index=codes,
@@ -75,15 +86,23 @@ def _ratings(codes: np.ndarray) -> Ratings:
 def _config(name: str):
     if name not in CONFIGS:
         pytest.fail(f"{name}: no config known here; add it to CONFIGS")
-    # Two resamples: only the point estimate is under test.
-    return CONFIGS[name](n_resamples=2, random_state=42, ci_method="percentile")
+    # Two resamples: only the point estimate is under test. The data is
+    # unbalanced on purpose, so the group coefficients are allowed their
+    # approximation on each subset (Cohen and Conger have no such setting).
+    flag = {} if name in ("cohen_kappa", "conger_kappa") else {"balanced_data_only": False}
+    return CONFIGS[name](n_resamples=2, random_state=42, ci_method="percentile", **flag)
 
 
 def _same(a: float, b: float) -> bool:
     return (np.isnan(a) and np.isnan(b)) or abs(a - b) < 1e-12
 
 
-@pytest.mark.parametrize("name", sorted(PAIRWISE_PERMUTATION_COEFFICIENTS))
+# Conger's kappa refuses data with missing ratings; see the tests at the end
+_PAIRWISE_ON_MISSING = sorted(PAIRWISE_PERMUTATION_COEFFICIENTS - {"conger_kappa"})
+_SUBSET_ON_MISSING = sorted(SUBSET_PERMUTATION_COEFFICIENTS - {"conger_kappa"})
+
+
+@pytest.mark.parametrize("name", _PAIRWISE_ON_MISSING)
 def test_pairwise_point_uses_only_shared_subjects(name):
     codes = _codes()
 
@@ -104,7 +123,7 @@ def test_pairwise_point_uses_only_shared_subjects(name):
         )
 
 
-@pytest.mark.parametrize("name", sorted(SUBSET_PERMUTATION_COEFFICIENTS))
+@pytest.mark.parametrize("name", _SUBSET_ON_MISSING)
 def test_subset_point_uses_only_subjects_rated_twice(name):
     codes = _codes()
 
@@ -129,7 +148,7 @@ def test_subset_point_uses_only_subjects_rated_twice(name):
 
 def test_conger_equals_cohen_on_a_pair():
     """Conger's kappa on two raters is Cohen's: same agreement, same marginals."""
-    codes = _codes()
+    codes = _complete_codes()
 
     def run(name):
         config = C.PairwisePermutationConfig(
@@ -140,3 +159,11 @@ def test_conger_equals_cohen_on_a_pair():
     conger, cohen = run("conger_kappa"), run("cohen_kappa")
     for pair in cohen:
         assert _same(conger[pair], cohen[pair]), pair
+
+
+def test_pairwise_conger_refuses_missing_ratings():
+    config = C.PairwisePermutationConfig(
+        coefficient_to_compute="conger_kappa", config_of_coefficient=_config("conger_kappa"),
+    )
+    with pytest.raises(ValueError, match="Conger's kappa needs every rater to rate every subject"):
+        PairwisePermutationAnalysis(_ratings(_codes()), config)

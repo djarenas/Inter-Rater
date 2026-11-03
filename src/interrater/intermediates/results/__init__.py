@@ -21,6 +21,7 @@ inherit a contract for.
 """
 
 from .analysis_result import AnalysisResult
+from .agreement_parts import AgreementParts
 from .hypothesis_test_result import HypothesisTestResult
 
 from .ci_results import (
@@ -50,6 +51,7 @@ from .permutation_results import (
 
 __all__ = [
     "AnalysisResult",
+    "AgreementParts",
     "CIResult",
     "BootstrapCIResult",
     "ParametricCIResult",

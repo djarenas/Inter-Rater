@@ -10,7 +10,7 @@ import numpy as np
 
 from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..ci_results import BootstrapCIResult
-from .permutation_result import PermutationResult
+from .permutation_result import PermutationResult, coefficient_label
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
@@ -355,33 +355,34 @@ class PairwisePermutationResult(PermutationResult):
 
     def __str__(self) -> str:
         """
-        Return a compact string representation.
+        Return my printed form: the mean, then every pair.
 
-        Format:
-            Pairwise (cohen_kappa): mean = 0.650
-            [0.580, 0.720] (95% CI, bca, n=4000), correlated
-            n_pairs=6; n_subjects=1617; n_raters=4; ci_method=bca
+            Pairwise Cohen's κ, 6 pairs: mean = 0.496 [0.377, 0.605] (95% CI, percentile, n=500), correlated bootstrap
+              199 subjects; 4 raters; each pair on the subjects both raters rated
+                raters      κ  95% CI          subjects
+                0, 1    0.539  [0.383, 0.682]       199
+                ...
 
-        The middle line is the interval printing itself, so a fallback to
-        percentile, a count of failed draws, or a method that never ran at
-        all appears there without this class having to know about any of
-        them.
+        An independent mean adds a "!" line under the first. Above
+        MAX_ROWS_PRINTED pairs, a line points to to_frame() instead of the
+        list. See PermutationResult._printed.
         """
-        ci_line = (
-            f"\n{self.bootstrap_ci_of_mean}, {self.bootstrap_mean_method}"
-            if self.bootstrap_ci_of_mean is not None
-            else ""
+        name, _ = coefficient_label(self.coefficient_name)
+        return self._printed(
+            title=f"Pairwise {name}, {self.n_pairs:,} pairs",
+            mean=self.mean_over_pairs,
+            mean_ci=self.bootstrap_ci_of_mean,
+            mean_method=self.bootstrap_mean_method,
+            unit="pair",
+            units="pairs",
+            pool="the subjects both raters rated",
         )
 
-        return (
-            f"Pairwise ({self.coefficient_name}): "
-            f"mean = {self.mean_over_pairs:.3f}"
-            f"{ci_line}\n"
-            f"n_pairs={self.n_pairs}; "
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"n_raters={self.balance_profile.n_raters}; "
-            f"ci_method={self.ci_method}"
-        )
+    def _units(self) -> list[tuple]:
+        return [
+            (pair, value, self.bootstrap_cis_per_pair[pair], self.subjects_per_pair[pair])
+            for pair, value in self.pairwise_values.items()
+        ]
 
     def get_bootstrap_distributions_per_pair(self) -> dict:
         """

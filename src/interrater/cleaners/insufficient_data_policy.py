@@ -4,26 +4,19 @@ from __future__ import annotations
 
 from ..contracts import MIN_RATINGS_PER_RATER, MIN_RATINGS_PER_SUBJECT
 
-MAX_DROP_PASSES: int = 100
-"""Safety rail on ``method: iterate``.
-
-Each pass only removes rows and columns, so iteration always converges and
-normally stops after two or three. Reaching this limit means something
-pathological is happening, and a result truncated mid-cascade is arbitrary --
-which is why the report says which way the loop ended rather than only how many
-passes it took.
-"""
-
 
 class InsufficientDataPolicy:
     """
     I say how much data is too little, and what to do about it.
 
-    There is extra detail to handle the fact that dropping is not symmetric. 
+    There is extra detail to handle the fact that dropping is not symmetric.
     Removing a rater can push a subject below its
-    threshold, and removing a subject can push a rater below its own, so the
-    order changes the answer. I make that order a declared choice rather than
-    an accident of implementation.
+    threshold, and removing a subject can push a rater below its own, so one
+    sweep is not enough. Sweeps repeat until one drops nothing. What is left is
+    the largest data meeting both minimums, and it is the same whichever axis
+    is swept first, so the order is not a choice. The cascade can run a dataset
+    down to very little -- the report shows each pass so that is visible as a
+    sequence rather than a single surprising total.
 
     My minimums may be raised but never lowered: the floors in ``contracts``
     are what makes a row or column able to participate at all, and below them a
@@ -36,20 +29,12 @@ class InsufficientDataPolicy:
         How many subjects a rater must have rated to be kept.
     min_ratings_per_subject:
         How many raters must have rated a subject for it to be kept.
-    method:
-        ``raters_first`` drops raters, then subjects, once. ``subjects_first``
-        reverses that. ``iterate`` repeats until a pass drops nothing, which
-        can cascade a dataset down to very little -- the report shows each pass
-        so that is visible as a sequence rather than a single surprising total.
     """
 
     # Attributes -------------------------------------------------------------  #
 
     min_ratings_per_rater:   int
     min_ratings_per_subject: int
-    method:                  str
-
-    _METHODS = ("raters_first", "subjects_first", "iterate")
 
     # Constructor ------------------------------------------------------------  #
 
@@ -57,11 +42,19 @@ class InsufficientDataPolicy:
         self,
         min_ratings_per_rater:   int = MIN_RATINGS_PER_RATER,
         min_ratings_per_subject: int = MIN_RATINGS_PER_SUBJECT,
-        method:                  str = "raters_first",
+        method:                  object = None,
     ) -> None:
+        # Removed in 2.1.0; kept as a name so it gets this error, not
+        # "unexpected keyword".
+        if method is not None:
+            raise TypeError(
+                f"{type(self).__name__}.method was removed in 2.1.0 (got "
+                f"{method!r}). Dropping always repeats until nothing more falls "
+                f"below the minimums: the largest data meeting both, whatever "
+                f"the order. Delete the method line."
+            )
         self.min_ratings_per_rater   = min_ratings_per_rater
         self.min_ratings_per_subject = min_ratings_per_subject
-        self.method                  = method
         self._validate()
 
     def _validate(self) -> None:
@@ -86,24 +79,18 @@ class InsufficientDataPolicy:
                     f"deliberate choice, never lowered."
                 )
 
-        if self.method not in self._METHODS:
-            raise ValueError(
-                f"{name}.method must be one of {list(self._METHODS)}, got "
-                f"{self.method!r}. Dropping is not symmetric, so the order is "
-                f"a choice you have to make."
-            )
-
     # Class methods ----------------------------------------------------------  #
 
     @classmethod
     def from_dict(cls, spec: dict) -> InsufficientDataPolicy:
+        # method is passed on so it gets the removed-in-2.1.0 error.
         unknown = sorted(set(spec) - {
             "min_ratings_per_rater", "min_ratings_per_subject", "method"
         })
         if unknown:
             raise ValueError(
                 f"insufficient_data_drops has unknown key(s) {unknown}. Known: "
-                f"min_ratings_per_rater, min_ratings_per_subject, method."
+                f"min_ratings_per_rater, min_ratings_per_subject."
             )
         return cls(**spec)
 
@@ -113,7 +100,6 @@ class InsufficientDataPolicy:
         return (
             self.min_ratings_per_rater == other.min_ratings_per_rater
             and self.min_ratings_per_subject == other.min_ratings_per_subject
-            and self.method == other.method
         )
 
     __hash__ = None  # type: ignore[assignment]
@@ -122,5 +108,5 @@ class InsufficientDataPolicy:
         return (
             f"InsufficientDataPolicy(per_rater="
             f"{self.min_ratings_per_rater}, per_subject="
-            f"{self.min_ratings_per_subject}, method={self.method!r})"
+            f"{self.min_ratings_per_subject})"
         )

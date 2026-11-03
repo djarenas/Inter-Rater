@@ -57,6 +57,14 @@ class PermutationConfig:
         it chooses the procedure ("correlated" or "independent"); the
         draw count, interval method, level and seed are the ones in
         config_of_coefficient.
+    balanced_data_only : bool, default False
+        Whether the whole panel must be balanced, every subject rated the
+        same number of times. False runs on an unbalanced panel: each pair
+        uses the subjects both raters rated, each subset the subjects at
+        least two of its raters rated. True refuses an unbalanced panel
+        before anything runs. This is about the panel; the flag of the
+        same name inside config_of_coefficient is about the coefficient,
+        and is applied to each pair or subset.
     """
 
     # Attribute declaration
@@ -68,6 +76,7 @@ class PermutationConfig:
     # With defaults
     subset_k: int | list | str | None = None
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None = None
+    balanced_data_only: bool = False
 
     # Constructor ------------------------------------------------------------ #
 
@@ -122,6 +131,12 @@ class PermutationConfig:
                     f"'all', or None, "
                     f"got {type(self.subset_k).__name__}"
                 )
+
+        if not isinstance(self.balanced_data_only, bool):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: balanced_data_only must be bool, "
+                f"got {type(self.balanced_data_only).__name__}"
+            )
 
         # Validate bootstrap_mean_config type if provided
         if self.bootstrap_mean_config is not None:
@@ -326,13 +341,14 @@ class PermutationConfig:
         Returns
         -------
         dict
-            Keys: coefficient_to_compute, subset_k,
+            Keys: coefficient_to_compute, subset_k, balanced_data_only,
             config_of_coefficient (nested summary),
             bootstrap_mean_config (nested summary or None).
         """
         result = {
             "coefficient_to_compute": self.coefficient_to_compute,
             "subset_k": self.subset_k,
+            "balanced_data_only": self.balanced_data_only,
             "config_of_coefficient": self.config_of_coefficient.summary(),
             "bootstrap_mean_config": (
                 self.bootstrap_mean_config.summary()

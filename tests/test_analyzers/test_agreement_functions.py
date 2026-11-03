@@ -43,6 +43,8 @@ from interrater.analyzers.agreement_functions.individual_marginals import (
     chance_cohen,
     chance_conger,
     cohen_kappa,
+    cohen_kappa_max,
+    max_observed_agreement,
     conger_kappa,
     light_kappa,
     rater_marginals,
@@ -801,6 +803,52 @@ class TestMeanOverSameSubsets:
 
     def test_empty_list_gives_nan(self):
         assert math.isnan(mean_over_same_subsets({(0, 1): 0.5}, []))
+
+
+class TestKappaMax:
+    """max_observed_agreement and cohen_kappa_max (Cohen 1960)."""
+
+    def test_unweighted_is_the_overlap(self):
+        a = np.array([0.6, 0.3, 0.1])
+        b = np.array([0.2, 0.5, 0.3])
+        assert max_observed_agreement(a, b) == pytest.approx(0.2 + 0.3 + 0.1)
+
+    def test_same_marginals_allow_kappa_one(self):
+        a = np.array([0.6, 0.4])
+        assert cohen_kappa_max(a, a) == pytest.approx(1.0)
+
+    def test_linear_program_matches_the_overlap_for_near_identity_weights(self):
+        """The LP path, with weights a hair away from identity."""
+        a = np.array([0.5, 0.3, 0.2])
+        b = np.array([0.2, 0.2, 0.6])
+        near = Weights(matrix=np.eye(3) + 1e-6 * (1 - np.eye(3)))
+        assert not near.is_identity
+        assert max_observed_agreement(a, b, near) == pytest.approx(
+            max_observed_agreement(a, b), abs=1e-5
+        )
+
+    def test_weighted_two_categories(self):
+        """K = 2, off-diagonal credit w: Po_max = overlap + w * (1 - overlap)."""
+        a = np.array([0.7, 0.3])
+        b = np.array([0.4, 0.6])
+        w = 0.5
+        weights = Weights(matrix=np.array([[1.0, w], [w, 1.0]]))
+        overlap = 0.4 + 0.3
+        assert max_observed_agreement(a, b, weights) == pytest.approx(
+            overlap + w * (1 - overlap)
+        )
+
+    @pytest.mark.parametrize("weighting", [None, "linear", "quadratic"])
+    def test_kappa_never_exceeds_kappa_max(self, weighting):
+        """Any real table with these marginals is a candidate, so kappa <= kappa_max."""
+        rng = np.random.default_rng(42)
+        weights = None if weighting is None else getattr(Weights, weighting)(4)
+        for _ in range(25):
+            index = rng.integers(0, 4, size=(30, 2)).astype(np.int8)
+            data = EstimatorInput(category_index=index, n_categories=4)
+            marg = rater_marginals(data)
+            kappa = cohen_kappa(data, weights)
+            assert kappa <= cohen_kappa_max(marg[0], marg[1], weights) + 1e-9
 
 
 # ========================================================================== #

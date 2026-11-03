@@ -5,6 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import numpy as np
+
+from ..contracts import EMPTY
 from .analyzer import Analyzer
 
 if TYPE_CHECKING:
@@ -16,6 +19,48 @@ if TYPE_CHECKING:
     from .configs import IndividualMarginalConfig
 
 _ERROR_PREFIX = "[IndividualMarginalAnalyzer] Error"
+
+# Who defined each coefficient for complete data, for the refusal message
+_COMPLETE_DATA_SOURCES = {
+    "Conger's kappa": "Conger 1980",
+    "Light's kappa": "Light 1971",
+}
+
+
+def check_complete(category_index: np.ndarray, coefficient: str) -> None:
+    """
+    Refuse ratings where some rater did not rate some subject.
+
+    Conger's and Light's kappas are defined for complete data: every rater
+    rates every subject. One place for the rule and its message, used by
+    their analyzers and by the permutation analyses.
+
+    Parameters
+    ----------
+    category_index : np.ndarray
+        The ratings, EMPTY where a rater did not rate a subject.
+    coefficient : str
+        "Conger's kappa" or "Light's kappa", as the message names it.
+
+    Raises
+    ------
+    ValueError
+        If any rating is missing, saying how many and what to use instead.
+    """
+    missing = category_index == EMPTY
+    if not missing.any():
+        return
+    raise ValueError(
+        f"{coefficient} needs every rater to rate every subject "
+        f"({_COMPLETE_DATA_SOURCES[coefficient]}); these data have "
+        f"{int(missing.sum()):,} missing ratings in "
+        f"{int(missing.any(axis=1).sum()):,} subjects. For data with missing "
+        f"ratings use Fleiss' kappa (exact when every subject has the same "
+        f"number of ratings, an approximation otherwise with "
+        f"balanced_data_only: false), Gwet's AC1, Brennan-Prediger or "
+        f"Krippendorff's alpha, or Cohen's kappa pair by pair in a pairwise "
+        f"permutation analysis."
+    )
 
 
 class IndividualMarginalAnalyzer(Analyzer, ABC):

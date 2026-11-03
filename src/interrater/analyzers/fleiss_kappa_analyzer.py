@@ -16,12 +16,21 @@ from ..intermediates.results.ci_results import (
 )
 from .configs import FleissKappaConfig
 
-from .agreement_functions.group_agreement import fleiss_kappa
+from .agreement_functions.group_agreement import (
+    chance_fleiss,
+    fleiss_kappa,
+    observed_agreement,
+)
 from .ci_methods import percentile_ci, bca_ci
 from ..array_utils import category_counts
 
 from ..intermediates.estimator_parts import NijMatrix, Weights
-from ..intermediates.data_profiles import BalanceProfile
+from ..intermediates.data_profiles import AgreementProfile, BalanceProfile
+from ..intermediates.not_computed import NotComputed
+from ..intermediates.results import AgreementParts
+from ..intermediates.results.analyzer_results.fleiss_kappa_result import (
+    KAPPA_MAX_NOT_COMPUTED,
+)
 
 _ERROR_PREFIX = "[FleissKappaAnalyzer] Error"
 
@@ -225,6 +234,9 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             confidence_interval=ci,
             balance_profile=self.balance_profile,
             bootstrap_distribution=bootstrap_distribution,
+            parts=self._agreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
             weight_matrix=self._weight_matrix(),
@@ -293,6 +305,9 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             confidence_interval=ci,
             balance_profile=self.balance_profile,
             bootstrap_distribution=bootstrap_distribution,
+            parts=self._agreement_parts(self.nij_matrix.matrix),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
             weight_matrix=self._weight_matrix(),
@@ -373,13 +388,11 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             # Select permutation scheme
             from .resampling_functions.permutation_resampling import (
                 within_rater_shuffle,
-                within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
                 "within_rater_shuffle": within_rater_shuffle,
-                "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
 
@@ -501,6 +514,21 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         -- is written once on my base classes in terms of this.
         """
         return fleiss_kappa(NijMatrix(matrix=nij_array), weights=self.weights)
+
+    def _agreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+        """
+        Po and Pe on the counts the point estimate was computed from.
+
+        The same two functions fleiss_kappa combines, so the result can check
+        that they rebuild the point estimate.
+        """
+        nij = NijMatrix(matrix=nij_array)
+        return AgreementParts(
+            observed=observed_agreement(nij, self.weights),
+            chance=chance_fleiss(nij, self.weights),
+            kind="agreement",
+            weighted=self.weights is not None and not self.weights.is_identity,
+        )
 
     def _parametric_null_ci(
         self, point: float, pj: np.ndarray

@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .individual_marginal_result import IndividualMarginalResult
+from ...not_computed import NotComputed
+from ..agreement_parts import AgreementParts
+from .individual_marginal_result import (
+    IndividualMarginalResult,
+    _same,
+    _unweighted_pair_kappa_max,
+)
 
 if TYPE_CHECKING:
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[CohenKappaResult] Error"
 
@@ -37,6 +46,13 @@ class CohenKappaResult(IndividualMarginalResult):
     on the Ratings object the caller passed in. I describe what the data said,
     not who said it.
 
+    My parts are Po and Pe, weighted exactly when I am, and kappa_max is
+    always computed: two raters' marginals cap their agreement (Cohen 1960).
+    I check both against the two raters' marginals in my agreement profile:
+    Pe is Sum_j p_aj p_bj (p_a W p_b when weighted), and unweighted
+    kappa_max is built from Sum_j min(p_aj, p_bj). The weighted maximum
+    needs a linear program, so it is checked only through kappa <= kappa_max.
+
     References
     ----------
     Cohen, J. (1960). A coefficient of agreement for nominal scales.
@@ -49,13 +65,21 @@ class CohenKappaResult(IndividualMarginalResult):
     ----------
     point : float
         Cohen's kappa (inherited from PointEstimateResult).
-    confidence_interval : tuple[float, float] | None
+    confidence_interval : CIResult | None
         Bootstrap or parametric confidence interval (inherited).
     bootstrap_distribution : np.ndarray | None
         Bootstrap distribution (inherited).
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Always populated for
         Cohen's kappa. n_subjects available via balance_profile.n_subjects.
+    parts : AgreementParts
+        Po and Pe (inherited). Always computed for Cohen's kappa.
+    kappa_max : float
+        The largest kappa these two raters' marginals allow (inherited).
+        NaN when kappa itself is undefined.
+    agreement_profile : AgreementProfile
+        Prevalence, the two raters' marginals, specific agreement, and the
+        prevalence and bias indices for two categories (inherited).
     ci_method : str
         Method used: "percentile", "bca", or "parametric_null".
     weights_type : str
@@ -72,9 +96,12 @@ class CohenKappaResult(IndividualMarginalResult):
     # Inherited from IndividualMarginalResult (which validates
     # balance_profile is not None and n_raters is not None)
     point: float
-    confidence_interval: tuple[float, float] | None
+    confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | None
     balance_profile: BalanceProfile | None
+    parts: AgreementParts
+    kappa_max: float
+    agreement_profile: AgreementProfile
 
     # Populated at this level
     ci_method: str
@@ -132,25 +159,70 @@ class CohenKappaResult(IndividualMarginalResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        self._check_parts_fit_cohen()
+
+    def _check_parts_fit_cohen(self) -> None:
+        """Po, Pe and kappa_max fit the two raters' marginals."""
+        if self.balance_profile.n_raters != 2:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: Cohen's kappa is for one pair of raters, "
+                f"got {self.balance_profile.n_raters}"
+            )
+        if not isinstance(self.parts, AgreementParts) or self.parts.kind != "agreement":
+            raise TypeError(
+                f"{_ERROR_PREFIX}: parts must be agreement parts (Po and Pe), "
+                f"got {self.parts!r}"
+            )
+        weighted = self.weights_type != "identity"
+        if self.parts.weighted != weighted:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: parts.weighted is {self.parts.weighted} but "
+                f"weights_type is '{self.weights_type}'"
+            )
+        if isinstance(self.kappa_max, NotComputed):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: kappa_max must be computed for Cohen's "
+                f"kappa: two raters' marginals always cap it (Cohen 1960)"
+            )
+        if math.isnan(self.point):
+            return
+
+        p_a, p_b = self._marginal_rows()
+        if not weighted:
+            pe = float((p_a * p_b).sum())
+        elif self.weight_matrix is not None:
+            pe = float(p_a @ np.asarray(self.weight_matrix, dtype=float) @ p_b)
+        else:
+            return
+        if not _same(pe, self.parts.chance):
+            raise ValueError(
+                f"{_ERROR_PREFIX}: Pe is {self.parts.chance:.6f}, but the "
+                f"raters' marginals in the agreement profile give {pe:.6f}; "
+                f"the parts and the profile describe different data"
+            )
+        if not weighted:
+            ceiling = _unweighted_pair_kappa_max(p_a, p_b)
+            if not _same(ceiling, self.kappa_max):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: kappa_max is {self.kappa_max:.6f}, but "
+                    f"the raters' marginals allow {ceiling:.6f}"
+                )
+
     # Public API ------------------------------------------------------------- #
 
-    def __str__(self) -> str:
-        """
-        Return a compact string representation with coefficient name.
+    # Printed form: see PointEstimateResult.__str__ ----------------------- #
 
-        Format:
-            Cohen's κ = 0.723 (95% CI: [0.681, 0.765], n_bootstrap=1000)
-            n_subjects=50; unweighted; ci_method=percentile
-        """
-        parent_str = super().__str__()
-        weight_label = (
-            "unweighted" if self.weights_type == "identity"
-            else f"weighted ({self.weights_type})"
-        )
+    def _name(self) -> str:
+        return "Cohen's κ"
+
+    def _kappa_max_note(self) -> str:
+        note = super()._kappa_max_note()
+        return note if note == "κ_max undefined" else f"{note} (these raters' marginals)"
+
+    def _data_line(self) -> str:
         return (
-            f"Cohen's κ {parent_str}\n"
-            f"n_subjects={self.balance_profile.n_subjects}; {weight_label}; "
-            f"ci_method={self.ci_method}"
+            f"{self._subjects_phrase()}; "
+            f"{self._weights_phrase(self.weights_type)}"
         )
 
     def summary(self) -> dict:

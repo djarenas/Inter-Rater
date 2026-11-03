@@ -6,14 +6,21 @@ from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
+from .agreement_functions.group_agreement import chance_gwet_ac1, observed_agreement
 from .group_analyzer import GroupAnalyzer
+from ..intermediates.data_profiles import AgreementProfile
+from ..intermediates.estimator_parts import NijMatrix
+from ..intermediates.not_computed import NotComputed
+from ..intermediates.results import AgreementParts
+from ..intermediates.results.analyzer_results.gwets_ac1_result import (
+    KAPPA_MAX_NOT_COMPUTED,
+)
 from ..intermediates.results.ci_results import BootstrapCIResult
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates.results import HypothesisTestResult, GwetsAC1Result
     from ..intermediates.data_profiles import BalanceProfile
-    from ..intermediates.estimator_parts import NijMatrix
     from .configs import GwetAC1Config
 
 _ERROR_PREFIX = "[GwetAC1Analyzer] Error"
@@ -212,6 +219,9 @@ class GwetAC1Analyzer(GroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=self._agreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
             ci_method=self.config.ci_method,
         )
 
@@ -270,6 +280,9 @@ class GwetAC1Analyzer(GroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=self._agreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
             ci_method=self.config.ci_method,
         )
     
@@ -300,7 +313,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
         from .agreement_functions.group_agreement import gwet_ac1
         from .resampling_functions.permutation_resampling import (
             within_rater_shuffle,
-            within_subject_shuffle,
             pool_and_redistribute,
         )
         from ..array_utils import category_counts
@@ -335,7 +347,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
         # Select permutation scheme
         scheme_map = {
             "within_rater_shuffle": within_rater_shuffle,
-            "within_subject": within_subject_shuffle,
             "pool_and_redistribute": pool_and_redistribute,
         }
         permute_fn = scheme_map.get(ht_config.scheme)
@@ -410,6 +421,21 @@ class GwetAC1Analyzer(GroupAnalyzer):
         from ..intermediates.estimator_parts import NijMatrix
 
         return gwet_ac1(NijMatrix(matrix=nij_array))
+
+    def _agreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+        """
+        Po and Pe on the counts the point estimate was computed from.
+
+        The same two functions gwet_ac1 combines, so the result can check
+        that they rebuild the point estimate.
+        """
+        nij = NijMatrix(matrix=nij_array)
+        return AgreementParts(
+            observed=observed_agreement(nij),
+            chance=chance_gwet_ac1(nij),
+            kind="agreement",
+            weighted=False,
+        )
 
     def _compute_ci(
         self,

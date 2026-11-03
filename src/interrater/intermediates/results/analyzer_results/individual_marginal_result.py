@@ -2,17 +2,39 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ...not_computed import NotComputed
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
+    from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[IndividualMarginalResult] Error"
+_TOL = 1e-9
+
+
+def _same(a: float, b: float) -> bool:
+    """Equal within tolerance, NaN equal only to NaN."""
+    if math.isnan(a) or math.isnan(b):
+        return math.isnan(a) and math.isnan(b)
+    return abs(a - b) <= _TOL
+
+
+def _unweighted_pair_kappa_max(p_a: np.ndarray, p_b: np.ndarray) -> float:
+    """
+    Cohen's (1960) ceiling for one pair, from their marginals: Po can be at
+    most Sum_j min(p_aj, p_bj), and Pe is Sum_j p_aj p_bj.
+    """
+    pe = float((p_a * p_b).sum())
+    if np.isclose(pe, 1.0):
+        return float("nan")
+    return (float(np.minimum(p_a, p_b).sum()) - pe) / (1.0 - pe)
 
 
 @dataclass(frozen=True)
@@ -32,7 +54,12 @@ class IndividualMarginalResult(PointEstimateResult):
     that constraint here: balance_profile must not be None, and
     balance_profile.n_raters must not be None.
 
-    I exist so that these two guards are written once instead of repeated
+    For the same reason my agreement profile must carry each rater's
+    marginals, one row per rater in my balance profile: they are what my
+    children's chance terms are built from, and they check their parts
+    against them.
+
+    I exist so that these guards are written once instead of repeated
     on every leaf. Downstream code can also check
     isinstance(result, IndividualMarginalResult) to know the coefficient
     came from rater-identity-aware analysis.
@@ -41,8 +68,8 @@ class IndividualMarginalResult(PointEstimateResult):
     ----------
     point : float
         The coefficient value (inherited from PointEstimateResult).
-    confidence_interval : tuple[float, float] | None
-        Bootstrap confidence interval (lower, upper) (inherited).
+    confidence_interval : CIResult | None
+        The interval, bootstrap or parametric (inherited).
     bootstrap_distribution : np.ndarray | None
         Bootstrap distribution (inherited).
     balance_profile : BalanceProfile
@@ -55,7 +82,7 @@ class IndividualMarginalResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: tuple[float, float] | None
+    confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | None
     balance_profile: BalanceProfile | None
 
@@ -89,3 +116,25 @@ class IndividualMarginalResult(PointEstimateResult):
             super().__post_init__()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
+        # Each rater's marginals, one row per rater
+        marginals = self.agreement_profile.rater_marginals
+        if isinstance(marginals, NotComputed):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: agreement_profile.rater_marginals must be "
+                f"computed for individual marginal coefficients (rater "
+                f"identity required), got {marginals}"
+            )
+        if len(marginals) != self.balance_profile.n_raters:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: agreement_profile has marginals for "
+                f"{len(marginals)} raters but balance_profile has "
+                f"{self.balance_profile.n_raters}"
+            )
+
+    def _marginal_rows(self) -> np.ndarray:
+        """Each rater's marginals from my profile, shape (n_raters, K)."""
+        return np.array([
+            list(row.values())
+            for row in self.agreement_profile.rater_marginals.values()
+        ], dtype=float)

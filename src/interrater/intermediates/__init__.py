@@ -4,6 +4,7 @@ from .results import AnalysisResult
 from .results.analyzer_results import PointEstimateResult, FleissKappaResult
 from .data_profiles import BalanceProfile
 from .estimator_parts import NijMatrix, Weights, EstimatorInput
+from .not_computed import NotComputed
 
 __all__ = [
     "AnalysisResult",
@@ -13,4 +14,5 @@ __all__ = [
     "NijMatrix",
     "Weights",
     "EstimatorInput",
+    "NotComputed",
 ]

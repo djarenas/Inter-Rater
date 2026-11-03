@@ -13,6 +13,8 @@ from .subject_resampling import (
 )
 from .rater_resampling import rater_jackknife, rater_subset
 from .permutation_resampling import within_rater_shuffle, within_subject_shuffle, pool_and_redistribute
+# Renamed within_rater_shuffle in 2.1.0; importable so a call says so
+from .permutation_resampling import column_shuffle
 
 __all__ = [
     "subject_bootstrap",

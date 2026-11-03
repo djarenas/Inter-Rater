@@ -17,9 +17,13 @@ from ..intermediates.estimator_parts import Weights
 from ..intermediates.estimator_parts.estimator_input import EstimatorInput
 from .agreement_functions.individual_marginals import (
     cohen_kappa,
+    cohen_kappa_max,
+    cohen_parts,
     rater_marginals,
     shared_rows,
 )
+from ..intermediates.data_profiles import AgreementProfile
+from ..intermediates.results import AgreementParts
 from .resampling_functions.subject_resampling import subject_bootstrap
 from .ci_methods import percentile_ci, bca_ci
 from ..intermediates.results.ci_results import (
@@ -173,6 +177,9 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=self._agreement_parts(),
+            kappa_max=self._kappa_max(),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
             weight_matrix=self._weight_matrix(),
@@ -250,13 +257,11 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             # Permutation test: shuffle ratings to build null distribution
             from .resampling_functions.permutation_resampling import (
                 within_rater_shuffle,
-                within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
                 "within_rater_shuffle": within_rater_shuffle,
-                "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
 
@@ -378,6 +383,31 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         rows = shared_rows(self.estimator_input, 0, 1)
         marginals = rater_marginals(self.estimator_input, rows)
         return marginals[0], marginals[1]
+
+    def _agreement_parts(self) -> AgreementParts:
+        """
+        Po and Pe from the same function cohen_kappa is built from, so the
+        result can check that they rebuild the point estimate.
+        """
+        po, pe = cohen_parts(self.estimator_input, self.weights)
+        return AgreementParts(
+            observed=po,
+            chance=pe,
+            kind="agreement",
+            weighted=self.weights is not None and not self.weights.is_identity,
+        )
+
+    def _kappa_max(self) -> float:
+        """
+        The largest kappa the two raters' marginals allow (Cohen 1960).
+
+        NaN when fewer than two subjects are shared, where kappa itself is
+        NaN: there is no coefficient for it to bound.
+        """
+        if self._get_n_subjects() < 2:
+            return float("nan")
+        p_a, p_b = self._compute_marginals()
+        return cohen_kappa_max(p_a, p_b, self.weights)
 
     def _estimate_from_array(self, category_index: np.ndarray) -> float:
         """

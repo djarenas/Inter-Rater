@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .permutation_result import PermutationResult
+from .permutation_result import (
+    INDEPENDENT_MEAN_CAVEAT,
+    PermutationResult,
+    coefficient_label,
+    interval_notes,
+    raters_phrase,
+)
 from .subset_permutation_result import SubsetPermutationResult
 
 if TYPE_CHECKING:
@@ -191,55 +197,59 @@ class MultiKSubsetResult(PermutationResult):
 
     def __str__(self) -> str:
         """
-        Return a compact multi-line string representation.
+        Return my printed form: one line per k.
 
-        Format (single k):
-            MultiK Subset (fleiss_kappa, ks=[3]):
-              k=3: mean=0.650 (10 subsets)
-            n_subjects=100; n_raters=5; ci_method=percentile
+            Subsets, Fleiss' κ: 199 subjects, 4 raters
+              k=2   6 subsets   mean 0.492 [0.367, 0.601]
+              k=3   4 subsets   mean 0.493 [0.370, 0.600]
+              k=4   1 subset    mean 0.493 [0.372, 0.600]
+              intervals: 95% CI, percentile, n=300, correlated bootstrap
 
-        Format (multiple k):
-            MultiK Subset (fleiss_kappa, ks=[2, 3, 4]):
-              k=2: mean=0.720 (10 subsets)
-              k=3: mean=0.650 (10 subsets, 95% CI: [0.580, 0.720])
-              k=4: mean=0.610 (5 subsets, no CI: every draw failed)
-            n_subjects=100; n_raters=5; ci_method=percentile
-
-        A k whose bootstrap ran and produced nothing says so, rather than
-        printing like a k that was never bootstrapped. Failed draws are
-        named when there are any, since a mean interval computed from a
-        fraction of its draws is not the same claim as one computed from
-        all of them.
+        Each k's full list prints from print(result.per_k_results[k]). A k
+        whose bootstrap ran and produced nothing says so, rather than
+        printing like a k that was never bootstrapped, and failed draws or a
+        fallback are named on that k's line: an interval from a fraction of
+        its draws is not the same claim as one from all of them. An
+        independent mean adds the "!" line.
         """
-        lines = [
-            f"MultiK Subset ({self.coefficient_name}, ks={self.ks}):"
-        ]
+        name, _ = coefficient_label(self.coefficient_name)
+        bp = self.balance_profile
+        lines = [f"Subsets, {name}: {bp.n_subjects:,} subjects, {raters_phrase(bp)}"]
 
+        first_ci, method = None, None
+        rows = []
         for k in self.ks:
             r = self.per_k_results[k]
-            line = f"  k={k}: mean={r.mean_over_subsets:.3f} ({r.n_subsets} subsets"
+            word = "subset" if r.n_subsets == 1 else "subsets"
             mean_ci = r.bootstrap_ci_of_mean
-            if mean_ci is not None:
-                if mean_ci.is_defined:
-                    line += (
-                        f", {mean_ci.confidence_level:.0%} CI: "
-                        f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
-                    )
-                    if mean_ci.n_failed:
-                        line += f", {mean_ci.n_failed} failed"
-                else:
-                    line += ", no CI: every draw failed"
-            if r.bootstrap_mean_method is not None:
-                line += f", {r.bootstrap_mean_method}"
-            line += ")"
-            lines.append(line)
+            if mean_ci is None:
+                interval = ""
+            elif not mean_ci.is_defined:
+                interval = "no CI: every draw failed"
+            else:
+                interval = f"[{mean_ci.lower:.3f}, {mean_ci.upper:.3f}]"
+                notes = interval_notes(mean_ci)
+                if notes:
+                    interval += f"  {'; '.join(notes)}"
+            if mean_ci is not None and first_ci is None:
+                first_ci, method = mean_ci, r.bootstrap_mean_method
+            rows.append((f"k={k}", f"{r.n_subsets:,} {word}", f"mean {r.mean_over_subsets:.3f}", interval))
 
-        lines.append(
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"n_raters={self.balance_profile.n_raters}; "
-            f"ci_method={self.ci_method}"
-        )
+        widths = [max(len(row[i]) for row in rows) for i in range(3)]
+        for row in rows:
+            cells = [f"{row[i]:<{widths[i]}}" for i in range(3)] + ([row[3]] if row[3] else [])
+            lines.append("  " + "   ".join(cells).rstrip())
 
+        if first_ci is None:
+            lines.append("  no interval for the mean")
+        else:
+            lines.append(
+                f"  intervals: {first_ci.confidence_level:.0%} CI, "
+                f"{first_ci.method_intended}, n={first_ci.n_resamples}, "
+                f"{method} bootstrap"
+            )
+            if method == "independent":
+                lines.append(f"  ! {INDEPENDENT_MEAN_CAVEAT}")
         return "\n".join(lines)
 
     def summary(self) -> dict:

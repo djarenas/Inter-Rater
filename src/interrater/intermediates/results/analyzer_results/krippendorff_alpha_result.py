@@ -4,15 +4,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
 import numpy as np
 
+from ...not_computed import NotComputed
+from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
-
+    from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[KrippendorffAlphaResult] Error"
+
+# Why kappa_max is not computed for me. The analyzer passes it in.
+KAPPA_MAX_NOT_COMPUTED = (
+    "Krippendorff's alpha takes expected disagreement from all ratings "
+    "pooled, so perfect agreement is always possible and the maximum is "
+    "always 1"
+)
 
 
 @dataclass(frozen=True)
@@ -44,17 +55,31 @@ class KrippendorffAlphaResult(PointEstimateResult):
     unweighted alpha are different statistics with different
     interpretations. A result must be self-describing.
 
+    My parts are Do and De, the observed and expected disagreement, and
+    they are weighted exactly when I am. Unlike the kappa family, De is not
+    checked against my agreement profile: De pools every pairable rating,
+    while the profile's shares are averaged per subject, and the two differ
+    on unbalanced data. kappa_max is always NotComputed.
+
     Attributes
     ----------
     point : float
         Krippendorff's alpha (inherited from PointEstimateResult).
-    confidence_interval : tuple[float, float] | None
-        Bootstrap confidence interval (lower, upper) (inherited).
+    confidence_interval : CIResult | None
+        The bootstrap interval (inherited).
     bootstrap_distribution : np.ndarray | None
         Bootstrap distribution (inherited).
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Informational only --
         alpha handles both balanced and unbalanced data exactly.
+    parts : AgreementParts
+        Do and De, kind "disagreement" (inherited). Always computed for
+        alpha.
+    kappa_max : NotComputed
+        Always NotComputed, with KAPPA_MAX_NOT_COMPUTED as the reason
+        (inherited).
+    agreement_profile : AgreementProfile
+        Prevalence, rater marginals, specific agreement (inherited).
     ci_method : str
         Method used: "percentile" or "bca".
     weights_type : str
@@ -70,9 +95,12 @@ class KrippendorffAlphaResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: tuple[float, float] | None
+    confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | None
     balance_profile: BalanceProfile | None
+    parts: AgreementParts
+    kappa_max: NotComputed
+    agreement_profile: AgreementProfile
 
     # Populated at this level
     ci_method: str
@@ -136,33 +164,49 @@ class KrippendorffAlphaResult(PointEstimateResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        self._check_parts_fit_alpha()
+
+    def _check_parts_fit_alpha(self) -> None:
+        """Do and De are always there, weighted as I am."""
+        if not isinstance(self.parts, AgreementParts) or self.parts.kind != "disagreement":
+            raise TypeError(
+                f"{_ERROR_PREFIX}: parts must be disagreement parts (Do and "
+                f"De), got {self.parts!r}"
+            )
+        weighted = self.weights_type != "identity"
+        if self.parts.weighted != weighted:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: parts.weighted is {self.parts.weighted} but "
+                f"weights_type is '{self.weights_type}'"
+            )
+        if not isinstance(self.kappa_max, NotComputed):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: kappa_max must be NotComputed for "
+                f"Krippendorff's alpha ({KAPPA_MAX_NOT_COMPUTED}), "
+                f"got {self.kappa_max!r}"
+            )
+
     # Public API -------------------------------------------------------------  #
 
-    def __str__(self) -> str:
-        """
-        Return a compact string representation with coefficient name and context.
+    # Printed form: see PointEstimateResult.__str__ ----------------------- #
 
-        Format:
-            Krippendorff's alpha = 0.625 (95% CI: [0.551, 0.681], n_bootstrap=4000)
-            n_subjects=100; n_raters=5; unweighted; ci_method=bca; exact formula
-        or (unbalanced):
-            Krippendorff's alpha = 0.625 (95% CI: [0.551, 0.681], n_bootstrap=4000)
-            n_subjects=100; n_raters=5; unweighted; ci_method=bca; exact formula (unbalanced data)
-        """
-        parent_str = super().__str__()
-        weight_label = (
-            "unweighted" if self.weights_type == "identity"
-            else f"weighted ({self.weights_type})"
+    def _name(self) -> str:
+        return "Krippendorff's α"
+
+    def _kappa_max_note(self) -> str:
+        return "κ_max not computed (pooled ratings)"
+
+    def _data_line(self) -> str:
+        # Alpha is exact on unbalanced data too. Said so explicitly, so that
+        # a reader used to Fleiss' "approximation (unbalanced data)" does not
+        # assume the same here.
+        exact = (
+            "exact formula" if self.balance_profile.is_balanced
+            else "exact formula (unbalanced data)"
         )
-        if self.balance_profile.is_balanced:
-            balance_str = "exact formula"
-        else:
-            balance_str = "exact formula (unbalanced data)"
         return (
-            f"Krippendorff's alpha {parent_str}\n"
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"{self.balance_profile.n_raters_display}; {weight_label}; "
-            f"ci_method={self.ci_method}; {balance_str}"
+            f"{self._subjects_phrase()}; {self._raters_phrase()}; "
+            f"{self._weights_phrase(self.weights_type)}; {exact}"
         )
 
     def summary(self) -> dict:

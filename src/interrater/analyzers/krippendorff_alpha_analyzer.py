@@ -6,14 +6,25 @@ from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
+from .agreement_functions.krippendorff import (
+    expected_disagreement,
+    observed_disagreement,
+)
 from .weightable_group_analyzer import WeightableGroupAnalyzer
+from ..intermediates.data_profiles import AgreementProfile
+from ..intermediates.estimator_parts import NijMatrix
+from ..intermediates.not_computed import NotComputed
+from ..intermediates.results import AgreementParts
+from ..intermediates.results.analyzer_results.krippendorff_alpha_result import (
+    KAPPA_MAX_NOT_COMPUTED,
+)
 from ..intermediates.results.ci_results import BootstrapCIResult
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates.results import HypothesisTestResult, KrippendorffAlphaResult
     from ..intermediates.data_profiles import BalanceProfile
-    from ..intermediates.estimator_parts import NijMatrix, Weights
+    from ..intermediates.estimator_parts import Weights
     from .configs import KrippendorffAlphaConfig
 
 _ERROR_PREFIX = "[KrippendorffAlphaAnalyzer] Error"
@@ -228,6 +239,9 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=self._disagreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
             weight_matrix=self._weight_matrix(),
@@ -288,6 +302,9 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=self._disagreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
             weight_matrix=self._weight_matrix(),
@@ -323,7 +340,6 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         from .agreement_functions.krippendorff import krippendorff_alpha
         from .resampling_functions.permutation_resampling import (
             within_rater_shuffle,
-            within_subject_shuffle,
             pool_and_redistribute,
         )
         from ..array_utils import category_counts
@@ -360,7 +376,6 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         # Select permutation scheme
         scheme_map = {
             "within_rater_shuffle": within_rater_shuffle,
-            "within_subject": within_subject_shuffle,
             "pool_and_redistribute": pool_and_redistribute,
         }
         permute_fn = scheme_map.get(ht_config.scheme)
@@ -434,6 +449,21 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
 
         return krippendorff_alpha(
             NijMatrix(matrix=nij_array), weights=self.weights
+        )
+
+    def _disagreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+        """
+        Do and De on the counts the point estimate was computed from.
+
+        The same two functions krippendorff_alpha combines, so the result can
+        check that they rebuild the point estimate.
+        """
+        nij = NijMatrix(matrix=nij_array)
+        return AgreementParts(
+            observed=observed_disagreement(nij, self.weights),
+            chance=expected_disagreement(nij, self.weights),
+            kind="disagreement",
+            weighted=self.weights is not None and not self.weights.is_identity,
         )
 
     def _compute_ci(

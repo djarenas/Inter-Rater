@@ -101,7 +101,6 @@ unused_categories: 'error'
 insufficient_data_drops:
     min_ratings_per_rater:   2
     min_ratings_per_subject: 2
-    method:                  iterate
 ```
 
 Then:
@@ -144,7 +143,8 @@ Matching
     matched    : 'o' 0
 
 Drops
-    nothing dropped (iterate)
+    rule       : at least 2 ratings per rater and 2 per subject
+    no raters or subjects dropped
 
 Categories
     used       : 1 13%, 0 4%, -1 83%

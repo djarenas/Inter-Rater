@@ -4,15 +4,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
 import numpy as np
 
+from ...not_computed import NotComputed
+from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
-
+    from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[BrennanPredigerResult] Error"
+_TOL = 1e-9
+
+# Why kappa_max is not computed for me. The analyzer passes it in.
+KAPPA_MAX_NOT_COMPUTED = (
+    "Brennan-Prediger's chance term is fixed by the number of categories, "
+    "so perfect agreement is always possible and the maximum is always 1"
+)
 
 
 @dataclass(frozen=True)
@@ -35,17 +46,29 @@ class BrennanPredigerResult(PointEstimateResult):
     unweighted Brennan-Prediger are different statistics with different
     interpretations. A result must be self-describing.
 
+    My parts are Po and Pe, weighted exactly when I am. Pe depends only on
+    the categories: 1/K unweighted, sum(W)/K^2 with my weight matrix -- so I
+    check it against the K in my agreement profile. kappa_max is always
+    NotComputed: a fixed chance term puts no limit below 1 on agreement.
+
     Attributes
     ----------
     point : float
         Brennan-Prediger coefficient (inherited from PointEstimateResult).
-    confidence_interval : tuple[float, float] | None
-        Bootstrap confidence interval (lower, upper) (inherited).
+    confidence_interval : CIResult | None
+        The bootstrap interval (inherited).
     bootstrap_distribution : np.ndarray | None
         Bootstrap distribution (inherited).
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
+    parts : AgreementParts
+        Po and Pe (inherited). Always computed for Brennan-Prediger.
+    kappa_max : NotComputed
+        Always NotComputed, with KAPPA_MAX_NOT_COMPUTED as the reason
+        (inherited).
+    agreement_profile : AgreementProfile
+        Prevalence, rater marginals, specific agreement (inherited).
     ci_method : str
         Method used: "percentile" or "bca".
     weights_type : str
@@ -61,9 +84,12 @@ class BrennanPredigerResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: tuple[float, float] | None
+    confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | None
     balance_profile: BalanceProfile | None
+    parts: AgreementParts
+    kappa_max: NotComputed
+    agreement_profile: AgreementProfile
 
     # Populated at this level
     ci_method: str
@@ -127,27 +153,63 @@ class BrennanPredigerResult(PointEstimateResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        self._check_parts_fit_brennan_prediger()
+
+    def _check_parts_fit_brennan_prediger(self) -> None:
+        """Po and Pe are always there, weighted as I am, Pe from K."""
+        if not isinstance(self.parts, AgreementParts) or self.parts.kind != "agreement":
+            raise TypeError(
+                f"{_ERROR_PREFIX}: parts must be agreement parts (Po and Pe), "
+                f"got {self.parts!r}"
+            )
+        weighted = self.weights_type != "identity"
+        if self.parts.weighted != weighted:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: parts.weighted is {self.parts.weighted} but "
+                f"weights_type is '{self.weights_type}'"
+            )
+        if not isinstance(self.kappa_max, NotComputed):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: kappa_max must be NotComputed for "
+                f"Brennan-Prediger ({KAPPA_MAX_NOT_COMPUTED}), "
+                f"got {self.kappa_max!r}"
+            )
+        k = len(self.agreement_profile.category_names)
+        if not weighted:
+            pe, formula = 1.0 / k, f"1/K with K = {k}"
+        elif self.weight_matrix is not None:
+            matrix = np.asarray(self.weight_matrix, dtype=float)
+            if matrix.shape != (k, k):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: weight_matrix is {matrix.shape[0]}x"
+                    f"{matrix.shape[1]} but the agreement profile has {k} "
+                    f"categories"
+                )
+            pe, formula = float(matrix.sum()) / (k * k), "sum(W)/K^2"
+        else:
+            return
+        if abs(pe - self.parts.chance) > _TOL:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: Pe is {self.parts.chance:.6f}, but "
+                f"{formula} is {pe:.6f}; the parts and the profile describe "
+                f"different categories"
+            )
+
     # Public API -------------------------------------------------------------  #
 
-    def __str__(self) -> str:
-        """
-        Return a compact string representation with coefficient name and context.
+    # Printed form: see PointEstimateResult.__str__ ----------------------- #
 
-        Format:
-            Brennan-Prediger = 0.835 (95% CI: [0.764, 0.919], n_bootstrap=4000)
-            n_subjects=100; n_raters=5; unweighted; ci_method=bca; exact formula
-        """
-        parent_str = super().__str__()
-        weight_label = (
-            "unweighted" if self.weights_type == "identity"
-            else f"weighted ({self.weights_type})"
-        )
-        exact_str = "exact formula" if self.is_exact else "approximation (unbalanced data)"
+    def _name(self) -> str:
+        return "Brennan-Prediger"
+
+    def _kappa_max_note(self) -> str:
+        return "κ_max not computed (fixed chance term)"
+
+    def _data_line(self) -> str:
+        exact = "exact formula" if self.is_exact else "approximation (unbalanced data)"
         return (
-            f"Brennan-Prediger {parent_str}\n"
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"{self.balance_profile.n_raters_display}; {weight_label}; "
-            f"ci_method={self.ci_method}; {exact_str}"
+            f"{self._subjects_phrase()}; {self._raters_phrase()}; "
+            f"{self._weights_phrase(self.weights_type)}; {exact}"
         )
 
     def summary(self) -> dict:

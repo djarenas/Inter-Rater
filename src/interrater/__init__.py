@@ -22,6 +22,7 @@ from interrater.cleaners.insufficient_data_policy import InsufficientDataPolicy
 from interrater.cleaners.ratings_cleaner import RatingsCleaner
 
 from interrater.intermediates.estimator_parts import (Weights, NijMatrix)
+from interrater.intermediates.not_computed import NotComputed
 
 from interrater.analyzers import FleissKappaAnalyzer, ScottsAnalyzer, GwetAC1Analyzer, BrennanPredigerAnalyzer, KrippendorffAlphaAnalyzer, CohenKappaAnalyzer, CongerKappaAnalyzer, LightKappaAnalyzer
 from interrater.analyzers.permutation_analysis import PairwisePermutationAnalysis, SubsetPermutationAnalysis
@@ -132,8 +133,10 @@ __all__ = [
     "SubsetPermutationConfig",
     "Weights",
     "NijMatrix",
-    # Bootstrap of the mean over rater combinations: "correlated" (default,
-    # resamples subjects once per draw) or "independent"
+    # Stands in for a value that does not apply, with the reason
+    "NotComputed",
+    # Bootstrap of the mean over rater combinations: "correlated"
+    # (resamples subjects once per draw) or "independent"
     "PermutationBootstrapMeanConfig",
     # Hypothesis testing against H0: coefficient = 0
     "HypothesisTestConfig",

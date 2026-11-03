@@ -64,8 +64,6 @@ class TestDropReportDefaults:
 
     def test_defaults(self, drops_nothing):
         r = drops_nothing
-        assert r.method == "raters_first"
-        assert r.converged is True
         assert r.passes == ()
         assert r.dropped_raters == {}
         assert r.dropped_subject_ids == ()
@@ -97,8 +95,8 @@ class TestDropReportSummary:
     def test_keys(self, drops_some):
         s = drops_some.summary()
         expected = {
-            "method", "min_ratings_per_rater", "min_ratings_per_subject",
-            "converged", "n_passes", "passes",
+            "min_ratings_per_rater", "min_ratings_per_subject",
+            "n_passes", "passes",
             "n_raters_dropped", "n_subjects_dropped",
             "dropped_raters", "dropped_subject_ids",
             "dropped_subject_distribution",
@@ -129,12 +127,12 @@ class TestDropReportRender:
     def test_nothing_dropped_shortcut(self, drops_nothing):
         """Says what was checked, and that nobody of either kind fell below it."""
         text = drops_nothing.render()
-        assert "rule       : at least 2 ratings per rater and 2 per subject (raters_first)" in text
+        assert "    rule       : at least 2 ratings per rater and 2 per subject" in text.splitlines()
         assert "no raters or subjects dropped" in text
 
     def test_rule_shown_when_something_dropped(self, drops_some):
         text = drops_some.render()
-        assert "rule       : at least 2 ratings per rater and 2 per subject (" in text
+        assert "rule       : at least 2 ratings per rater and 2 per subject (settled after 1 pass)" in text
 
     def test_rule_in_summary(self, drops_some):
         s = drops_some.summary()
@@ -149,9 +147,7 @@ class TestDropReportRender:
     def test_full_shows_pass_detail(self):
         """Full verbosity shows per-pass breakdown when there are multiple."""
         r = DropReport(
-            method="iterate",
             min_ratings_per_rater=2, min_ratings_per_subject=2,
-            converged=True,
             passes=(DropPass(1, 1, 0), DropPass(2, 0, 3), DropPass(3, 0, 0)),
             dropped_raters={"carol": 1},
             dropped_subject_ids=("a", "b", "c"),
@@ -166,22 +162,9 @@ class TestDropReportRender:
         assert "doc_E" in text
         assert "doc_F" in text
 
-    def test_non_converged_text(self):
-        r = DropReport(
-            method="iterate",
-            min_ratings_per_rater=2, min_ratings_per_subject=2,
-            converged=False,
-            passes=(DropPass(1, 0, 5),),
-            dropped_subject_ids=tuple(f"s{i}" for i in range(5)),
-            dropped_subject_distribution={1: 5},
-        )
-        text = r.render()
-        assert "STOPPED AT THE PASS LIMIT" in text
-
     def test_subject_ids_with_ints(self):
         """Integer subject IDs render without error (widened type)."""
         r = DropReport(
-            method="raters_first",
             min_ratings_per_rater=2, min_ratings_per_subject=2,
             passes=(DropPass(1, 0, 2),),
             dropped_subject_ids=(0, 1),
@@ -195,7 +178,6 @@ class TestDropReportRender:
         """Only the first 3 raters are shown, with a +N more suffix."""
         raters = {f"r{i}": i + 1 for i in range(5)}
         r = DropReport(
-            method="raters_first",
             min_ratings_per_rater=2, min_ratings_per_subject=2,
             passes=(DropPass(1, 5, 0),),
             dropped_raters=raters,
@@ -506,7 +488,7 @@ class TestCleaningReportProperties:
             shape_in=(0, 2),
             shape_out=(0, 2),
             matching=MatchingReport(n_cells=0, n_null=0),
-            drops=DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2),
+            drops=DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2),
             categories=CategoryReport(counts={"a": 0, "b": 0}, policy="keep"),
         )
         assert r.survived == 0.0
@@ -541,7 +523,7 @@ class TestCleaningReportProperties:
             shape_in=(4, 2),
             shape_out=(4, 2),
             matching=MatchingReport(n_cells=8, n_null=0),
-            drops=DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2),
+            drops=DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2),
             categories=CategoryReport(
                 counts={"a": 4, "b": 4, "c": 0},
                 policy="drop",
@@ -653,7 +635,7 @@ class TestCleaningReportRender:
             shape_in=(4, 2),
             shape_out=(4, 2),
             matching=MatchingReport(n_cells=8, n_null=0),
-            drops=DropReport(method="raters_first", min_ratings_per_rater=2, min_ratings_per_subject=2),
+            drops=DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2),
             categories=CategoryReport(
                 counts={"a": 4, "b": 4, "c": 0},
                 policy="drop",
@@ -735,7 +717,7 @@ class TestReportWording:
 
     def test_pass_lines_say_what_was_removed(self):
         r = DropReport(
-            method="iterate", min_ratings_per_rater=2, min_ratings_per_subject=2,
+            min_ratings_per_rater=2, min_ratings_per_subject=2,
             passes=(DropPass(1, 1, 0), DropPass(2, 0, 0)),
             dropped_raters={"carol": 1},
         )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -14,7 +13,6 @@ if TYPE_CHECKING:
     from .hypothesis_test_config import HypothesisTestConfig
 
 _ERROR_PREFIX = "[CongerKappaConfig] Error"
-_WARNING_PREFIX = "[CongerKappaConfig] Warning"
 
 @dataclass(frozen=True)
 class CongerKappaConfig(NoWeightIndividualConfig):
@@ -48,7 +46,14 @@ class CongerKappaConfig(NoWeightIndividualConfig):
 
     Attributes
     ----------
-    (all fields inherited from NoWeightIndividualConfig and parents)
+    balanced_data_only : bool, default True
+        Must be True. The field exists so that every coefficient config
+        accepts the same keys, and a config moved here from Fleiss' kappa
+        is told why False does not apply instead of failing on an unknown
+        key. Conger's kappa has no approximation for missing ratings: the
+        analyzer requires every rater to rate every subject, which is
+        stricter than balanced.
+    (all other fields inherited from NoWeightIndividualConfig and parents)
     """
 
     # Attribute declaration
@@ -65,7 +70,9 @@ class CongerKappaConfig(NoWeightIndividualConfig):
     rater_jackknife: bool
     # Inherited from parent class NoWeightIndividualConfig (validated to stay at defaults)
     # Populated at this level
-    balanced_data_only: bool = True # Must always be True. The variable exists in the class so that if someone feeds a YAML with a true value the config takes it and does not complain.
+    # Must be True. Exists so that every coefficient config accepts the same
+    # keys, and a config moved here is told why False does not apply.
+    balanced_data_only: bool = True
      
 
     # Constructor ------------------------------------------------------------ #
@@ -83,13 +90,14 @@ class CongerKappaConfig(NoWeightIndividualConfig):
             raise TypeError(f"{_ERROR_PREFIX}: balanced_data_only must be bool")
 
         if not self.balanced_data_only:
-            # Bypass the frozen dataclass and warn
-            object.__setattr__(self, "balanced_data_only", True)
-            warnings.warn(
-                f"{_WARNING_PREFIX}: Conger's kappa requires balanced data. "
-                f"balanced_data_only has been set to True.",
-                UserWarning,
-                stacklevel=2,
+            raise ValueError(
+                f"{_ERROR_PREFIX}: balanced_data_only: false is not available "
+                f"for Conger's kappa. It has no approximation for missing "
+                f"ratings: every rater must rate every subject (Conger 1980). "
+                f"For data with missing ratings use Fleiss' kappa with "
+                f"balanced_data_only: false, Gwet's AC1, Brennan-Prediger or "
+                f"Krippendorff's alpha, or Cohen's kappa pair by pair in a "
+                f"pairwise permutation analysis."
             )
 
 

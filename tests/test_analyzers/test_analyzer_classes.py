@@ -791,15 +791,6 @@ class TestParametricNullNeedsItsAssumptions:
         with pytest.raises(ValueError, match="unweighted null variance"):
             FleissKappaAnalyzer(_three_cat_ratings(3, ordered=True), self._configs(FleissKappaConfig)[which])
 
-    def test_scott_unbalanced_refused_with_the_right_reason(self):
-        """It used to fail by dividing by zero, blaming 'all ratings in one category'."""
-        from interrater.analyzers import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        config = self._configs(ScottsConfig, balanced_data_only=False)[1]
-        with pytest.raises(ValueError, match="same number of raters; these data have 1 to 2"):
-            ScottsAnalyzer(_three_cat_ratings(2, unbalanced=True), config)
-
     @pytest.mark.parametrize("which", [0, 1], ids=["interval", "test"])
     def test_balanced_unweighted_fleiss_still_runs(self, which):
         from interrater.analyzers import FleissKappaAnalyzer
@@ -1441,3 +1432,322 @@ class TestParametricNullDisclosure:
             FleissKappaAnalyzer(_make_ratings(3), config).estimate()
 
         assert not [w for w in caught if "parametric" in str(w.message).lower()]
+
+
+# ------------------------------------------------------------------ #
+# What each result is made of                                          #
+# ------------------------------------------------------------------ #
+
+
+class TestResultsCarryTheirParts:
+    """
+    Every result carries Po and Pe (or why not), kappa_max (or why not) and
+    the agreement profile. The result checks them against its point
+    estimate and each other; these tests check the analyzers fill them in
+    the same way from ratings and from counts.
+    """
+
+    @staticmethod
+    def _both_paths(analyzer_cls, config, ratings, nij):
+        from_ratings = analyzer_cls(ratings, config).estimate()
+        from_counts = analyzer_cls.build_from_nij_matrix(nij, config).estimate_from_nij_matrix()
+        return from_ratings, from_counts
+
+    @staticmethod
+    def _assert_same_parts(a, b):
+        assert a.parts.observed == pytest.approx(b.parts.observed, abs=1e-12)
+        assert a.parts.chance == pytest.approx(b.parts.chance, abs=1e-12)
+        assert a.parts.weighted == b.parts.weighted
+        # Counts carry no category names, so compare the shares in order
+        assert list(a.agreement_profile.prevalence.values()) == pytest.approx(
+            list(b.agreement_profile.prevalence.values())
+        )
+
+    def test_fleiss_1971_po_and_pe(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+        """Fleiss (1971) reports P = 0.556 and Pe = 0.220 for Table 1."""
+        from interrater import NotComputed
+        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        config = FleissKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        a, b = self._both_paths(
+            FleissKappaAnalyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
+        )
+        assert a.parts.observed == pytest.approx(0.556, abs=5e-4)
+        assert a.parts.chance == pytest.approx(0.220, abs=5e-4)
+        assert not a.parts.weighted
+        self._assert_same_parts(a, b)
+        for result in (a, b):
+            assert isinstance(result.kappa_max, NotComputed)
+            assert "pooled" in result.kappa_max.reason
+        assert isinstance(a.agreement_profile.rater_marginals, dict)
+        assert isinstance(b.agreement_profile.rater_marginals, NotComputed)
+
+    def test_weighted_fleiss_parts_say_weighted(self):
+        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+
+        config = FleissKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        result = FleissKappaAnalyzer(_three_cat_ratings(3, ordered=True), config).estimate()
+        assert result.weights_type == "linear"
+        assert result.parts.weighted
+        assert result.parts.reproduces(result.point)
+
+    def test_scott_parts(self, two_rater_ratings, two_rater_nij_matrix):
+        from interrater import NotComputed
+        from interrater.analyzers import ScottsAnalyzer
+        from interrater.analyzers.configs import ScottsConfig
+        from interrater.intermediates.data_profiles import PrevalenceBiasIndex
+
+        config = ScottsConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        a, b = self._both_paths(ScottsAnalyzer, config, two_rater_ratings, two_rater_nij_matrix)
+        self._assert_same_parts(a, b)
+        assert not a.parts.weighted
+        assert isinstance(a.kappa_max, NotComputed)
+        # Two raters, two categories: both indices from ratings, PI only from counts
+        assert isinstance(a.agreement_profile.prevalence_bias, PrevalenceBiasIndex)
+        assert isinstance(b.agreement_profile.prevalence_bias.bias_index, NotComputed)
+
+    def test_gwet_parts(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+        """Same Po as Fleiss' kappa on the same data; only Pe differs."""
+        from interrater import NotComputed
+        from interrater.analyzers import GwetAC1Analyzer
+        from interrater.analyzers.configs import GwetAC1Config
+
+        config = GwetAC1Config(n_resamples=10, random_state=42, ci_method="percentile")
+        a, b = self._both_paths(
+            GwetAC1Analyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
+        )
+        self._assert_same_parts(a, b)
+        assert a.parts.observed == pytest.approx(0.556, abs=5e-4)
+        assert not a.parts.weighted
+        assert isinstance(a.kappa_max, NotComputed)
+
+    def test_brennan_prediger_parts(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+        from interrater.analyzers import BrennanPredigerAnalyzer
+        from interrater.analyzers.configs import BrennanPredigerConfig
+
+        config = BrennanPredigerConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        a, b = self._both_paths(
+            BrennanPredigerAnalyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
+        )
+        self._assert_same_parts(a, b)
+        assert a.parts.chance == pytest.approx(1 / 5)
+
+    def test_weighted_brennan_prediger_parts(self):
+        from interrater.analyzers import BrennanPredigerAnalyzer
+        from interrater.analyzers.configs import BrennanPredigerConfig
+
+        config = BrennanPredigerConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        result = BrennanPredigerAnalyzer(_three_cat_ratings(3, ordered=True), config).estimate()
+        assert result.parts.weighted
+        assert result.parts.chance == pytest.approx(np.sum(result.weight_matrix) / 9)
+        assert result.parts.reproduces(result.point)
+
+    def test_krippendorff_parts(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+        from interrater import NotComputed
+        from interrater.analyzers import KrippendorffAlphaAnalyzer
+        from interrater.analyzers.configs import KrippendorffAlphaConfig
+
+        config = KrippendorffAlphaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        a, b = self._both_paths(
+            KrippendorffAlphaAnalyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
+        )
+        self._assert_same_parts(a, b)
+        assert a.parts.kind == "disagreement"
+        assert not a.parts.weighted
+        assert isinstance(a.kappa_max, NotComputed)
+
+    def test_weighted_krippendorff_parts(self):
+        from interrater.analyzers import KrippendorffAlphaAnalyzer
+        from interrater.analyzers.configs import KrippendorffAlphaConfig
+
+        config = KrippendorffAlphaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        result = KrippendorffAlphaAnalyzer(_three_cat_ratings(3, ordered=True), config).estimate()
+        assert result.parts.weighted
+        assert result.parts.reproduces(result.point)
+
+    def test_krippendorff_parts_on_unbalanced_data(self):
+        """Where De and the profile's shares part ways; the parts still rebuild alpha."""
+        from interrater.analyzers import KrippendorffAlphaAnalyzer
+        from interrater.analyzers.configs import KrippendorffAlphaConfig
+
+        config = KrippendorffAlphaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        result = KrippendorffAlphaAnalyzer(_three_cat_ratings(3, unbalanced=True), config).estimate()
+        assert not result.balance_profile.is_balanced
+        assert result.parts.reproduces(result.point)
+
+    def test_cohen_parts_and_ceiling(self, two_rater_ratings):
+        from interrater.analyzers import CohenKappaAnalyzer
+        from interrater.analyzers.configs import CohenKappaConfig
+
+        config = CohenKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        result = CohenKappaAnalyzer(two_rater_ratings, config).estimate()
+        p_a, p_b = (
+            np.array(list(row.values()))
+            for row in result.agreement_profile.rater_marginals.values()
+        )
+        assert result.parts.chance == pytest.approx(float((p_a * p_b).sum()))
+        pe = result.parts.chance
+        assert result.kappa_max == pytest.approx((np.minimum(p_a, p_b).sum() - pe) / (1 - pe))
+        assert result.point <= result.kappa_max
+
+    def test_weighted_cohen_ceiling_from_the_linear_program(self):
+        from interrater.analyzers import CohenKappaAnalyzer
+        from interrater.analyzers.agreement_functions import cohen_kappa_max
+        from interrater.analyzers.configs import CohenKappaConfig
+
+        config = CohenKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        analyzer = CohenKappaAnalyzer(_three_cat_ratings(2, ordered=True), config)
+        result = analyzer.estimate()
+        p_a, p_b = analyzer._compute_marginals()
+        assert result.parts.weighted
+        assert result.kappa_max == pytest.approx(cohen_kappa_max(p_a, p_b, analyzer.weights))
+        assert result.point <= result.kappa_max
+
+    def test_conger_pair_gets_cohens_ceiling(self, two_rater_ratings):
+        from interrater.analyzers import CohenKappaAnalyzer, CongerKappaAnalyzer
+        from interrater.analyzers.configs import CohenKappaConfig, CongerKappaConfig
+
+        cohen = CohenKappaAnalyzer(
+            two_rater_ratings, CohenKappaConfig(n_resamples=10, random_state=42, ci_method="percentile"),
+        ).estimate()
+        conger = CongerKappaAnalyzer(
+            two_rater_ratings, CongerKappaConfig(n_resamples=10, random_state=42, ci_method="percentile"),
+        ).estimate()
+        assert conger.point == pytest.approx(cohen.point)
+        assert conger.parts.chance == pytest.approx(cohen.parts.chance)
+        assert conger.kappa_max == pytest.approx(cohen.kappa_max)
+
+    def test_conger_panel_has_no_ceiling(self, three_rater_ratings):
+        from interrater import NotComputed
+        from interrater.analyzers import CongerKappaAnalyzer
+        from interrater.analyzers.configs import CongerKappaConfig
+
+        config = CongerKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        result = CongerKappaAnalyzer(three_rater_ratings, config).estimate()
+        assert isinstance(result.kappa_max, NotComputed)
+        assert "3 or more raters" in result.kappa_max.reason
+        assert result.parts.reproduces(result.point)
+
+    def test_light_pairs(self, three_rater_ratings):
+        """Each pair's kappa is Cohen's on that pair; their mean is Light's."""
+        from interrater import NotComputed
+        from interrater.analyzers import LightKappaAnalyzer
+        from interrater.analyzers.agreement_functions import cohen_kappa
+        from interrater.analyzers.configs import LightKappaConfig
+
+        config = LightKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+        analyzer = LightKappaAnalyzer(three_rater_ratings, config)
+        result = analyzer.estimate()
+        assert isinstance(result.parts, NotComputed)
+        assert isinstance(result.kappa_max, NotComputed)
+        kappas = []
+        for n, (pair, parts) in enumerate(result.pair_parts.items()):
+            i, j = [(0, 1), (0, 2), (1, 2)][n]
+            pair_data = analyzer.estimator_input.select_raters(np.array([i, j]))
+            assert parts.coefficient() == pytest.approx(cohen_kappa(pair_data))
+            assert parts.coefficient() <= result.pair_kappa_max[pair] + 1e-12
+            kappas.append(parts.coefficient())
+        assert result.point == pytest.approx(np.mean(kappas))
+
+
+class TestCongerNeedsCompleteData:
+    """Conger (1980): every rater rates every subject; anything else is refused."""
+
+    @staticmethod
+    def _config():
+        from interrater.analyzers.configs import CongerKappaConfig
+
+        return CongerKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+
+    def test_missing_ratings_refused(self):
+        from interrater.analyzers import CongerKappaAnalyzer
+
+        ratings = _three_cat_ratings(3, unbalanced=True)  # five subjects lose a rater
+        with pytest.raises(ValueError, match="5 missing ratings in 5 subjects") as caught:
+            CongerKappaAnalyzer(ratings, self._config())
+        message = str(caught.value)
+        assert message.startswith("[CongerKappaAnalyzer] Error")
+        assert "Conger 1980" in message
+        assert "Krippendorff's alpha" in message
+        assert "pairwise permutation" in message
+        assert "balanced_data_only: false" in message
+
+    def test_balanced_but_incomplete_refused(self):
+        """Same number of ratings per subject, different raters: still refused."""
+        from interrater import EMPTY
+        from interrater.analyzers import CongerKappaAnalyzer
+
+        e = EMPTY
+        index = np.array([[0, 0, e], [1, e, 1], [e, 1, 0], [1, 1, e]], dtype=np.int8)
+        semantics = RatingsSemantics(raters=3, categories=UnorderedCategories(("a", "b")))
+        with pytest.raises(ValueError, match="4 missing ratings in 4 subjects"):
+            CongerKappaAnalyzer(Ratings(category_index=index, semantics=semantics), self._config())
+
+    def test_complete_data_runs(self):
+        from interrater.analyzers import CongerKappaAnalyzer
+
+        result = CongerKappaAnalyzer(_three_cat_ratings(3), self._config()).estimate()
+        assert result.balance_profile.fill_rate == 1.0
+
+
+class TestLightNeedsCompleteData:
+    """Light (1971): every rater rates every subject; anything else is refused."""
+
+    @staticmethod
+    def _config():
+        from interrater.analyzers.configs import LightKappaConfig
+
+        return LightKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
+
+    def test_missing_ratings_refused(self):
+        from interrater.analyzers import LightKappaAnalyzer
+
+        ratings = _three_cat_ratings(3, unbalanced=True)  # five subjects lose a rater
+        with pytest.raises(ValueError, match="5 missing ratings in 5 subjects") as caught:
+            LightKappaAnalyzer(ratings, self._config())
+        message = str(caught.value)
+        assert message.startswith("[LightKappaAnalyzer] Error")
+        assert "Light 1971" in message
+        assert "pairwise permutation" in message
+
+    def test_balanced_but_incomplete_refused(self):
+        """Same number of ratings per subject, different raters: still refused."""
+        from interrater import EMPTY
+        from interrater.analyzers import LightKappaAnalyzer
+
+        e = EMPTY
+        index = np.array([[0, 0, e], [1, e, 1], [e, 1, 0], [1, 1, e]], dtype=np.int8)
+        semantics = RatingsSemantics(raters=3, categories=UnorderedCategories(("a", "b")))
+        with pytest.raises(ValueError, match="4 missing ratings in 4 subjects"):
+            LightKappaAnalyzer(Ratings(category_index=index, semantics=semantics), self._config())
+
+    def test_complete_data_runs(self):
+        from interrater.analyzers import LightKappaAnalyzer
+
+        result = LightKappaAnalyzer(_three_cat_ratings(3), self._config()).estimate()
+        assert result.balance_profile.fill_rate == 1.0
+
+
+class TestCountsNeedTwoRatings:
+    """
+    build_from_nij_matrix holds counts to the rule Ratings holds ratings to:
+    every subject rated at least twice. Every group coefficient reaches it
+    through GroupAnalyzer.build_from_nij_matrix.
+    """
+
+    @pytest.mark.parametrize("name", [
+        "FleissKappa", "Scotts", "GwetAC1", "BrennanPrediger", "KrippendorffAlpha",
+    ])
+    def test_rows_rated_fewer_than_twice_refused(self, name):
+        import interrater.analyzers as analyzers
+        import interrater.analyzers.configs as configs
+
+        analyzer = getattr(analyzers, f"{name}Analyzer")
+        config = getattr(configs, f"{name}Config")(balanced_data_only=False)
+        nij = NijMatrix(np.array([[2, 0], [1, 0], [0, 0], [1, 1]]))
+        with pytest.raises(
+            ValueError, match="1 rated by nobody and 1 rated by only one rater",
+        ):
+            analyzer.build_from_nij_matrix(nij, config)

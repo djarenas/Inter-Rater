@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -14,7 +13,6 @@ if TYPE_CHECKING:
     from ...injectors import InjectorConfig
 
 _ERROR_PREFIX = "[CohenKappaConfig] Error"
-_WARNING_PREFIX = "[CohenKappaConfig] Warning"
 
 @dataclass(frozen=True)
 class CohenKappaConfig(WeightableIndividualConfig):
@@ -49,9 +47,12 @@ class CohenKappaConfig(WeightableIndividualConfig):
 
     Attributes
     ----------
-    balanced_data_only: bool, default True
-        Must always be True. The variable exists in the class so that if someone feeds a YAML with a true value
-        the config takes it and does not complain.
+    balanced_data_only : bool, default True
+        Must be True. The field exists so that every coefficient config
+        accepts the same keys, and a config moved here from Fleiss' kappa
+        is told why False does not apply instead of failing on an unknown
+        key. Cohen's kappa is always computed on the subjects both raters
+        rated, which is exact, so there is no approximation to allow.
     (all other fields inherited from WeightableIndividualConfig and parents)
     """
 
@@ -86,13 +87,11 @@ class CohenKappaConfig(WeightableIndividualConfig):
             raise TypeError(f"{_ERROR_PREFIX}: balanced_data_only must be bool")
 
         if not self.balanced_data_only:
-            # Bypass the frozen dataclass and warn
-            object.__setattr__(self, "balanced_data_only", True)
-            warnings.warn(
-                f"{_WARNING_PREFIX}: Cohen's kappa requires balanced data. "
-                f"balanced_data_only has been set to True.",
-                UserWarning,
-                stacklevel=2,
+            raise ValueError(
+                f"{_ERROR_PREFIX}: balanced_data_only: false is not available "
+                f"for Cohen's kappa. It is always computed on the subjects both "
+                f"raters rated, which is exact, so there is no approximation "
+                f"to allow. Set it to true or remove the line."
             )
 
         # Cohen has a published closed-form null variance (Fleiss, Cohen &

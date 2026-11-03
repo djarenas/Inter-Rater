@@ -256,6 +256,26 @@ whether the approximation holds for a particular panel.
 Takes no weights, following Light (1971).
 
 
+### The most agreement the marginals allow (kappa_max)
+
+When each rater's rates are fixed, observed agreement cannot exceed the
+overlap of their distributions, Sum_j min(p_aj, p_bj) (Cohen 1960). So a pair
+whose rates differ cannot reach kappa = 1 however carefully they rate.
+``cohen_kappa_max`` puts that ceiling on the kappa scale,
+(Po_max - Pe) / (1 - Pe), using Cohen's own chance term.
+
+With weights, near misses earn credit too. The most agreement is then the
+largest weighted agreement of any table whose rows match rater a's rates and
+whose columns match rater b's: a small transportation problem, solved exactly
+as a linear program by ``max_observed_agreement``. With identity weights it is
+the sum of minima, used directly.
+
+It is defined for coefficients whose chance term uses each rater's own
+marginals: Cohen's kappa, and each pair in Light's. Conger's kappa with three
+or more raters has no standard closed form for it, and coefficients that pool
+the marginals (Fleiss, Scott) or do not use them (Gwet, Brennan-Prediger) have
+nothing for it to say.
+
 ## Krippendorff's alpha
 
 Alpha is built the other way up. Where the kappa family measures agreement and

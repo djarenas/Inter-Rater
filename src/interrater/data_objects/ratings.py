@@ -23,8 +23,8 @@ class Ratings:
     array that does.
 
     My constructor raises rather than repair. Anything holding me may assume my
-    values are in range, my shape matches what my semantics declare, and no
-    declared rater of mine sat idle.
+    values are in range, my shape matches what my semantics declare, no
+    declared rater of mine sat idle, and every subject was rated at least twice.
 
     I describe my contents, not my history. Nothing about what a cleaner
     discarded to make me survives in me; that lives in the cleaner report, alongside
@@ -138,7 +138,7 @@ class Ratings:
         _v.validate_subject_ids_match_shape(self.category_index, self.subject_ids, name)
         _v.validate_subject_ids_unique(self.subject_ids, self.semantics, name)
         _v.validate_no_idle_raters(self.category_index, self.semantics, name)
-        _v.validate_no_unrated_subjects(self.category_index, self.subject_ids, name)
+        _v.validate_subjects_rated_twice(self.category_index, self.subject_ids, name)
 
     def _freeze(self) -> None:
         """Read-only, so nothing computed from me can be invalidated later."""

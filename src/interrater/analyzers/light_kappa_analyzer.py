@@ -8,7 +8,7 @@ from math import comb
 
 import numpy as np
 
-from .individual_marginal_analyzer import IndividualMarginalAnalyzer
+from .individual_marginal_analyzer import IndividualMarginalAnalyzer, check_complete
 
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import LightKappaResult, HypothesisTestResult
@@ -16,7 +16,20 @@ from ..intermediates.data_profiles.balance_profile import BalanceProfile
 from .configs import LightKappaConfig
 
 from ..intermediates.estimator_parts.estimator_input import EstimatorInput
-from .agreement_functions.individual_marginals import light_kappa
+from .agreement_functions.individual_marginals import (
+    cohen_kappa_max,
+    light_kappa,
+    light_pair_parts,
+    rater_marginals,
+    shared_rows,
+)
+from ..intermediates.data_profiles import AgreementProfile
+from ..intermediates.not_computed import NotComputed
+from ..intermediates.results import AgreementParts
+from ..intermediates.results.analyzer_results.light_kappa_result import (
+    KAPPA_MAX_NOT_COMPUTED,
+    PARTS_NOT_COMPUTED,
+)
 from .resampling_functions.subject_resampling import subject_bootstrap
 from .ci_methods import percentile_ci, bca_ci
 from ..intermediates.results.ci_results import BootstrapCIResult
@@ -104,7 +117,8 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         TypeError
             If config is not LightKappaConfig.
         ValueError
-            If ratings is None.
+            If ratings is None, or any rating is missing (after injection):
+            Light (1971) defines the coefficient for complete data.
         """
         # Call parent __init__ (validates ratings not None, validates config is
         # IndividualMarginalConfig, computes BalanceProfile, builds
@@ -116,6 +130,12 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
 
         # Validate config type
         self._validate_light_config()
+
+        # Complete data only, checked after any injection
+        try:
+            check_complete(self.ratings.category_index, "Light's kappa")
+        except ValueError as exc:
+            raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
     # Public API ------------------------------------------------------------- #
 
@@ -148,13 +168,19 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         # Build and return result
         n_pairs = comb(self.balance_profile.n_raters, 2)
 
+        pair_parts, pair_kappa_max = self._pairs()
         return LightKappaResult(
             point=point,
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            parts=NotComputed(PARTS_NOT_COMPUTED),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
             n_pairs=n_pairs,
             ci_method=self.config.ci_method,
+            pair_parts=pair_parts,
+            pair_kappa_max=pair_kappa_max,
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -193,13 +219,11 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             # Permutation test: shuffle ratings to build null distribution
             from .resampling_functions.permutation_resampling import (
                 within_rater_shuffle,
-                within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
                 "within_rater_shuffle": within_rater_shuffle,
-                "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
 
@@ -267,6 +291,28 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
                 f"{_ERROR_PREFIX}: config must be LightKappaConfig, "
                 f"got {type(self.config).__name__}"
             )
+
+    def _pairs(self) -> tuple[dict, dict]:
+        """
+        Each pair's Po and Pe, from the function light_kappa is built from,
+        and each pair's Cohen ceiling on the subjects the pair shares (NaN
+        where they share fewer than two). Keyed by the pair's rater names.
+        """
+        names = [str(r) for r in self.ratings.semantics.raters]
+        pair_parts, pair_kappa_max = {}, {}
+        for (i, j), (po, pe) in light_pair_parts(self.estimator_input).items():
+            key = (names[i], names[j])
+            pair_parts[key] = AgreementParts(
+                observed=po, chance=pe, kind="agreement", weighted=False,
+            )
+            pair_data = self.estimator_input.select_raters(np.array([i, j]))
+            rows = shared_rows(pair_data, 0, 1)
+            if rows.size < 2:
+                pair_kappa_max[key] = float("nan")
+            else:
+                marginals = rater_marginals(pair_data, rows)
+                pair_kappa_max[key] = cohen_kappa_max(marginals[0], marginals[1])
+        return pair_parts, pair_kappa_max
 
     def _estimate_from_array(self, category_index: np.ndarray) -> float:
         """

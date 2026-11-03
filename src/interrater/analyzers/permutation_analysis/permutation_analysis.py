@@ -211,8 +211,29 @@ class PermutationAnalysis:
         # Apply injection pipeline (before BalanceProfile)
         self.apply_injection()
 
+        # Conger's kappa is for complete data only, checked after injection
+        if config.coefficient_to_compute == "conger_kappa":
+            from ..individual_marginal_analyzer import check_complete
+
+            try:
+                check_complete(self.ratings.category_index, "Conger's kappa")
+            except ValueError as exc:
+                raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
+
         # Build BalanceProfile
         self.balance_profile = BalanceProfile.from_ratings(self.ratings)
+
+        # The panel must be balanced only if the config says so
+        if config.balanced_data_only and not self.balance_profile.is_balanced:
+            counts = sorted(self.balance_profile.subject_counts)
+            raise ValueError(
+                f"{_ERROR_PREFIX}: balanced_data_only is true, but the panel "
+                f"is unbalanced: subjects have {counts[0]} to {counts[-1]} "
+                f"ratings. Set balanced_data_only: false (next to "
+                f"coefficient_to_compute) to run anyway: each pair uses the "
+                f"subjects both raters rated, each subset the subjects at "
+                f"least two of its raters rated."
+            )
 
         # Weights come from the semantics, as in the analyzers
         weights = self._resolve_weights()

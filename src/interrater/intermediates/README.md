@@ -17,6 +17,7 @@ API -- callers import from `interrater`, not from `interrater.intermediates`.
 | Module             | What It Does                                            |
 |--------------------|---------------------------------------------------------|
 | `_profile_utils.py`| Prevalence, observed/expected agreement, category arithmetic. Free functions: numpy in, numpy out. Private to this package. |
+| `not_computed.py`  | `NotComputed(reason)`: stands in for a value that does not apply here, with the reason. Keeps three states apart: a number (computed), NaN (computed but undefined for this data), and NotComputed (not applicable). It has no truth value; check `isinstance`. Exported as `interrater.NotComputed`. |
 
 Confidence intervals are computed in `analyzers/ci_methods.py`, not here.
 The result objects that carry an interval live in `results/`; the arithmetic

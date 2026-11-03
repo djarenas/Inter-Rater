@@ -18,7 +18,6 @@ from ..reports.cleaning_report import CleaningReport
 from ..reports.drop_report import DropPass, DropReport
 from ..reports.matching_report import MatchingReport
 from .cleaner_config import CleanerConfig
-from .insufficient_data_policy import MAX_DROP_PASSES
 
 _ERROR_PREFIX = "[RatingsCleaner] Error"
 
@@ -430,9 +429,9 @@ class RatingsCleaner:
         """
         Remove raters and subjects holding too little data to be worth keeping.
 
-        Which order, and whether to repeat, is the policy's call -- dropping
-        is not symmetric, so a sweep one way gives a different answer from a
-        sweep the other. Counts are taken before the drop so the report can
+        Sweeps repeat until one drops nothing, since dropping is not
+        symmetric and one sweep can leave data below the minimums. Counts are
+        taken before the drop so the report can
         say how much each casualty held when it went: the count it was judged
         on, in the pass that removed it, not its count before any dropping.
 
@@ -447,23 +446,10 @@ class RatingsCleaner:
                 [f"subject{i}" for i in range(codes.shape[0])], dtype=LABEL_DTYPE
             )
 
-        if policy.method == "iterate":
-            # raters_first is arbitrary here: the maximal set satisfying both
-            # thresholds is unique, so sweep order affects the path but not the
-            # converged endpoint.
-            (keep_s, keep_r, per_pass, converged,
-             subject_held, rater_held) = _d.sweep_until_settled(
-                codes, policy.min_ratings_per_rater,
-                policy.min_ratings_per_subject, True, MAX_DROP_PASSES,
-            )
-        else:
-            keep_s, keep_r, subject_held, rater_held = _d.sweep_once(
-                codes, policy.min_ratings_per_rater,
-                policy.min_ratings_per_subject,
-                raters_first = policy.method == "raters_first",
-            )
-            per_pass  = [(int((~keep_r).sum()), int((~keep_s).sum()))]
-            converged = True
+        (keep_s, keep_r, per_pass,
+         subject_held, rater_held) = _d.sweep_until_settled(
+            codes, policy.min_ratings_per_rater, policy.min_ratings_per_subject,
+        )
 
         dropped_raters = {
             raters[i]: int(rater_held[i])
@@ -472,10 +458,8 @@ class RatingsCleaner:
         dropped_ids = tuple(subject_ids[~keep_s].tolist())
 
         report = DropReport(
-            method    = policy.method,
             min_ratings_per_rater   = policy.min_ratings_per_rater,
             min_ratings_per_subject = policy.min_ratings_per_subject,
-            converged = converged,
             passes    = tuple(
                 DropPass(i + 1, r, s) for i, (r, s) in enumerate(per_pass)
             ),

@@ -9,7 +9,7 @@ import numpy as np
 
 from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..ci_results import BootstrapCIResult
-from .permutation_result import PermutationResult
+from .permutation_result import PermutationResult, coefficient_label
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
@@ -387,34 +387,35 @@ class SubsetPermutationResult(PermutationResult):
 
     def __str__(self) -> str:
         """
-        Return a compact string representation.
+        Return my printed form: the mean, then every subset.
 
-        Format:
-            Subset (k=3, fleiss_kappa): mean = 0.650
-            [0.580, 0.720] (95% CI, bca, n=4000), correlated
-            n_subsets=10; n_subjects=1617; n_raters=5; ci_method=bca
+            Subsets of 3 raters, Fleiss' κ, 4 subsets: mean = 0.493 [0.370, 0.600] (...), correlated bootstrap
+              199 subjects; 4 raters; each subset on the subjects at least two of its raters rated
+                raters         κ  95% CI          subjects
+                0, 1, 2    0.514  [0.367, 0.642]       199
+                ...
 
-        The middle line is the interval printing itself, so a fallback to
-        percentile, a count of failed draws, or a method that never ran at
-        all appears there without this class having to know about any of
-        them. It describes the mean only -- a subset that had nothing to
-        resample says so in its own entry of bootstrap_cis_per_subset.
+        An independent mean adds a "!" line under the first. Above
+        MAX_ROWS_PRINTED subsets, a line points to to_frame() instead of
+        the list. See PermutationResult._printed.
         """
-        ci_line = (
-            f"\n{self.bootstrap_ci_of_mean}, {self.bootstrap_mean_method}"
-            if self.bootstrap_ci_of_mean is not None
-            else ""
+        name, _ = coefficient_label(self.coefficient_name)
+        word = "subset" if self.n_subsets == 1 else "subsets"
+        return self._printed(
+            title=f"Subsets of {self.subset_k} raters, {name}, {self.n_subsets:,} {word}",
+            mean=self.mean_over_subsets,
+            mean_ci=self.bootstrap_ci_of_mean,
+            mean_method=self.bootstrap_mean_method,
+            unit="subset",
+            units="subsets",
+            pool="the subjects at least two of its raters rated",
         )
 
-        return (
-            f"Subset (k={self.subset_k}, {self.coefficient_name}): "
-            f"mean = {self.mean_over_subsets:.3f}"
-            f"{ci_line}\n"
-            f"n_subsets={self.n_subsets}; "
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"n_raters={self.balance_profile.n_raters}; "
-            f"ci_method={self.ci_method}"
-        )
+    def _units(self) -> list[tuple]:
+        return [
+            (subset, value, self.bootstrap_cis_per_subset[subset], self.subjects_per_subset[subset])
+            for subset, value in self.subset_values.items()
+        ]
 
     def get_bootstrap_distributions_per_subset(self) -> dict:
         """

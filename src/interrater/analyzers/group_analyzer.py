@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..contracts import MIN_RATINGS_PER_SUBJECT
 from .analyzer import Analyzer
 
 if TYPE_CHECKING:
@@ -122,9 +123,33 @@ class GroupAnalyzer(Analyzer, ABC):
         TypeError
             If config is not GroupCoefficientConfig.
         ValueError
+            If a row of nij holds fewer than MIN_RATINGS_PER_SUBJECT (2)
+            ratings, the same rule Ratings applies.
+        ValueError
             If config.balanced_data_only=True but nij indicates unbalanced data.
         """
         from ..intermediates.data_profiles import BalanceProfile
+
+        # Same rule as Ratings: a subject with fewer than two ratings joins no
+        # comparison. Checked here and not in NijMatrix, which internal steps
+        # build from pairs, subsets and draws.
+        rated = np.asarray(nij.matrix).sum(axis=1)
+        short = np.flatnonzero(rated < MIN_RATINGS_PER_SUBJECT)
+        if short.size:
+            unrated = int((rated[short] == 0).sum())
+            once    = short.size - unrated
+            found   = []
+            if unrated:
+                found.append(f"{unrated:,} rated by nobody")
+            if once:
+                found.append(f"{once:,} rated by only one rater")
+            raise ValueError(
+                f"{_ERROR_PREFIX}: needs at least {MIN_RATINGS_PER_SUBJECT} "
+                f"ratings per subject; the counts matrix has "
+                f"{' and '.join(found)} (rows {short[:3].tolist()}). A subject "
+                f"with fewer than two ratings joins no comparison; remove these "
+                f"rows."
+            )
 
         # Create instance via __new__ (bypass normal __init__)
         instance = cls.__new__(cls)

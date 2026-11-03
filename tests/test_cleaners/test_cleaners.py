@@ -21,7 +21,7 @@ Key behaviours:
   repairs, and rejects or absorbs unknowns.
 - Config is checked against semantics before data is touched.
 - Unused categories are caught or kept per policy.
-- Raters and subjects below thresholds are dropped per method.
+- Raters and subjects below thresholds are dropped until none are left.
 - The report counts everything: nulls, missing, repairs, unknowns, drops.
 """
 
@@ -109,27 +109,24 @@ class TestFrameLayoutEquality:
 
 
 class TestInsufficientDataPolicyDefaults:
-    """Default construction uses the contract floors and raters_first."""
+    """Default construction uses the contract floors."""
 
     def test_defaults(self):
         p = InsufficientDataPolicy()
         assert p.min_ratings_per_rater == MIN_RATINGS_PER_RATER
         assert p.min_ratings_per_subject == MIN_RATINGS_PER_SUBJECT
-        assert p.method == "raters_first"
 
     def test_custom(self):
         p = InsufficientDataPolicy(
             min_ratings_per_rater=5,
             min_ratings_per_subject=3,
-            method="iterate",
         )
         assert p.min_ratings_per_rater == 5
         assert p.min_ratings_per_subject == 3
-        assert p.method == "iterate"
 
 
 class TestInsufficientDataPolicyValidation:
-    """Type guards, floor enforcement, and method validation."""
+    """Type guards, floor enforcement, and the removed method."""
 
     def test_bool_rejected(self):
         """True is 1 in Python but not an acceptable integer here."""
@@ -149,9 +146,11 @@ class TestInsufficientDataPolicyValidation:
         with pytest.raises(ValueError, match="floor"):
             InsufficientDataPolicy(min_ratings_per_subject=1)
 
-    def test_invalid_method(self):
-        with pytest.raises(ValueError, match="method"):
-            InsufficientDataPolicy(method="backwards")
+    @pytest.mark.parametrize("method", ["iterate", "raters_first", "subjects_first"])
+    def test_method_removed(self, method):
+        """Any value, iterate included: there is one way to write a policy."""
+        with pytest.raises(TypeError, match="method was removed in 2.1.0"):
+            InsufficientDataPolicy(method=method)
 
 
 class TestInsufficientDataPolicyFromDict:
@@ -161,19 +160,23 @@ class TestInsufficientDataPolicyFromDict:
         spec = {
             "min_ratings_per_rater": 3,
             "min_ratings_per_subject": 4,
-            "method": "subjects_first",
         }
         p = InsufficientDataPolicy.from_dict(spec)
         assert p.min_ratings_per_rater == 3
-        assert p.method == "subjects_first"
+        assert p.min_ratings_per_subject == 4
 
     def test_unknown_key(self):
         with pytest.raises(ValueError, match="unknown key"):
-            InsufficientDataPolicy.from_dict({"method": "iterate", "typo": 1})
+            InsufficientDataPolicy.from_dict({"min_ratings_per_rater": 2, "typo": 1})
+
+    def test_method_removed(self):
+        """Gets the removed-in-2.1.0 error, not "unknown key"."""
+        with pytest.raises(TypeError, match="method was removed in 2.1.0"):
+            InsufficientDataPolicy.from_dict({"method": "iterate"})
 
 
 class TestInsufficientDataPolicyEquality:
-    """Equality compares all three fields."""
+    """Equality compares both minimums."""
 
     def test_equal(self):
         assert InsufficientDataPolicy() == InsufficientDataPolicy()
@@ -314,11 +317,18 @@ class TestCleanerConfigFromDict:
     def test_nested(self):
         spec = {
             "frame_layout": {"use_column_names": False},
-            "insufficient_data_drops": {"method": "iterate"},
+            "insufficient_data_drops": {"min_ratings_per_subject": 3},
         }
         cfg = CleanerConfig.from_dict(spec)
         assert cfg.frame_layout.use_column_names is False
-        assert cfg.insufficient_data_drops.method == "iterate"
+        assert cfg.insufficient_data_drops.min_ratings_per_subject == 3
+
+    def test_method_in_yaml_refused(self, tmp_path):
+        """A 2.0.0 cleaner config with a method line is told to delete it."""
+        path = tmp_path / "config.yaml"
+        path.write_text("insufficient_data_drops:\n  method: iterate\n")
+        with pytest.raises(TypeError, match="Delete the method line"):
+            CleanerConfig.build_from_yaml(path)
 
     def test_unknown_key(self):
         with pytest.raises(ValueError, match="unknown key"):
@@ -368,7 +378,7 @@ class TestCleanerConfigYaml:
             missing_values=("NA", "o"), value_map={"inc": "include"},
             unknown_policy="empty", unused_categories="keep",
             insufficient_data_drops=InsufficientDataPolicy(
-                min_ratings_per_rater=3, min_ratings_per_subject=2, method="iterate",
+                min_ratings_per_rater=3, min_ratings_per_subject=2,
             ),
         )
         assert CleanerConfig.from_dict(cfg.to_dict()) == cfg
@@ -415,11 +425,10 @@ class TestRepr:
         assert "doc_id" in r
 
     def test_insufficient_data_policy_repr(self):
-        p = InsufficientDataPolicy(min_ratings_per_rater=5, method="iterate")
+        p = InsufficientDataPolicy(min_ratings_per_rater=5)
         r = repr(p)
         assert r.startswith("InsufficientDataPolicy(")
         assert "5" in r
-        assert "iterate" in r
 
     def test_cleaner_config_repr(self):
         cfg = CleanerConfig(case_sensitive=True, unknown_policy="empty")
@@ -850,8 +859,8 @@ class TestDrops:
         sem = RatingsSemantics(raters=["ann", "bob", "cara"], categories=cats)
         return df, sem
 
-    def test_drop_rater_first(self):
-        """raters_first drops cara (1 rating < min=2) before checking subjects."""
+    def test_drop_thin_rater(self):
+        """cara (1 rating < min=2) is dropped."""
         df, sem = self._thin_rater_frame()
         cfg = CleanerConfig(unknown_policy="empty")
         rc = RatingsCleaner(df, sem, cfg)
@@ -870,20 +879,6 @@ class TestDrops:
         assert (drops.min_ratings_per_rater, drops.min_ratings_per_subject) == (3, 2)
         assert "at least 3 ratings per rater and 2 per subject" in drops.render()
 
-    def test_drop_subjects_first(self):
-        """subjects_first sweeps subjects before raters."""
-        df, sem = self._thin_rater_frame()
-        cfg = CleanerConfig(
-            unknown_policy="empty",
-            insufficient_data_drops=InsufficientDataPolicy(method="subjects_first"),
-        )
-        rc = RatingsCleaner(df, sem, cfg)
-        # Under subjects_first with min_per_subject=2: every subject has
-        # at least 2 ratings from ann and bob, so no subjects dropped.
-        # Then raters: cara has 1 rating < min=2, so cara is dropped.
-        assert rc.ratings.n_raters == 2
-        assert "cara" in rc.report.drops.dropped_raters
-
     def test_nothing_dropped_on_clean_data(self, clean_df, semantics):
         """Clean data with everyone above thresholds drops nothing."""
         rc = RatingsCleaner(clean_df, semantics)
@@ -893,7 +888,7 @@ class TestDrops:
 
     def test_drop_iterate(self, two_cat):
         """
-        iterate cascades across three passes.
+        Dropping cascades across three passes.
 
             sub0: ann=include  bob=exclude  cara=None
             sub1: ann=exclude  bob=include  cara=None
@@ -902,7 +897,7 @@ class TestDrops:
 
         Pass 1: no raters below 2, sub3 has 1 rating -> drop sub3.
         Pass 2: cara now has 1 rating -> drop cara; sub2 now has 1 -> drop sub2.
-        Pass 3: ann=2, bob=2, sub0=2, sub1=2 -> converged.
+        Pass 3: ann=2, bob=2, sub0=2, sub1=2 -> settled.
         """
         df = pd.DataFrame({
             "ann":  ["include", "exclude", "include", None],
@@ -912,17 +907,12 @@ class TestDrops:
         sem = RatingsSemantics(
             raters=["ann", "bob", "cara"], categories=two_cat,
         )
-        cfg = CleanerConfig(
-            insufficient_data_drops=InsufficientDataPolicy(method="iterate"),
-        )
-        rc = RatingsCleaner(df, sem, cfg)
+        rc = RatingsCleaner(df, sem)
 
         assert rc.ratings.n_subjects == 2
         assert rc.ratings.n_raters == 2
 
         d = rc.report.drops
-        assert d.method == "iterate"
-        assert d.converged is True
         assert d.n_passes == 3
         # Pass 1: 0 raters, 1 subject (sub3)
         assert d.passes[0].n_raters == 0
@@ -930,7 +920,7 @@ class TestDrops:
         # Pass 2: 1 rater (cara), 1 subject (sub2)
         assert d.passes[1].n_raters == 1
         assert d.passes[1].n_subjects == 1
-        # Pass 3: nothing -> converged
+        # Pass 3: nothing -> settled
         assert d.passes[2].dropped_nothing is True
         # Counts at removal, not in the original array: cara had 2 ratings to
         # start with but went in pass 2 holding 1, after sub3 was removed.
@@ -948,15 +938,11 @@ class TestDrops:
         assert rc.report.n_raters_lost == 1
         assert rc.report.semantics_changed is True
 
-    # Each case survives cleaning and cascades: before 2.1.0 every one of them
-    # reported a casualty holding at least the minimum.
-    @pytest.mark.parametrize("method, seed", [
-        ("raters_first", 8), ("raters_first", 10), ("raters_first", 11),
-        ("subjects_first", 1), ("subjects_first", 2), ("subjects_first", 6),
-        ("subjects_first", 7), ("subjects_first", 8),
-        ("iterate", 1), ("iterate", 6), ("iterate", 7),
-    ])
-    def test_every_casualty_held_less_than_the_minimum(self, method, seed):
+    # Each case survives cleaning and cascades over more than one dropping
+    # pass, where counts from before the sweep would differ from counts at
+    # removal.
+    @pytest.mark.parametrize("seed", [1, 6, 7, 12])
+    def test_every_casualty_held_less_than_the_minimum(self, seed):
         """
         What the report says a casualty held is what it was judged on, so it
         is always below the minimum. Reporting counts from before the sweep
@@ -972,22 +958,18 @@ class TestDrops:
             categories=UnorderedCategories(("include", "exclude")),
         )
         policy = InsufficientDataPolicy(
-            min_ratings_per_rater=20, min_ratings_per_subject=3, method=method,
+            min_ratings_per_rater=20, min_ratings_per_subject=3,
         )
         cfg = CleanerConfig(insufficient_data_drops=policy, unused_categories="keep")
         d = RatingsCleaner(df, sem, cfg).report.drops
         assert all(n < 20 for n in d.dropped_raters.values()), d.dropped_raters
         assert all(k < 3 for k in d.dropped_subject_distribution), d.dropped_subject_distribution
 
-    def test_drop_iterate_nothing_dropped(self, clean_df, semantics):
-        """iterate on clean data: one pass that drops nothing, converged."""
-        cfg = CleanerConfig(
-            insufficient_data_drops=InsufficientDataPolicy(method="iterate"),
-        )
-        rc = RatingsCleaner(clean_df, semantics, cfg)
+    def test_clean_data_settles_in_one_pass(self, clean_df, semantics):
+        """Clean data: one pass that drops nothing."""
+        rc = RatingsCleaner(clean_df, semantics)
 
         assert rc.report.drops.dropped_nothing is True
-        assert rc.report.drops.converged is True
         assert rc.report.drops.n_passes == 1
         assert rc.report.drops.passes[0].dropped_nothing is True
 
@@ -1004,17 +986,17 @@ class TestDrops:
             RatingsCleaner(df, sem)
 
     def test_drop_report_details(self):
-        """Drop report records rater counts, pass details, and convergence."""
+        """Drop report records rater counts and pass details."""
         df, sem = self._thin_rater_frame()
         rc = RatingsCleaner(df, sem)
         d = rc.report.drops
 
-        assert d.method == "raters_first"
-        assert d.converged is True
-        assert d.n_passes == 1
+        # Pass 1 drops cara; pass 2 drops nothing, so it settles
+        assert d.n_passes == 2
         assert d.passes[0].number == 1
         assert d.passes[0].n_raters == 1
         assert d.passes[0].n_subjects == 0
+        assert d.passes[1].dropped_nothing is True
         # Cara had 1 rating in the original array
         assert d.dropped_raters == {"cara": 1}
         assert d.dropped_subject_ids == ()

@@ -48,7 +48,7 @@ The validation chain:
 6. subject ids match row count
 7. subject ids unique (unless semantics say otherwise)
 8. no idle raters (every declared rater rated at least one subject)
-9. no unrated subjects (every row has at least one non-EMPTY cell)
+9. every subject rated at least twice (MIN_RATINGS_PER_SUBJECT non-EMPTY cells per row)
 
 BalancedRatings adds: constant raters per subject.
 PairedRatings adds: exactly two raters, fully crossed (no gaps).
@@ -56,5 +56,5 @@ PairedRatings adds: exactly two raters, fully crossed (no gaps).
 ## Dependencies
 
 - `semantics` (Categories, RatingsSemantics)
-- `contracts.py` (EMPTY, INDEX_DTYPE, MIN_SUBJECTS)
+- `contracts.py` (EMPTY, INDEX_DTYPE, MIN_SUBJECTS, MIN_RATINGS_PER_SUBJECT)
 - `array_utils.py` (balance and crossing checks)

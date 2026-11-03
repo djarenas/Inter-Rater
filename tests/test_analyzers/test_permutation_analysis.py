@@ -82,7 +82,8 @@ def _make_ratings(
     Parameters
     ----------
     sparse : bool
-        If True, randomly set ~20% of entries to EMPTY (missing).
+        If True, randomly set ~20% of entries to EMPTY (missing), then drop
+        subjects left with fewer than 2 ratings, as the cleaner would.
     """
     rng = np.random.default_rng(seed)
     cat_names = [f"C{i}" for i in range(n_categories)]
@@ -93,6 +94,7 @@ def _make_ratings(
     if sparse:
         mask = rng.random(size=(n_subjects, n_raters)) < 0.2
         category_index[mask] = EMPTY
+        category_index = category_index[(category_index != EMPTY).sum(axis=1) >= 2]
 
     cats = UnorderedCategories(cat_names)
     semantics = RatingsSemantics(raters=rater_names, categories=cats)
@@ -134,16 +136,25 @@ def _subset_config(
     random_state: int = 42,
     ci_method: str = "percentile",
     bootstrap_mean: str | None = None,
+    balanced_data_only: bool | None = None,
+    panel_balanced_data_only: bool = False,
 ) -> SubsetPermutationConfig:
-    """Build a SubsetPermutationConfig for testing."""
+    """
+    Build a SubsetPermutationConfig for testing.
+
+    ``balanced_data_only`` sets the coefficient's flag (None keeps its
+    default); ``panel_balanced_data_only`` sets the permutation config's.
+    """
     config_map = {
         "fleiss_kappa": FleissKappaConfig,
         "scotts_pi": ScottsConfig,
     }
+    flag = {} if balanced_data_only is None else {"balanced_data_only": balanced_data_only}
     coc = config_map[coefficient](
         n_resamples=n_resamples,
         random_state=random_state,
         ci_method=ci_method,
+        **flag,
     )
     bmc = None
     if bootstrap_mean is not None:
@@ -153,6 +164,7 @@ def _subset_config(
         config_of_coefficient=coc,
         subset_k=subset_k,
         bootstrap_mean_config=bmc,
+        balanced_data_only=panel_balanced_data_only,
     )
 
 
@@ -701,6 +713,121 @@ class TestPairwiseComputationC:
         )
 
 
+class TestMeanUsesTheSamePairs:
+    """Every draw of the mean averages the pairs the point estimate averaged.
+
+    A draw that loses one of them is NaN and counted as failed, as for a
+    single coefficient. It used to average the remaining pairs -- a
+    different quantity, counted as an ordinary draw.
+
+    The data: raters b and c each say "1" on few subjects, so a resample
+    that misses those subjects leaves a pair with nothing to agree on.
+    """
+
+    A = [1, 1, 0, 1, 0, 0, 1, 0, 1, 0]
+    B = [0, 1, 0, 0, 0, 0, 1, 0, 1, 0]
+    C = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    N = 400
+
+    def _ratings(self, b=None, c=None):
+        index = np.array([self.A, b or self.B, c or self.C], dtype=np.int8).T
+        sem = RatingsSemantics(
+            raters=["a", "b", "c"], categories=UnorderedCategories(["C0", "C1"])
+        )
+        return Ratings(category_index=index, semantics=sem)
+
+    def _config(self, method, cls=PairwisePermutationConfig, **extra):
+        coefficient = "cohen_kappa" if cls is PairwisePermutationConfig else "scotts_pi"
+        coc = (CohenKappaConfig if cls is PairwisePermutationConfig else ScottsConfig)(
+            n_resamples=self.N, random_state=42,
+        )
+        return cls(
+            coefficient_to_compute=coefficient,
+            config_of_coefficient=coc,
+            bootstrap_mean_config=PermutationBootstrapMeanConfig(method=method),
+            **extra,
+        )
+
+    def _expected_correlated(self, analysis, defined, values_of):
+        """Redo the correlated draws with the analysis's own seed and order."""
+        rng = np.random.default_rng(42)
+        n = analysis.estimator_input.n_subjects
+        expected = []
+        with np.errstate(all="ignore"):
+            for _ in range(self.N):
+                data = analysis.estimator_input.take_subjects(
+                    rng.choice(n, size=n, replace=True)
+                )
+                values = values_of(data)
+                drawn = [values[u] for u in defined]
+                expected.append(
+                    float("nan") if np.isnan(drawn).any() else float(np.mean(drawn))
+                )
+        return np.array(expected)
+
+    def test_correlated_draw_that_loses_a_pair_fails(self):
+        from interrater.analyzers.agreement_functions.rater_combinations import over_pairs
+
+        analysis = PairwisePermutationAnalysis(self._ratings(), self._config("correlated"))
+        result = analysis.run()
+        defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
+        assert len(defined) == 3
+        expected = self._expected_correlated(
+            analysis, defined, lambda d: over_pairs(d, analysis.estimator)
+        )
+        draws = result.bootstrap_distribution_of_mean
+        np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
+        np.testing.assert_allclose(draws[~np.isnan(draws)], expected[~np.isnan(expected)])
+        # This data does lose pairs in some draws, and they are counted
+        assert result.bootstrap_ci_of_mean.n_failed == int(np.isnan(expected).sum()) > 0
+
+    def test_independent_draw_that_picks_a_failed_value_fails(self):
+        result = PairwisePermutationAnalysis(
+            self._ratings(), self._config("independent")
+        ).run()
+        defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
+        stacked = np.array([result.bootstrap_distributions_per_pair[p] for p in defined])
+        indices = np.random.default_rng(42).integers(
+            0, stacked.shape[1], size=(self.N, len(defined))
+        )
+        sampled = stacked[np.arange(len(defined))[np.newaxis, :], indices]
+        expected = sampled.mean(axis=1)  # NaN if any pair's value is NaN
+        draws = result.bootstrap_distribution_of_mean
+        np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
+        np.testing.assert_allclose(draws[~np.isnan(draws)], expected[~np.isnan(expected)])
+        assert result.bootstrap_ci_of_mean.n_failed > 0
+
+    def test_jackknife_value_that_loses_a_pair_is_nan(self):
+        """Raters b and c say "1" only on subject 1. Leaving it out leaves
+        them nothing to agree on, so that leave-one-out mean is NaN."""
+        only_subject_1 = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+        analysis = PairwisePermutationAnalysis(
+            self._ratings(b=only_subject_1, c=only_subject_1),
+            self._config("correlated"),
+        )
+        result = analysis.run()
+        defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
+        assert len(defined) == 3
+        jackknife = analysis._mean_jackknife_correlated(defined)
+        assert np.isnan(jackknife[1])
+        assert np.isfinite(np.delete(jackknife, 1)).all()
+
+    def test_subsets_follow_the_same_rule(self):
+        from interrater.analyzers.agreement_functions.rater_combinations import over_subsets
+
+        analysis = SubsetPermutationAnalysis(
+            self._ratings(), self._config("correlated", SubsetPermutationConfig, subset_k=2)
+        )
+        result = analysis.run()[2]
+        defined = sorted(s for s, v in result.subset_values.items() if not np.isnan(v))
+        expected = self._expected_correlated(
+            analysis, defined, lambda d: over_subsets(d, analysis.estimator, 2)
+        )
+        draws = result.bootstrap_distribution_of_mean
+        np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
+        assert result.bootstrap_ci_of_mean.n_failed == int(np.isnan(expected).sum()) > 0
+
+
 class TestPairwiseDifferentCoefficients:
     """Pairwise analysis with different coefficient types."""
 
@@ -1022,12 +1149,73 @@ class TestSubsetSparseData:
     """Subset analysis on sparse data."""
 
     def test_sparse_data_runs(self):
-        """Should handle missing data without error."""
+        """Runs on missing data when Fleiss is allowed its approximation."""
         ratings = _make_ratings(30, 4, sparse=True, seed=42)
-        config = _subset_config(subset_k=3, n_resamples=50)
+        config = _subset_config(subset_k=3, n_resamples=50, balanced_data_only=False)
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
         assert r.n_subsets == 4
+
+    def test_unbalanced_subsets_refused_when_fleiss_asks_for_balance(self):
+        """Fleiss' default, balanced_data_only=True, applies to each subset."""
+        ratings = _make_ratings(30, 4, sparse=True, seed=42)
+        config = _subset_config(subset_k=3, n_resamples=50)
+        with pytest.raises(ValueError, match="subsets are unbalanced.*approximation.*inside config_of_coefficient"):
+            SubsetPermutationAnalysis(ratings, config)
+
+    def test_complete_data_needs_no_setting(self):
+        """Every subset of a complete panel is complete, so Fleiss' default runs."""
+        ratings = _make_ratings(30, 4, sparse=False, seed=42)
+        result = SubsetPermutationAnalysis(ratings, _subset_config(subset_k=3, n_resamples=50)).run()
+        assert result.per_k_results[3].n_subsets == 4
+
+
+class TestPanelBalancedDataOnly:
+    """The permutation config's own flag: may the whole panel be unbalanced?"""
+
+    def test_default_is_false(self):
+        assert _subset_config().balanced_data_only is False
+
+    def test_unbalanced_panel_refused_when_true(self):
+        ratings = _make_ratings(30, 4, sparse=True, seed=42)
+        config = _subset_config(
+            subset_k=3, balanced_data_only=False, panel_balanced_data_only=True,
+        )
+        with pytest.raises(ValueError, match="balanced_data_only is true, but the panel is unbalanced"):
+            SubsetPermutationAnalysis(ratings, config)
+
+    def test_pairwise_unbalanced_panel_refused_when_true(self):
+        ratings = _make_ratings(30, 4, sparse=True, seed=42)
+        config = PairwisePermutationConfig(
+            coefficient_to_compute="cohen_kappa",
+            config_of_coefficient=CohenKappaConfig(n_resamples=10, random_state=42),
+            balanced_data_only=True,
+        )
+        with pytest.raises(ValueError, match="the panel is unbalanced"):
+            PairwisePermutationAnalysis(ratings, config)
+
+    def test_pairwise_unbalanced_panel_runs_with_cohen_default(self):
+        """Each pair uses its shared subjects, so Cohen's true holds per pair."""
+        ratings = _make_ratings(30, 4, sparse=True, seed=42)
+        config = PairwisePermutationConfig(
+            coefficient_to_compute="cohen_kappa",
+            config_of_coefficient=CohenKappaConfig(n_resamples=10, random_state=42),
+        )
+        assert config.config_of_coefficient.balanced_data_only is True
+        result = PairwisePermutationAnalysis(ratings, config).run()
+        assert result.n_pairs == 6
+
+    def test_flag_must_be_bool(self):
+        with pytest.raises(TypeError, match="balanced_data_only must be bool"):
+            SubsetPermutationConfig(
+                coefficient_to_compute="fleiss_kappa",
+                config_of_coefficient=FleissKappaConfig(),
+                subset_k=3,
+                balanced_data_only="no",
+            )
+
+    def test_in_summary(self):
+        assert _subset_config().summary()["balanced_data_only"] is False
 
 
 # ------------------------------------------------------------------ #
@@ -1135,9 +1323,9 @@ class TestResultSummary:
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         s = str(result)
-        assert "cohen_kappa" in s
-        assert "Pairwise" in s
-        assert "n_pairs=3" in s
+        assert s.startswith("Pairwise Cohen's κ, 3 pairs: mean = ")
+        assert "correlated bootstrap" in s
+        assert len([line for line in s.splitlines() if line.startswith("    ")]) == 4  # heading + 3 pairs
 
     def test_multi_k_summary(self):
         """MultiKSubsetResult.summary() should have per-k results."""

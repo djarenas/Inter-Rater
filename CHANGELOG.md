@@ -35,6 +35,29 @@ version does not warn you, so this section does.
 - Scott's pi, Gwet's AC1, Conger's kappa and Light's kappa refuse ordered
   or weighted semantics, since they have no weighted form. Use a semantics
   with `kind: unordered` for them.
+- Conger's and Light's kappas require complete data, every rater rating
+  every subject, as Conger (1980) and Light (1971) define them. Data with
+  missing ratings is refused by their analyzers, and Conger's by pairwise
+  permutation, with a message naming the coefficients that handle missing
+  ratings. 2.0.0 ran on such data: Conger took chance and observed agreement
+  from different subjects, and Light averaged pairs over different subjects.
+- Subset permutation applies the coefficient's `balanced_data_only` to each
+  subset. Fleiss' kappa defaults to `true`, so on a panel whose subsets are
+  unbalanced it is refused unless `config_of_coefficient` sets
+  `balanced_data_only: false`; 2.0.0 ignored the setting and ran the
+  approximation. Pairs are always balanced on their shared subjects.
+- Cohen's, Conger's and Light's configs refuse `balanced_data_only: false`,
+  saying why it does not apply. Cohen and Conger used to set it to `true`
+  with a warning; Light used to accept it. Cohen is always computed on the
+  subjects both raters rated; Conger and Light need complete data. `true` is
+  accepted, and is now Light's default, so a config moved from Fleiss'
+  kappa still loads.
+- `Ratings` refuses subjects with fewer than two ratings, and
+  `build_from_nij_matrix` refuses count rows that sum to less than two.
+  2.0.0 refused only subjects rated by nobody; a subject rated once joins no
+  comparison either. The cleaner's floor of two per subject is unchanged, but
+  its one-pass drop methods can leave a subject rated once, which now stops
+  with this error; `method: iterate` meets both minimums.
 - `build_from_nij_matrix` is always unweighted.
 - `CustomWeightsInput` is removed. Nothing used it.
 - `Weights.from_file` is removed, with its JSON, CSV and text formats.
@@ -46,13 +69,17 @@ version does not warn you, so this section does.
   hint. A misspelt key such as `unique_subject` used to be ignored.
 - `scheme="within_subject"` is removed from hypothesis tests. Shuffling the
   raters within a subject keeps the agreement the test is meant to break, so
-  it cannot properly test whether agreement is above chance. A config that
-  names it is refused, with a message pointing to `within_rater_shuffle`.
+  it cannot test whether agreement is above chance: Fleiss-type coefficients
+  never change under it, and for Cohen-type coefficients only the chance
+  term moves, so it detects raters using categories at different rates,
+  not agreement. A config that names it is refused, with a message pointing
+  to `within_rater_shuffle`.
 - `scheme="column_shuffle"` is renamed `within_rater_shuffle`, and the
   function `column_shuffle()` is renamed `within_rater_shuffle()`. The new
   name says what it does: each rater's answers are shuffled across subjects,
-  not the raters themselves. It is still the default. The old name is
-  refused with a message giving the new one.
+  not the raters themselves. It is still the default. The old names are
+  refused with a message giving the new one: the scheme in a config, and the
+  function when called.
 - Hypothesis tests take `alternative`: `"two-sided"` (default), `"greater"`
   or `"less"`, for both methods. In 2.0.0 Gwet's AC1, Brennan-Prediger and
   Krippendorff's alpha were one-sided and the other five two-sided, so the
@@ -61,7 +88,9 @@ version does not warn you, so this section does.
 - Permutation p-values are (count + 1)/(B + 1) (Phipson & Smyth 2010), so
   they are never 0. Two-sided is twice the smaller tail, capped at 1,
   instead of comparing absolute values, which assumed the null was centred
-  on 0.
+  on 0. A shuffle whose value differs from the observed one only by rounding
+  (within 100 machine epsilons of it) counts as a tie, at or beyond it in
+  both tails, as in `scipy.stats.permutation_test`.
 - `HypothesisTestResult` requires `coefficient`, the name of the
   coefficient tested (e.g. `"fleiss_kappa"`). Its printed form reads
   `H₀: fleiss_kappa = 0` instead of `H₀: point estimate = 0`.
@@ -73,9 +102,10 @@ version does not warn you, so this section does.
   Injection builds a new rater from individual ratings, which a nij matrix
   does not have; it used to be skipped silently, so the result was reported
   as if the rater had been added.
-- `percent_agreement` is no longer listed as a subset-permutation or
+- `percent_agreement` is no longer an active subset-permutation or
   subject-bootstrap coefficient. It had no analyzer or config, so it could
-  not run; the `percent_agreement` function remains.
+  not run; it is now a commented "Future" entry in both lists, and the
+  `percent_agreement` function remains.
 - `parametric_null` (interval and test) is refused on unbalanced data, and
   for Fleiss on weighted data, where its formulas do not apply. Two
   example-README rows now read "not computed".
@@ -93,12 +123,16 @@ version does not warn you, so this section does.
   have emptied the column.
 - `PermutationBootstrapMeanConfig` takes only `method`. The mean's draw count,
   `ci_method`, `alpha` and seed come from `config_of_coefficient`, as the
-  per-combination intervals' do; any other key is refused. Example values
-  are unchanged.
+  per-combination intervals' do. `n_bootstraps`, `ci_method`, `alpha` and
+  `random_state` are refused with where each moved, from a config or from
+  Python; any other key is refused. Example values are unchanged.
 - The independent mean requires `config_of_coefficient.ci_method:
   percentile`. BCa's acceleration needs a jackknife over the units the
   bootstrap resamples, and none matches the independent mean; it is refused
   when the config is built.
+- `DropReport` takes two required fields, `min_ratings_per_rater` and
+  `min_ratings_per_subject`, after `method`: the drop rule it applied. Code
+  that builds one by hand must pass them; the cleaner does.
 
 ### Added
 
@@ -129,6 +163,9 @@ version does not warn you, so this section does.
 - `plot_null_distribution(test_result)`: a permutation test's shuffles,
   with the observed value, the shuffles counted toward p coloured, and the
   p-value's arithmetic.
+- `balanced_data_only` on pairwise and subset permutation configs, default
+  `false`: whether the whole panel must be balanced. `true` refuses an
+  unbalanced panel before anything runs.
 
 ### Changed
 
@@ -136,7 +173,6 @@ version does not warn you, so this section does.
   interval, and both say the width is scaled as though the estimate were zero.
 - The resample-count notice no longer reads "B below 1000 recommended", which
   parsed as a recommendation to stay below 1000.
-- Cohen's and Conger's `balanced_data_only` warnings state what was set.
 - Example reference values are recomputed at `random_state=42`, the package
   default, instead of 32.
 - The cleaning report states the drop rule it applied, marks rare and
@@ -171,9 +207,6 @@ version does not warn you, so this section does.
   discrete data: Brennan-Prediger tied the point in up to 12% of draws in
   the examples, and 12 example intervals changed, the largest from
   [0.745, 0.925] to [0.715, 0.910].
-- Conger's kappa took chance and observed agreement from different
-  subjects. Both now use those rated at least twice: pairwise Conger equals
-  pairwise Cohen; full-panel values are unchanged.
 - Subset permutation checked `subset_k` against the raters before
   injection, so `"all"` skipped the injected raters and a k counting them
   was refused.

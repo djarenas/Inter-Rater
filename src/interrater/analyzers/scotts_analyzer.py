@@ -15,7 +15,17 @@ if TYPE_CHECKING:
     from ..intermediates.data_profiles.balance_profile import BalanceProfile
 
 from ..intermediates.estimator_parts import NijMatrix
-from .agreement_functions.group_agreement import scotts_pi
+from ..intermediates.data_profiles import AgreementProfile
+from ..intermediates.not_computed import NotComputed
+from ..intermediates.results import AgreementParts
+from ..intermediates.results.analyzer_results.scotts_pi_result import (
+    KAPPA_MAX_NOT_COMPUTED,
+)
+from .agreement_functions.group_agreement import (
+    chance_fleiss,
+    observed_agreement,
+    scotts_pi,
+)
 from .ci_methods import percentile_ci, bca_ci
 from ..intermediates.results.ci_results import (
     BootstrapCIResult,
@@ -212,7 +222,10 @@ class ScottsAnalyzer(GroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
-            ci_method=self.config.ci_method
+            parts=self._agreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
+            ci_method=self.config.ci_method,
         )
 
     def estimate_from_nij_matrix(self) -> ScottsPiResult:
@@ -263,7 +276,10 @@ class ScottsAnalyzer(GroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
-            ci_method=self.config.ci_method
+            parts=self._agreement_parts(self.nij_matrix.matrix),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
+            ci_method=self.config.ci_method,
         )
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -327,13 +343,11 @@ class ScottsAnalyzer(GroupAnalyzer):
 
             from .resampling_functions.permutation_resampling import (
                 within_rater_shuffle,
-                within_subject_shuffle,
                 pool_and_redistribute,
             )
 
             scheme_map = {
                 "within_rater_shuffle": within_rater_shuffle,
-                "within_subject": within_subject_shuffle,
                 "pool_and_redistribute": pool_and_redistribute,
             }
 
@@ -440,6 +454,21 @@ class ScottsAnalyzer(GroupAnalyzer):
         -- is written once on my base classes in terms of this.
         """
         return scotts_pi(NijMatrix(matrix=nij_array), weights=None)
+
+    def _agreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+        """
+        Po and Pe on the counts the point estimate was computed from.
+
+        The same two functions scotts_pi combines, so the result can check
+        that they rebuild the point estimate.
+        """
+        nij = NijMatrix(matrix=nij_array)
+        return AgreementParts(
+            observed=observed_agreement(nij, None),
+            chance=chance_fleiss(nij, None),
+            kind="agreement",
+            weighted=False,
+        )
 
     def _parametric_null_ci(
         self, point: float, pj: np.ndarray

@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ...not_computed import NotComputed
+from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[FleissKappaResult] Error"
+_TOL = 1e-9
+
+# Why kappa_max is not computed for me. The analyzer passes it in.
+KAPPA_MAX_NOT_COMPUTED = (
+    "Fleiss' kappa corrects with category shares pooled over all raters, "
+    "so perfect agreement is always possible and the maximum is always 1"
+)
 
 
 @dataclass(frozen=True)
@@ -34,18 +46,30 @@ class FleissKappaResult(PointEstimateResult):
     unweighted Fleiss' kappa are different statistics with different
     interpretations. A result must be self-describing.
 
+    My parts are Po and Pe, and I check them against the rest of me: they
+    are weighted exactly when I am, and when unweighted, Pe is the sum of
+    squared category shares in my agreement profile -- so the parts and the
+    profile must come from the same data. kappa_max is always NotComputed:
+    pooled shares put no limit below 1 on agreement.
 
     Attributes
     ----------
     point : float
         Fleiss' kappa (inherited from PointEstimateResult).
-    confidence_interval : tuple[float, float] | None
-        Bootstrap confidence interval (lower, upper) (inherited).
+    confidence_interval : CIResult | None
+        The interval, bootstrap or parametric (inherited).
     bootstrap_distribution : np.ndarray | None
         Bootstrap distribution (inherited).
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
+    parts : AgreementParts
+        Po and Pe (inherited). Always computed for Fleiss' kappa.
+    kappa_max : NotComputed
+        Always NotComputed, with KAPPA_MAX_NOT_COMPUTED as the reason
+        (inherited).
+    agreement_profile : AgreementProfile
+        Prevalence, rater marginals, specific agreement (inherited).
     ci_method : str
         Method used: "percentile", "bca", or "parametric_null".
     weights_type : str
@@ -61,9 +85,12 @@ class FleissKappaResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: tuple[float, float] | None
+    confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | None
     balance_profile: BalanceProfile | None
+    parts: AgreementParts
+    kappa_max: NotComputed
+    agreement_profile: AgreementProfile
 
     # Populated at this level
     ci_method: str
@@ -126,27 +153,51 @@ class FleissKappaResult(PointEstimateResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        self._check_parts_fit_fleiss()
+
+    def _check_parts_fit_fleiss(self) -> None:
+        """Po and Pe are always there, weighted as I am, Pe from my profile."""
+        if not isinstance(self.parts, AgreementParts) or self.parts.kind != "agreement":
+            raise TypeError(
+                f"{_ERROR_PREFIX}: parts must be agreement parts (Po and Pe), "
+                f"got {self.parts!r}"
+            )
+        weighted = self.weights_type != "identity"
+        if self.parts.weighted != weighted:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: parts.weighted is {self.parts.weighted} but "
+                f"weights_type is '{self.weights_type}'"
+            )
+        if not isinstance(self.kappa_max, NotComputed):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: kappa_max must be NotComputed for Fleiss' "
+                f"kappa ({KAPPA_MAX_NOT_COMPUTED}), got {self.kappa_max!r}"
+            )
+        if weighted or math.isnan(self.parts.chance):
+            return
+        pe = sum(p * p for p in self.agreement_profile.prevalence.values())
+        if abs(pe - self.parts.chance) > _TOL:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: Pe is {self.parts.chance:.6f}, but the "
+                f"agreement profile's category shares give {pe:.6f}; the parts "
+                f"and the profile describe different data"
+            )
+
     # Public API ------------------------------------------------------------- #
 
-    def __str__(self) -> str:
-        """
-        Return a compact string representation with coefficient name and context.
+    # Printed form: see PointEstimateResult.__str__ ----------------------- #
 
-        Format:
-            Fleiss' κ = 0.523 (95% CI: [0.481, 0.565], n_bootstrap=1000)
-            n_subjects=100; n_raters=5; unweighted; ci_method=bca; exact formula
-        """
-        parent_str = super().__str__()
-        weight_label = (
-            "unweighted" if self.weights_type == "identity"
-            else f"weighted ({self.weights_type})"
-        )
-        exact_str = "exact formula" if self.is_exact else "approximation (unbalanced data)"
+    def _name(self) -> str:
+        return "Fleiss' κ"
+
+    def _kappa_max_note(self) -> str:
+        return "κ_max not computed (pooled shares)"
+
+    def _data_line(self) -> str:
+        exact = "exact formula" if self.is_exact else "approximation (unbalanced data)"
         return (
-            f"Fleiss' κ {parent_str}\n"
-            f"n_subjects={self.balance_profile.n_subjects}; "
-            f"{self.balance_profile.n_raters_display}; {weight_label}; "
-            f"ci_method={self.ci_method}; {exact_str}"
+            f"{self._subjects_phrase()}; {self._raters_phrase()}; "
+            f"{self._weights_phrase(self.weights_type)}; {exact}"
         )
 
     def summary(self) -> dict:

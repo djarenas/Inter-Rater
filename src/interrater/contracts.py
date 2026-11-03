@@ -119,6 +119,15 @@ prevalence and is not yet in this package; see the roadmap entry on overlap
 adequacy.
 """
 
+# ------------------------------------------------------------ Printing #
+
+MAX_ROWS_PRINTED: int = 100
+"""The most pairs or subsets a permutation result lists when printed.
+
+Above it, ``print(result)`` keeps its header lines and points to
+``result.to_frame()``, which always holds every row.
+"""
+
 # --------------------------------------------------- Resampling Coefficients #
 
 SUBJECT_BOOTSTRAP_COEFFICIENTS: frozenset[str] = frozenset([
@@ -130,6 +139,7 @@ SUBJECT_BOOTSTRAP_COEFFICIENTS: frozenset[str] = frozenset([
     "cohen_kappa",
     "conger_kappa",
     # "gwet_ac2",  # Future: weighted form of AC1, also supports subject bootstrap
+    # "percent_agreement",  # Future: needs an analyzer and config; the function exists
 ])
 """Coefficients that support subject bootstrap (resample subjects, never raters).
 
@@ -182,6 +192,7 @@ SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([
     "brennan_prediger",
     "krippendorff_alpha",
     # "gwet_ac2",  # Future: weighted form of AC1, also supports subset permutation
+    # "percent_agreement",  # Future: needs an analyzer and config; the function exists
 ])
 """Coefficients that support subset permutation (all k-subsets of raters).
 

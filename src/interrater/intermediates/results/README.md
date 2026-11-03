@@ -46,11 +46,12 @@ resample it counted, with as many non-finite draws as it counted failed.
 The check lives in `_bootstrap_draws.py`, shared by every result that holds
 draws.
 
-## The two classes at this level
+## The classes at this level
 
 | Class                  | What It Holds                                                    | Why It Exists                                                      |
 |------------------------|------------------------------------------------------------------|---------------------------------------------------------------------|
 | `AnalysisResult`       | ABC with `summary() -> dict`                                      | Common contract: every result can describe itself in plain types.   |
+| `AgreementParts`       | observed, chance, kind ('agreement' for Po/Pe, 'disagreement' for Do/De), weighted | The two terms a chance-corrected coefficient is built from. Rebuilds the coefficient, so a result can check its point against them. |
 | `HypothesisTestResult` | p_value, alpha, reject_null, method, point, alternative; z (parametric) or null distribution and counts (permutation) | Test against H0: coefficient = 0. Parametric or permutation.        |
 
 **`HypothesisTestResult` is standalone.** A hypothesis test is a

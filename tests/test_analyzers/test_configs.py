@@ -478,15 +478,18 @@ class TestCohenKappaConfig:
         cfg = CohenKappaConfig()
         assert cfg.balanced_data_only is True
 
-    def test_balanced_data_forced_true_with_warning(self):
-        """Setting balanced_data_only=False should warn and force True."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            cfg = CohenKappaConfig(balanced_data_only=False)
-            assert cfg.balanced_data_only is True
-            assert len(w) == 1
-            assert issubclass(w[0].category, UserWarning)
-            assert "balanced data" in str(w[0].message).lower()
+    def test_balanced_data_false_refused_with_reason(self):
+        """Not rewritten to True: refused, saying why it does not apply."""
+        with pytest.raises(ValueError, match="not available for Cohen's kappa.*subjects both raters rated"):
+            CohenKappaConfig(balanced_data_only=False)
+
+    def test_balanced_data_true_accepted(self):
+        """The key a Fleiss config carries loads here too."""
+        assert CohenKappaConfig.build_from_dict({"balanced_data_only": True}).balanced_data_only
+
+    def test_balanced_data_not_bool(self):
+        with pytest.raises(TypeError, match="balanced_data_only must be bool"):
+            CohenKappaConfig(balanced_data_only="yes")
 
     def test_allows_parametric_null_ci(self):
         """Cohen has asymptotic null variance (Fleiss, Cohen & Everitt 1969).
@@ -511,15 +514,17 @@ class TestCongerKappaConfig:
         cfg = CongerKappaConfig()
         assert cfg.balanced_data_only is True
 
-    def test_balanced_data_forced_true_with_warning(self):
-        """Setting balanced_data_only=False should warn and force True."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            cfg = CongerKappaConfig(balanced_data_only=False)
-            assert cfg.balanced_data_only is True
-            assert len(w) == 1
-            assert issubclass(w[0].category, UserWarning)
-            assert "balanced data" in str(w[0].message).lower()
+    def test_balanced_data_false_refused_with_reason(self):
+        """Not rewritten to True: refused, pointing to what handles missing ratings."""
+        with pytest.raises(ValueError, match="not available for Conger's kappa.*pairwise permutation"):
+            CongerKappaConfig(balanced_data_only=False)
+
+    def test_balanced_data_true_accepted(self):
+        assert CongerKappaConfig.build_from_dict({"balanced_data_only": True}).balanced_data_only
+
+    def test_balanced_data_not_bool(self):
+        with pytest.raises(TypeError, match="balanced_data_only must be bool"):
+            CongerKappaConfig(balanced_data_only="yes")
 
     def test_rejects_parametric_null_ci(self):
         with pytest.raises(ValueError, match="parametric_null.*not available"):
@@ -531,11 +536,19 @@ class TestCongerKappaConfig:
             CongerKappaConfig(hypothesis_test_config=ht)
 
 class TestLightKappaConfig:
-    """Tests for LightKappaConfig (no parametric null, unbalanced OK)."""
+    """Tests for LightKappaConfig (no parametric null, complete data only)."""
 
-    def test_default_balanced_data_false(self):
-        cfg = LightKappaConfig()
-        assert cfg.balanced_data_only is False
+    def test_default_balanced_data_true(self):
+        assert LightKappaConfig().balanced_data_only is True
+
+    def test_balanced_data_false_refused_with_reason(self):
+        """Light (1971) is for complete data; the message says what to use instead."""
+        with pytest.raises(ValueError, match="not available for Light's kappa.*Light 1971.*pairwise permutation"):
+            LightKappaConfig(balanced_data_only=False)
+
+    def test_balanced_data_not_bool(self):
+        with pytest.raises(TypeError, match="balanced_data_only must be bool"):
+            LightKappaConfig(balanced_data_only="no")
 
     def test_rejects_parametric_null_ci(self):
         with pytest.raises(ValueError, match="parametric_null.*not available"):
@@ -566,15 +579,31 @@ class TestPermutationBootstrapMeanConfig:
         cfg = PermutationBootstrapMeanConfig(method="independent")
         assert cfg.summary() == {"method": "independent"}
 
-    def test_unknown_key_refused_from_yaml(self):
-        """Anything but method is refused, with a pointer to where the
-        draw count, interval method, level and seed are set."""
+    def test_removed_key_refused_from_yaml(self):
+        """A removed key says where it moved."""
         with pytest.raises(
-            ValueError, match="only key is 'method'.*config_of_coefficient"
+            TypeError, match=r"\['n_bootstraps'\] were removed in 2\.1\.0.*n_bootstraps -> n_resamples"
         ):
             PermutationBootstrapMeanConfig.from_dict(
                 {"method": "correlated", "n_bootstraps": 4000}
             )
+
+    @pytest.mark.parametrize("key, value", [
+        ("n_bootstraps", 4000), ("ci_method", "bca"), ("alpha", 0.05), ("random_state", 42),
+    ])
+    def test_removed_key_refused_from_python(self, key, value):
+        """The same message when called from Python, not a generic TypeError."""
+        with pytest.raises(TypeError, match="removed in 2.1.0.*config_of_coefficient"):
+            PermutationBootstrapMeanConfig(method="correlated", **{key: value})
+
+    def test_other_unknown_key_refused(self):
+        with pytest.raises(ValueError, match="only key is 'method'"):
+            PermutationBootstrapMeanConfig.from_dict({"method": "correlated", "n_draws": 10})
+
+    def test_removed_fields_not_in_summary_or_repr(self):
+        cfg = PermutationBootstrapMeanConfig(method="correlated")
+        assert cfg.summary() == {"method": "correlated"}
+        assert repr(cfg) == "PermutationBootstrapMeanConfig(method='correlated')"
 
     def test_from_yaml_shape(self):
         cfg = PermutationBootstrapMeanConfig.from_dict({"method": "correlated"})
@@ -707,8 +736,8 @@ class TestPairwisePermutationConfig:
         assert cfg.config_of_coefficient.ci_method == "bca"
 
     def test_extra_key_in_mean_block_refused(self):
-        """Reading a permutation config refuses extra keys in the mean block."""
-        with pytest.raises(ValueError, match="only key is 'method'"):
+        """A removed key in the mean block says where it moved, read from a dict."""
+        with pytest.raises(TypeError, match="removed in 2.1.0.*n_bootstraps -> n_resamples"):
             PairwisePermutationConfig.build_from_dict({
                 "coefficient_to_compute": "cohen_kappa",
                 "config_of_coefficient": {"n_resamples": 100},

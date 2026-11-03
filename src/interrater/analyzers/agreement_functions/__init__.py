@@ -22,6 +22,8 @@ from .group_agreement import (
 
 from .individual_marginals import (
     chance_cohen,
+    cohen_kappa_max,
+    max_observed_agreement,
     chance_conger,
     cohen_kappa,
     conger_kappa,
@@ -60,6 +62,8 @@ __all__ = [
     "rater_marginals",
     "shared_rows",
     "chance_cohen",
+    "cohen_kappa_max",
+    "max_observed_agreement",
     "chance_conger",
     "cohen_kappa",
     "conger_kappa",

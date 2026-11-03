@@ -302,7 +302,6 @@ class CleanerConfig:
             insufficient_data_drops:
               min_ratings_per_rater: 2
               min_ratings_per_subject: 2
-              method: raters_first
         """
         import yaml
 
@@ -338,7 +337,6 @@ class CleanerConfig:
             "insufficient_data_drops": {
                 "min_ratings_per_rater":   drops.min_ratings_per_rater,
                 "min_ratings_per_subject": drops.min_ratings_per_subject,
-                "method":                  drops.method,
             },
         }
 
@@ -370,7 +368,6 @@ class CleanerConfig:
             f"    unknown_policy    = {self.unknown_policy!r}\n"
             f"    unused_categories = {self.unused_categories!r}\n"
             f"    insufficient_data_drops = per_rater>={drops.min_ratings_per_rater}, "
-            f"per_subject>={drops.min_ratings_per_subject}, "
-            f"{drops.method!r}\n"
+            f"per_subject>={drops.min_ratings_per_subject}\n"
             f")"
         )
