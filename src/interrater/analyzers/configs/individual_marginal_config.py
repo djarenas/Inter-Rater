@@ -25,15 +25,14 @@ class IndividualMarginalConfig(AnalyzerConfig):
     different from group coefficients (Fleiss, AC1, etc.) which discard rater
     identity and read a counts matrix.
 
-    I do not currently allow rater_jackknife (leave-one-rater-out diagnostics),
-    even though theoretically Conger could support it at n>3. This is a design
-    choice for now; future versions may relax this.
+    I do not allow rater_jackknife (leave-one-rater-out diagnostics): it is
+    not supported in this version yet, for any coefficient.
 
     Attributes
     ----------
     rater_jackknife : bool, default False
-        Must remain False for now. Individual marginal coefficients do not
-        currently support leave-one-rater-out diagnostics.
+        Must be False: leave-one-rater-out diagnostics are not supported in
+        this version yet.
     (all other fields inherited from AnalyzerConfig)
     """
 
@@ -64,8 +63,8 @@ class IndividualMarginalConfig(AnalyzerConfig):
         # Rater jackknife not currently supported for individual marginals
         if self.rater_jackknife:
             raise ValueError(
-                f"{_ERROR_PREFIX}: rater_jackknife is not currently supported "
-                f"for individual marginal coefficients. Set rater_jackknife=False."
+                f"{_ERROR_PREFIX}: rater_jackknife (leave-one-rater-out) is not "
+                f"supported in this version yet. Set rater_jackknife: false."
             )
 
     # Public API ------------------------------------------------------------- #

@@ -290,6 +290,11 @@ class TestGroupCoefficientConfig:
         with pytest.raises(TypeError, match="rater_jackknife"):
             GroupCoefficientConfig(rater_jackknife=1)
 
+    def test_rater_jackknife_true_rejected(self):
+        """Refused, not silently ignored as in 2.0.0."""
+        with pytest.raises(ValueError, match="rater_jackknife.*not supported in this version"):
+            GroupCoefficientConfig(rater_jackknife=True)
+
     def test_summary_includes_group_fields(self):
         cfg = GroupCoefficientConfig()
         s = cfg.summary()
@@ -442,7 +447,7 @@ class TestIndividualMarginalConfig:
 
     def test_rater_jackknife_true_rejected(self):
         """Individual marginals don't support jackknife yet."""
-        with pytest.raises(ValueError, match="rater_jackknife.*not currently"):
+        with pytest.raises(ValueError, match="rater_jackknife.*not supported in this version"):
             IndividualMarginalConfig(rater_jackknife=True)
 
     def test_summary_includes_rater_jackknife(self):

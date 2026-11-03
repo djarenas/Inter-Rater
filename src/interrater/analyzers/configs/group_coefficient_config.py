@@ -29,7 +29,8 @@ class GroupCoefficientConfig(AnalyzerConfig):
     - Whether to enforce balance (constant raters per subject). Fleiss requires
       this mathematically; others are more flexible.
     - Whether to run leave-one-rater-out diagnostics to see how much each
-      rater matters to the agreement.
+      rater matters to the agreement. Not supported in this version yet:
+      true is refused, so it is never silently ignored.
 
     Attributes
     ----------
@@ -39,9 +40,8 @@ class GroupCoefficientConfig(AnalyzerConfig):
         different numbers of raters). Fleiss' kappa requires balance; other
         group coefficients are flexible.
     rater_jackknife : bool, default False
-        If True, compute leave-one-rater-out diagnostics: drop each rater in
-        turn and recompute the coefficient. Useful for detecting which rater
-        contributes most to agreement or causes instability.
+        Leave-one-rater-out diagnostics: drop each rater in turn and recompute
+        the coefficient. Not supported in this version yet; must be False.
     """
 
     # Attribute declaration
@@ -81,6 +81,11 @@ class GroupCoefficientConfig(AnalyzerConfig):
             raise TypeError(
                 f"{_ERROR_PREFIX}: rater_jackknife must be bool, "
                 f"got {type(self.rater_jackknife).__name__}"
+            )
+        if self.rater_jackknife:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: rater_jackknife (leave-one-rater-out) is not "
+                f"supported in this version yet. Set rater_jackknife: false."
             )
 
     # Public API ------------------------------------------------------------- #

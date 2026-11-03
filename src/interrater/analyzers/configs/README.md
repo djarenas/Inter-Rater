@@ -66,7 +66,7 @@ Validates all fields in `__post_init__`. Provides `build_from_dict`, `build_from
 Base for coefficients that read counts matrices (discard rater identity). Adds:
 
 - `balanced_data_only` (bool, default False) -- whether to enforce constant raters per subject
-- `rater_jackknife` (bool, default False) -- whether to run leave-one-rater-out diagnostics
+- `rater_jackknife` (bool, default False) -- leave-one-rater-out diagnostics; not supported in this version yet, so `true` is refused
 
 Both are validated as strict `bool` (rejects `int` to catch `balanced_data_only=1`).
 
@@ -88,7 +88,7 @@ Leaf configs: **FleissKappaConfig**, **BrennanPredigerConfig**, **KrippendorffAl
 
 Base for coefficients that keep rater identity (pairwise or per-rater marginals). Adds:
 
-- `rater_jackknife` (bool, default False) -- currently validated to stay False
+- `rater_jackknife` (bool, default False) -- not supported in this version yet, so `true` is refused
 
 These coefficients read EstimatorInput (not NijMatrix) and maintain which rater said what.
 
@@ -100,7 +100,7 @@ Leaf configs: **CongerKappaConfig**, **LightKappaConfig**.
 
 ### WeightableIndividualConfig
 
-For individual-marginal coefficients that support weighting. Same fields and validation as WeightableGroupConfig, plus enforces `rater_jackknife` stays False.
+For individual-marginal coefficients that support weighting. Same fields and validation as WeightableGroupConfig; `rater_jackknife: true` is refused, as everywhere.
 
 Leaf configs: **CohenKappaConfig**.
 
