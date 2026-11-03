@@ -131,6 +131,7 @@ PermutationConfig is a separate hierarchy (not a child of GroupCoefficientConfig
 - `config_of_coefficient` (AnalyzerConfig) -- the nested config for that coefficient
 - `subset_k` (int | list[int] | str | None, default None) -- subset size(s) for subset permutation
 - `bootstrap_mean_config` (PermutationBootstrapMeanConfig | None, default None) -- mean-level bootstrap configuration
+- `keep_draws` (bool, default True) -- keep each pair's or subset's bootstrap draws in the result; False tosses them after use, so memory does not grow with the number of units. Values and intervals are the same either way.
 
 Refuses `ci_method='parametric_null'` in `config_of_coefficient`: combinations sharing a rater are correlated, so no closed-form variance describes them.
 

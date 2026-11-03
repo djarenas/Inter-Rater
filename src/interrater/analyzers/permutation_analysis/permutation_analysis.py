@@ -107,6 +107,62 @@ _ESTIMATOR_MAP: dict[str, Estimator] = {
 }
 
 
+class IndependentMeanDraws:
+    """
+    I am the independent mean's draws, built while the units are bootstrapped.
+
+    Each draw of the independent mean picks one value from each defined
+    unit's (pair's or subset's) draws and averages the picks. I take the
+    units one at a time, as Computation B makes them: I pick n_resamples
+    values from a unit's draws and add them to a running total. After that
+    the unit's draws can be tossed, so the independent mean never needs
+    every unit's draws at once.
+
+    This is the only way the independent mean is built, whatever
+    keep_draws says, so the same seed gives the same interval whether the
+    draws are kept or not. The picks come from one stream seeded with
+    config_of_coefficient's random_state, taken in unit order.
+
+    A NaN pick makes that draw NaN, so it counts as failed rather than
+    averaging the other units. With no defined unit, every draw is NaN.
+    """
+
+    def __init__(
+        self, units: list, n_resamples: int, random_state: int | None
+    ) -> None:
+        self._units = list(units)
+        self._defined = set(self._units)
+        self._added = 0
+        self._rng = np.random.default_rng(random_state)
+        self._total = np.zeros(n_resamples, dtype=np.float64)
+
+    def add(self, unit: tuple, draws: np.ndarray) -> None:
+        """Pick from a unit's draws; units that are not defined are skipped."""
+        if unit not in self._defined:
+            return
+        # The picks come off one stream, so the order fixes the result.
+        if self._added >= len(self._units) or unit != self._units[self._added]:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: independent mean got unit {unit} out of "
+                f"order; this is a bug, not a property of the data."
+            )
+        picks = self._rng.integers(0, draws.size, size=self._total.size)
+        self._total += draws[picks]
+        self._added += 1
+
+    def draws(self) -> np.ndarray:
+        """The mean's draws, once every defined unit has been added."""
+        if self._added != len(self._units):
+            raise ValueError(
+                f"{_ERROR_PREFIX}: independent mean has {self._added} of "
+                f"{len(self._units)} units; this is a bug, not a property "
+                f"of the data."
+            )
+        if not self._units:
+            return np.full(self._total.size, np.nan)
+        return self._total / len(self._units)
+
+
 class PermutationAnalysis:
     """
     I am the base for permutation analysis across rater subsets.

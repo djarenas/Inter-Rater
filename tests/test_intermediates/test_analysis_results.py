@@ -53,11 +53,9 @@ from interrater.intermediates.results.permutation_results.permutation_result imp
     PermutationResult,
 )
 from interrater.intermediates.results.permutation_results.pairwise_permutation_result import (
-    MAX_PAIRS_FOR_DISTRIBUTIONS,
     PairwisePermutationResult,
 )
 from interrater.intermediates.results.permutation_results.subset_permutation_result import (
-    MAX_SUBSETS_FOR_DISTRIBUTIONS,
     SubsetPermutationResult,
 )
 from interrater.intermediates.results.permutation_results.multi_k_subset_result import (
@@ -1631,18 +1629,26 @@ class TestPairwisePermutationResultValidation:
         with pytest.raises(TypeError, match="always runs"):
             PairwisePermutationResult(**_pairwise_kwargs(bootstrap_cis_per_pair=None))
 
-    def test_distributions_required_at_or_below_limit(self):
-        with pytest.raises(ValueError, match="must be stored when"):
-            PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=None))
+    def test_draws_may_be_left_out(self):
+        """None is what keep_draws: false leaves; the intervals stay."""
+        r = PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=None))
+        assert len(r.bootstrap_cis_per_pair) == 3
 
-    def test_distributions_refused_above_limit(self):
+    def test_draws_kept_past_the_old_limit(self):
+        """2.0.0 refused draws above 20 pairs; there is no limit now."""
         values = _many_units(7, 2)
-        with pytest.raises(ValueError, match="None above it"):
-            PairwisePermutationResult(**_pairwise_kwargs(
-                pairwise_values=values,
-                subjects_per_pair={key: 10 for key in values},
-                n_pairs=len(values),
-            ))
+        r = PairwisePermutationResult(**_pairwise_kwargs(
+            pairwise_values=values,
+            subjects_per_pair={key: 10 for key in values},
+            n_pairs=len(values),
+        ))
+        assert len(r.bootstrap_distributions_per_pair) == 21
+
+    def test_draws_for_every_pair_or_none(self):
+        dists = _dists_for(PAIRS)
+        del dists[(1, 2)]
+        with pytest.raises(ValueError, match="same keys as pairwise_values"):
+            PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=dists))
 
     def test_bootstrap_cis_per_pair_keys_mismatch(self):
         with pytest.raises(
@@ -1687,26 +1693,18 @@ class TestPairwisePermutationResultAccessor:
         result = r.get_bootstrap_distributions_per_pair()
         assert result is dists
 
-    def test_raises_above_the_storage_limit(self):
-        """The one reason draws can be missing: too many pairs to store.
+    def test_raises_when_draws_not_kept(self):
+        """The one reason draws can be missing: keep_draws was false.
 
         It must not claim the bootstrap was not performed -- it always is.
         """
-        values = _many_units(7, 2)
-        assert len(values) > MAX_PAIRS_FOR_DISTRIBUTIONS
-        r = PairwisePermutationResult(**_pairwise_kwargs(
-            pairwise_values=values,
-            subjects_per_pair={key: 10 for key in values},
-            n_pairs=len(values),
-            bootstrap_distributions_per_pair=None,
-        ))
+        r = PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=None))
         with pytest.raises(RuntimeError) as exc:
             r.get_bootstrap_distributions_per_pair()
         message = str(exc.value)
-        assert f"n_pairs ({len(values)}) > MAX_PAIRS_FOR_DISTRIBUTIONS" in message
+        assert "keep_draws false" in message
         assert "bootstrap_cis_per_pair" in message
         assert "not performed" not in message
-        assert "higher threshold" not in message
 
 
 class TestPairwisePermutationResultStr:
@@ -1747,12 +1745,8 @@ class TestPairwisePermutationResultSummary:
         assert len(d["bootstrap_cis_per_pair"]) == 3
 
     def test_pair_distributions_stored_flag(self):
-        """Above the storage limit the flag is False."""
-        values = _many_units(7, 2)
+        """Draws not kept: the flag is False."""
         d = PairwisePermutationResult(**_pairwise_kwargs(
-            pairwise_values=values,
-            subjects_per_pair={key: 10 for key in values},
-            n_pairs=len(values),
             bootstrap_distributions_per_pair=None,
         )).summary()
         assert d["pair_distributions_stored"] is False
@@ -1930,18 +1924,26 @@ class TestSubsetPermutationResultValidation:
         with pytest.raises(TypeError, match="always runs"):
             SubsetPermutationResult(**_subset_kwargs(bootstrap_cis_per_subset=None))
 
-    def test_distributions_required_at_or_below_limit(self):
-        with pytest.raises(ValueError, match="must be stored when"):
-            SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=None))
+    def test_draws_may_be_left_out(self):
+        """None is what keep_draws: false leaves; the intervals stay."""
+        r = SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=None))
+        assert len(r.bootstrap_cis_per_subset) == 3
 
-    def test_distributions_refused_above_limit(self):
+    def test_draws_kept_past_the_old_limit(self):
+        """2.0.0 refused draws above 120 subsets; there is no limit now."""
         values = _many_units(17, 2)
-        with pytest.raises(ValueError, match="None above it"):
-            SubsetPermutationResult(**_subset_kwargs(
-                subset_values=values,
-                subjects_per_subset={key: 10 for key in values},
-                n_subsets=len(values),
-            ))
+        r = SubsetPermutationResult(**_subset_kwargs(
+            subset_values=values,
+            subjects_per_subset={key: 10 for key in values},
+            n_subsets=len(values),
+        ))
+        assert len(r.bootstrap_distributions_per_subset) == 136
+
+    def test_draws_for_every_subset_or_none(self):
+        dists = _dists_for(SUBSETS_K2)
+        del dists[(1, 2)]
+        with pytest.raises(ValueError, match="same keys as subset_values"):
+            SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=dists))
 
     def test_bootstrap_cis_per_subset_keys_mismatch(self):
         with pytest.raises(
@@ -1986,26 +1988,18 @@ class TestSubsetPermutationResultAccessor:
         result = r.get_bootstrap_distributions_per_subset()
         assert result is dists
 
-    def test_raises_above_the_storage_limit(self):
-        """The one reason draws can be missing: too many subsets to store.
+    def test_raises_when_draws_not_kept(self):
+        """The one reason draws can be missing: keep_draws was false.
 
         It must not claim the bootstrap was not performed -- it always is.
         """
-        values = _many_units(17, 2)
-        assert len(values) > MAX_SUBSETS_FOR_DISTRIBUTIONS
-        r = SubsetPermutationResult(**_subset_kwargs(
-            subset_values=values,
-            subjects_per_subset={key: 10 for key in values},
-            n_subsets=len(values),
-            bootstrap_distributions_per_subset=None,
-        ))
+        r = SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=None))
         with pytest.raises(RuntimeError) as exc:
             r.get_bootstrap_distributions_per_subset()
         message = str(exc.value)
-        assert f"n_subsets ({len(values)}) > MAX_SUBSETS_FOR_DISTRIBUTIONS" in message
+        assert "keep_draws false" in message
         assert "bootstrap_cis_per_subset" in message
         assert "not performed" not in message
-        assert "higher threshold" not in message
 
 
 class TestSubsetPermutationResultStr:
@@ -2047,12 +2041,8 @@ class TestSubsetPermutationResultSummary:
         assert len(d["bootstrap_cis_per_subset"]) == 3
 
     def test_subset_distributions_stored_flag(self):
-        """Above the storage limit the flag is False."""
-        values = _many_units(17, 2)
+        """Draws not kept: the flag is False."""
         d = SubsetPermutationResult(**_subset_kwargs(
-            subset_values=values,
-            subjects_per_subset={key: 10 for key in values},
-            n_subsets=len(values),
             bootstrap_distributions_per_subset=None,
         )).summary()
         assert d["subset_distributions_stored"] is False

@@ -34,6 +34,7 @@ class PairwisePermutationConfig(PermutationConfig):
     subset_k: int | None  # Checks that this value is None. Subsets should not happen in Pairwise permutations, but a user may put by mistake from a leftover config
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None
     balanced_data_only: bool
+    keep_draws: bool
 
     # Constructor ------------------------------------------------------------ #
 

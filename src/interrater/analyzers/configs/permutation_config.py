@@ -65,6 +65,11 @@ class PermutationConfig:
         before anything runs. This is about the panel; the flag of the
         same name inside config_of_coefficient is about the coefficient,
         and is applied to each pair or subset.
+    keep_draws : bool, default True
+        Whether the result keeps each pair's or subset's bootstrap draws.
+        False tosses each unit's draws once its interval is built and its
+        share of the mean added, so memory does not grow with the number of
+        units. Every value and interval is the same either way.
     """
 
     # Attribute declaration
@@ -77,6 +82,7 @@ class PermutationConfig:
     subset_k: int | list | str | None = None
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None = None
     balanced_data_only: bool = False
+    keep_draws: bool = True
 
     # Constructor ------------------------------------------------------------ #
 
@@ -136,6 +142,12 @@ class PermutationConfig:
             raise TypeError(
                 f"{_ERROR_PREFIX}: balanced_data_only must be bool, "
                 f"got {type(self.balanced_data_only).__name__}"
+            )
+
+        if not isinstance(self.keep_draws, bool):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: keep_draws must be bool, "
+                f"got {type(self.keep_draws).__name__}"
             )
 
         # Validate bootstrap_mean_config type if provided
@@ -342,13 +354,14 @@ class PermutationConfig:
         -------
         dict
             Keys: coefficient_to_compute, subset_k, balanced_data_only,
-            config_of_coefficient (nested summary),
+            keep_draws, config_of_coefficient (nested summary),
             bootstrap_mean_config (nested summary or None).
         """
         result = {
             "coefficient_to_compute": self.coefficient_to_compute,
             "subset_k": self.subset_k,
             "balanced_data_only": self.balanced_data_only,
+            "keep_draws": self.keep_draws,
             "config_of_coefficient": self.config_of_coefficient.summary(),
             "bootstrap_mean_config": (
                 self.bootstrap_mean_config.summary()

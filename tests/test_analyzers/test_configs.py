@@ -626,6 +626,15 @@ class TestPermutationConfig:
         assert cfg.coefficient_to_compute == "cohen_kappa"
         assert cfg.subset_k is None
         assert cfg.bootstrap_mean_config is None
+        assert cfg.keep_draws is True
+
+    def test_keep_draws_non_bool_rejected(self):
+        with pytest.raises(TypeError, match="keep_draws must be bool"):
+            PermutationConfig(
+                coefficient_to_compute="cohen_kappa",
+                config_of_coefficient=CohenKappaConfig(),
+                keep_draws=0,
+            )
 
     def test_invalid_coefficient_rejected(self):
         with pytest.raises(ValueError, match="coefficient_to_compute"):
@@ -651,6 +660,7 @@ class TestPermutationConfig:
         assert "config_of_coefficient" in s
         assert "subset_k" in s
         assert "bootstrap_mean_config" in s
+        assert s["keep_draws"] is True
 
 
 class TestPairwisePermutationConfig:

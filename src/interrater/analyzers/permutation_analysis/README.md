@@ -106,13 +106,44 @@ rater ARE correlated, and ignoring it underestimates the variance of the
 mean. The v1 package's analytic SE made this assumption and was ~28% too
 narrow.
 
-Cost: 0 estimator calls (numpy sampling from B's output). Requires B to
-have run first.
+Cost: 0 estimator calls. It is built during Computation B: as each pair's
+draws are made, one value per mean draw is picked from them and added to a
+running total (see *Keeping the draws*).
 
 Controlled by: `bootstrap_mean_config` (method only). The draw count,
 interval method, level and seed are the coefficient's own
 (`config_of_coefficient`), so the mean and the per-pair intervals are built
 the same way. The independent mean needs `ci_method: percentile` there.
+
+#### Keeping the draws
+
+Every pair or subset is bootstrapped, and its draws are the evidence behind
+its interval: they can be plotted, re-analysed, or used to check how much the
+interval's bounds would move under another seed. So by default the result
+keeps them, for every pair or subset.
+
+Until 2.1.0 they were kept only up to 20 pairs or 120 subsets. Above that
+they were computed, held through the whole run, and thrown away at the end.
+That freed memory after the run, never during it, and it meant a 10-rater
+panel could not show a single pair's distribution.
+
+`keep_draws: false` is for panels where the draws will not fit. Each pair or
+subset is bootstrapped, its interval built, its share of the mean added, and
+then its draws are tossed. Memory holds one unit's draws at a time, whatever
+the number of units. Every value, interval and mean interval is the same as
+with `keep_draws: true`; only the draws are missing from the result.
+
+**The same seed gives the same numbers either way.** The independent mean
+samples from each unit's draws, so it is built as the units are bootstrapped:
+as each unit's draws are made, one value per mean draw is picked from them and
+added to a running total, before the draws can be tossed. This is done the
+same way under both settings. If it were not, `keep_draws` would change the
+independent interval, and a setting about storage must not change a result.
+The correlated mean never reads the per-unit draws: it resamples subjects
+itself, one draw at a time, from its own seed stream, so `keep_draws` cannot
+change it either.
+
+The mean's own draws, one array, are always kept.
 
 #### Every draw averages the same pairs
 

@@ -7,7 +7,8 @@ I execute the three computations described in README.md, once per k:
 - B (per-subset bootstrap): resample subjects within each subset, produce
   per-subset distributions and CIs.
 - C (mean bootstrap): correlated (global resample, all subsets on the
-  same draw) or independent (sample from B's per-subset distributions).
+  same draw) or independent (sample from B's per-subset distributions,
+  picked while B runs; see IndependentMeanDraws).
 
 Each k is independent -- "average agreement among pairs" and "average
 agreement among triples" are different quantities, so each gets its own
@@ -24,11 +25,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...contracts import EMPTY
-from ...intermediates.results.permutation_results.subset_permutation_result import (
-    MAX_SUBSETS_FOR_DISTRIBUTIONS,
-)
 from ...intermediates.results.ci_results import BootstrapCIResult
-from .permutation_analysis import PermutationAnalysis
+from .permutation_analysis import IndependentMeanDraws, PermutationAnalysis
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
@@ -266,9 +264,22 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             self._compute_observed(k)
         )
 
+        # The subsets the point estimate averaged. Every draw of the mean
+        # uses exactly these, so it estimates the same quantity.
+        defined_subsets = sorted(
+            s for s, v in subset_values.items() if not np.isnan(v)
+        )
+
+        # The independent mean picks from each subset's draws while B makes
+        # them, so B can toss them when keep_draws is false.
+        independent = (
+            IndependentMeanDraws(defined_subsets, coc.n_resamples, coc.random_state)
+            if bmc is not None and bmc.method == "independent" else None
+        )
+
         # Computation B -- always
         subset_distributions, subset_cis = (
-            self._compute_per_subset_bootstrap(k, subset_values)
+            self._compute_per_subset_bootstrap(k, subset_values, independent)
         )
 
         # Computation C -- if mean bootstrap requested
@@ -277,18 +288,11 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         mean_method = None
         if bmc is not None:
             mean_method = bmc.method
-            # The subsets the point estimate averaged. Every draw uses
-            # exactly these, so it estimates the same quantity.
-            defined_subsets = sorted(
-                s for s, v in subset_values.items() if not np.isnan(v)
-            )
             mean_distribution, mean_ci = self._compute_mean_bootstrap(
-                k, subset_distributions, mean_over_subsets, defined_subsets
+                k, independent, mean_over_subsets, defined_subsets
             )
 
-        # Decide whether to store per-subset distributions
         n_subsets = len(subset_values)
-        store_distributions = n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS
 
         return SubsetPermutationResult(
             coefficient_name=self.config.coefficient_to_compute,
@@ -303,9 +307,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             bootstrap_ci_of_mean=mean_ci,
             bootstrap_distribution_of_mean=mean_distribution,
             bootstrap_cis_per_subset=subset_cis,
-            bootstrap_distributions_per_subset=(
-                subset_distributions if store_distributions else None
-            ),
+            bootstrap_distributions_per_subset=subset_distributions,
         )
 
     def _compute_observed(
@@ -348,7 +350,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         self,
         k: int,
         subset_values: dict,
-    ) -> tuple[dict, dict]:
+        independent: IndependentMeanDraws | None,
+    ) -> tuple[dict | None, dict]:
         """
         Computation B: per-subset bootstrap.
 
@@ -385,24 +388,34 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ``method_used`` is None -- no method ran, which is a different
         statement from an interval that could not be computed.
 
+        Each subset's draws are used for its interval and, for the
+        independent mean, picked from; then they are kept only if
+        keep_draws is true. So with keep_draws false, memory holds one
+        subset's draws at a time.
+
         Parameters
         ----------
         k : int
             Subset size.
         subset_values : dict
             Point estimates from Computation A, used for CI computation.
+        independent : IndependentMeanDraws | None
+            The independent mean, built as each subset's draws are made.
+            None unless the independent mean was requested.
 
         Returns
         -------
-        tuple[dict, dict]
+        tuple[dict | None, dict]
             (subset_distributions, subset_cis)
-            distributions: dict[subset -> np.ndarray of shape (n_resamples,)]
+            distributions: dict[subset -> np.ndarray of shape (n_resamples,)],
+            or None when keep_draws is false
             cis: dict[subset -> BootstrapCIResult]
         """
         coc = self.config.config_of_coefficient
         n_resamples = coc.n_resamples
         alpha = coc.alpha
         ci_method = coc.ci_method
+        keep_draws = self.config.keep_draws
 
         # Spawn one child seed per subset for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
@@ -430,7 +443,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 # to resample. Every draw fails, so no method runs -- which
                 # the result states rather than implying with a pair of
                 # NaNs.
-                distributions[subset] = np.full(n_resamples, np.nan)
+                if keep_draws:
+                    distributions[subset] = np.full(n_resamples, np.nan)
                 cis[subset] = BootstrapCIResult(
                     lower=float("nan"),
                     upper=float("nan"),
@@ -452,7 +466,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                     subset_data.take_subjects(resampled)
                 )
 
-            distributions[subset] = draws
+            if independent is not None:
+                independent.add(subset, draws)
+            if keep_draws:
+                distributions[subset] = draws
             point = subset_values[subset]
 
             # The jackknife leaves out the subjects this subset was
@@ -470,12 +487,12 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 draws, point, ci_method, alpha, jackknife_fn=_jackknife
             )
 
-        return distributions, cis
+        return (distributions if keep_draws else None), cis
 
     def _compute_mean_bootstrap(
         self,
         k: int,
-        subset_distributions: dict,
+        independent: IndependentMeanDraws | None,
         mean_over_subsets: float,
         defined_subsets: list,
     ) -> tuple[np.ndarray, tuple[float, float]]:
@@ -493,15 +510,16 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         each draw, pick one value from each subset's bootstrap
         distribution, average. Treats subsets as independent -- the CI
         will be narrower than correlated and may underestimate variance.
-        Cost: 0 estimator calls (numpy only).
+        Cost: 0 estimator calls; the picks were made while B ran (see
+        IndependentMeanDraws), so here they are only read off.
 
         Parameters
         ----------
         k : int
             Subset size.
-        subset_distributions : dict
-            Per-subset bootstrap distributions from B. Required for the
-            independent path; ignored for correlated.
+        independent : IndependentMeanDraws | None
+            The independent mean, built during B. Required for the
+            independent path; None for correlated.
         mean_over_subsets : float
             Point estimate of the mean from A, used for CI computation.
         defined_subsets : list
@@ -522,16 +540,14 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         bmc = self.config.bootstrap_mean_config
         coc = self.config.config_of_coefficient
         n_resamples = coc.n_resamples
-        rng = np.random.default_rng(coc.random_state)
 
         if bmc.method == "correlated":
+            rng = np.random.default_rng(coc.random_state)
             mean_distribution = self._mean_bootstrap_correlated(
                 k, defined_subsets, n_resamples, rng
             )
         elif bmc.method == "independent":
-            mean_distribution = self._mean_bootstrap_independent(
-                subset_distributions, defined_subsets, n_resamples, rng
-            )
+            mean_distribution = independent.draws()
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown bootstrap mean method "
@@ -657,61 +673,5 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 resampled_data, self.estimator, k
             )
             mean_draws[b] = mean_over_same_subsets(sub_values, defined_subsets)
-
-        return mean_draws
-
-    def _mean_bootstrap_independent(
-        self,
-        subset_distributions: dict,
-        defined_subsets: list,
-        n_resamples: int,
-        rng: np.random.Generator,
-    ) -> np.ndarray:
-        """
-        Independent mean bootstrap: sample from B's per-subset distributions.
-
-        For each draw: pick one value from each defined subset's bootstrap
-        distribution and average them. A draw that picks a failed (NaN)
-        value for any subset is NaN, so it counts as failed rather than
-        averaging the other subsets. Treats subsets as independent, so the
-        CI will typically be narrower than correlated -- on real data, too
-        narrow.
-
-        Parameters
-        ----------
-        subset_distributions : dict
-            Per-subset distributions from B.
-        defined_subsets : list
-            The subsets defined at the point estimate.
-        n_resamples : int
-            Number of bootstrap draws.
-        rng : np.random.Generator
-            Seeded random number generator.
-
-        Returns
-        -------
-        np.ndarray
-            Mean coefficient per draw, shape (n_resamples,).
-        """
-        subsets = defined_subsets
-        if not subsets:
-            return np.full(n_resamples, np.nan)
-        # Stack per-subset distributions: (n_subsets, n_resamples_per_subset)
-        stacked = np.array(
-            [subset_distributions[s] for s in subsets]
-        )
-        n_subsets = stacked.shape[0]
-        n_per_subset = stacked.shape[1]
-
-        # Vectorized: draw one index per subset per bootstrap draw
-        indices = rng.integers(
-            0, n_per_subset, size=(n_resamples, n_subsets)
-        )
-        # sampled[b, s] = stacked[s, indices[b, s]]
-        sampled = stacked[
-            np.arange(n_subsets)[np.newaxis, :], indices
-        ]
-        # Mean across subsets; any NaN makes the draw NaN
-        mean_draws = sampled.mean(axis=1).astype(np.float64)
 
         return mean_draws

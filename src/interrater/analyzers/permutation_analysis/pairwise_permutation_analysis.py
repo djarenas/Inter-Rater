@@ -7,7 +7,8 @@ I execute the three computations described in README.md:
 - B (per-pair bootstrap): resample subjects within each pair, produce
   per-pair distributions and CIs.
 - C (mean bootstrap): correlated (global resample, all pairs on the
-  same draw) or independent (sample from B's per-pair distributions).
+  same draw) or independent (sample from B's per-pair distributions,
+  picked while B runs; see IndependentMeanDraws).
 
 All three use the same estimator callable (EstimatorInput -> float),
 resolved by the parent.
@@ -20,11 +21,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...contracts import EMPTY
-from ...intermediates.results.permutation_results.pairwise_permutation_result import (
-    MAX_PAIRS_FOR_DISTRIBUTIONS,
-)
 from ...intermediates.results.ci_results import BootstrapCIResult
-from .permutation_analysis import PermutationAnalysis
+from .permutation_analysis import IndependentMeanDraws, PermutationAnalysis
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
@@ -115,9 +113,22 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             self._compute_observed()
         )
 
+        # The pairs the point estimate averaged. Every draw of the mean uses
+        # exactly these, so it estimates the same quantity.
+        defined_pairs = sorted(
+            p for p, v in pairwise_values.items() if not np.isnan(v)
+        )
+
+        # The independent mean picks from each pair's draws while B makes
+        # them, so B can toss them when keep_draws is false.
+        independent = (
+            IndependentMeanDraws(defined_pairs, coc.n_resamples, coc.random_state)
+            if bmc is not None and bmc.method == "independent" else None
+        )
+
         # Computation B -- always
         pairwise_distributions, pairwise_cis = (
-            self._compute_per_pair_bootstrap(pairwise_values)
+            self._compute_per_pair_bootstrap(pairwise_values, independent)
         )
 
         # Computation C -- if mean bootstrap requested
@@ -126,18 +137,11 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         mean_method = None
         if bmc is not None:
             mean_method = bmc.method
-            # The pairs the point estimate averaged. Every draw uses exactly
-            # these, so it estimates the same quantity.
-            defined_pairs = sorted(
-                p for p, v in pairwise_values.items() if not np.isnan(v)
-            )
             mean_distribution, mean_ci = self._compute_mean_bootstrap(
-                pairwise_distributions, mean_over_pairs, defined_pairs
+                independent, mean_over_pairs, defined_pairs
             )
 
-        # Decide whether to store per-pair distributions
         n_pairs = len(pairwise_values)
-        store_distributions = n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS
 
         return PairwisePermutationResult(
             coefficient_name=self.config.coefficient_to_compute,
@@ -151,9 +155,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             bootstrap_ci_of_mean=mean_ci,
             bootstrap_distribution_of_mean=mean_distribution,
             bootstrap_cis_per_pair=pairwise_cis,
-            bootstrap_distributions_per_pair=(
-                pairwise_distributions if store_distributions else None
-            ),
+            bootstrap_distributions_per_pair=pairwise_distributions,
         )
 
     # Private helpers ---------------------------------------------------- #
@@ -192,7 +194,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
     def _compute_per_pair_bootstrap(
         self,
         pairwise_values: dict,
-    ) -> tuple[dict, dict]:
+        independent: IndependentMeanDraws | None,
+    ) -> tuple[dict | None, dict]:
         """
         Computation B: per-pair bootstrap.
 
@@ -208,22 +211,32 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         Pairs with fewer than 2 shared subjects cannot be bootstrapped
         and receive NaN distributions and CIs.
 
+        Each pair's draws are used for its interval and, for the
+        independent mean, picked from; then they are kept only if
+        keep_draws is true. So with keep_draws false, memory holds one
+        pair's draws at a time.
+
         Parameters
         ----------
         pairwise_values : dict
             Point estimates from Computation A, used for CI computation.
+        independent : IndependentMeanDraws | None
+            The independent mean, built as each pair's draws are made.
+            None unless the independent mean was requested.
 
         Returns
         -------
-        tuple[dict, dict]
+        tuple[dict | None, dict]
             (pairwise_distributions, pairwise_cis)
-            distributions: dict[pair -> np.ndarray of shape (n_resamples,)]
-            cis: dict[pair -> (lower, upper)]
+            distributions: dict[pair -> np.ndarray of shape (n_resamples,)],
+            or None when keep_draws is false
+            cis: dict[pair -> BootstrapCIResult]
         """
         coc = self.config.config_of_coefficient
         n_resamples = coc.n_resamples
         alpha = coc.alpha
         ci_method = coc.ci_method
+        keep_draws = self.config.keep_draws
 
         # Spawn one child seed per pair for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
@@ -250,7 +263,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 # coefficient to resample. Every draw fails, so no method
                 # runs -- which the result states rather than implying with
                 # a pair of NaNs.
-                distributions[pair] = np.full(n_resamples, np.nan)
+                if keep_draws:
+                    distributions[pair] = np.full(n_resamples, np.nan)
                 cis[pair] = BootstrapCIResult(
                     lower=float("nan"),
                     upper=float("nan"),
@@ -272,7 +286,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                     pair_data.take_subjects(resampled)
                 )
 
-            distributions[pair] = draws
+            if independent is not None:
+                independent.add(pair, draws)
+            if keep_draws:
+                distributions[pair] = draws
             point = pairwise_values[pair]
 
             # The jackknife leaves out the subjects this pair was computed
@@ -289,11 +306,11 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 draws, point, ci_method, alpha, jackknife_fn=_jackknife
             )
 
-        return distributions, cis
+        return (distributions if keep_draws else None), cis
 
     def _compute_mean_bootstrap(
         self,
-        pairwise_distributions: dict,
+        independent: IndependentMeanDraws | None,
         mean_over_pairs: float,
         defined_pairs: list,
     ) -> tuple[np.ndarray, tuple[float, float]]:
@@ -311,13 +328,14 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         each draw, pick one value from each pair's bootstrap
         distribution, average. Treats pairs as independent -- the CI
         will be narrower than correlated and may underestimate variance.
-        Cost: 0 estimator calls (numpy only).
+        Cost: 0 estimator calls; the picks were made while B ran (see
+        IndependentMeanDraws), so here they are only read off.
 
         Parameters
         ----------
-        pairwise_distributions : dict
-            Per-pair bootstrap distributions from B. Required for the
-            independent path; ignored for correlated.
+        independent : IndependentMeanDraws | None
+            The independent mean, built during B. Required for the
+            independent path; None for correlated.
         mean_over_pairs : float
             Point estimate of the mean from A, used for CI computation.
         defined_pairs : list
@@ -338,16 +356,14 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         bmc = self.config.bootstrap_mean_config
         coc = self.config.config_of_coefficient
         n_resamples = coc.n_resamples
-        rng = np.random.default_rng(coc.random_state)
 
         if bmc.method == "correlated":
+            rng = np.random.default_rng(coc.random_state)
             mean_distribution = self._mean_bootstrap_correlated(
                 defined_pairs, n_resamples, rng
             )
         elif bmc.method == "independent":
-            mean_distribution = self._mean_bootstrap_independent(
-                pairwise_distributions, defined_pairs, n_resamples, rng
-            )
+            mean_distribution = independent.draws()
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown bootstrap mean method "
@@ -463,61 +479,5 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             )
             pair_values = over_pairs(resampled_data, self.estimator)
             mean_draws[b] = mean_over_same_subsets(pair_values, defined_pairs)
-
-        return mean_draws
-
-    def _mean_bootstrap_independent(
-        self,
-        pairwise_distributions: dict,
-        defined_pairs: list,
-        n_resamples: int,
-        rng: np.random.Generator,
-    ) -> np.ndarray:
-        """
-        Independent mean bootstrap: sample from B's per-pair distributions.
-
-        For each draw: pick one value from each defined pair's bootstrap
-        distribution and average them. A draw that picks a failed (NaN)
-        value for any pair is NaN, so it counts as failed rather than
-        averaging the other pairs. Treats pairs as independent, so the CI
-        will typically be narrower than correlated -- on real data, too
-        narrow.
-
-        Parameters
-        ----------
-        pairwise_distributions : dict
-            Per-pair distributions from B.
-        defined_pairs : list
-            The pairs defined at the point estimate.
-        n_resamples : int
-            Number of bootstrap draws.
-        rng : np.random.Generator
-            Seeded random number generator.
-
-        Returns
-        -------
-        np.ndarray
-            Mean coefficient per draw, shape (n_resamples,).
-        """
-        pairs = defined_pairs
-        if not pairs:
-            return np.full(n_resamples, np.nan)
-        # Stack per-pair distributions: (n_pairs, n_resamples_per_pair)
-        stacked = np.array(
-            [pairwise_distributions[p] for p in pairs]
-        )
-        n_pairs = stacked.shape[0]
-        n_per_pair = stacked.shape[1]
-
-        # Vectorized: draw one index per pair per bootstrap draw
-        indices = rng.integers(
-            0, n_per_pair, size=(n_resamples, n_pairs)
-        )
-        # sampled[b, p] = stacked[p, indices[b, p]]
-        sampled = stacked[
-            np.arange(n_pairs)[np.newaxis, :], indices
-        ]
-        # Mean across pairs; any NaN makes the draw NaN
-        mean_draws = sampled.mean(axis=1).astype(np.float64)
 
         return mean_draws

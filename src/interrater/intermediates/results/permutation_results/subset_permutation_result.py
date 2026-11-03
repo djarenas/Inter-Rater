@@ -16,13 +16,6 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[SubsetPermutationResult] Error"
 
-# Default threshold for storing per-subset bootstrap distributions.
-# Above this many subsets, raw distributions are not stored to save memory.
-# Per-subset CIs are always stored regardless of this threshold.
-# At 1000 resamples per subset, 120 subsets costs ~1 MB -- lightweight.
-# Covers the common cases: C(10,3)=120, C(9,4)=126, C(7,5)=21.
-MAX_SUBSETS_FOR_DISTRIBUTIONS: int = 120
-
 
 @dataclass(frozen=True)
 class SubsetPermutationResult(PermutationResult):
@@ -67,8 +60,8 @@ class SubsetPermutationResult(PermutationResult):
     - bootstrap_ci_of_mean: CI on the mean
     - bootstrap_distribution_of_mean: raw draws of the mean
     - bootstrap_cis_per_subset: CI per subset (always computed and stored)
-    - bootstrap_distributions_per_subset: raw draws per subset (only when
-      n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS, to bound memory)
+    - bootstrap_distributions_per_subset: raw draws per subset (None when the
+      analysis ran with keep_draws false)
 
     Observed spread and bootstrap width answer different questions with
     different remedies. High spread across subsets means agreement depends
@@ -127,10 +120,10 @@ class SubsetPermutationResult(PermutationResult):
         pair of NaNs. Always present: the analyzer config requires
         n_resamples >= 1, so the per-subset bootstrap always runs.
     bootstrap_distributions_per_subset : dict[tuple[int, ...], np.ndarray] | None
-        Raw bootstrap draws per subset. Stored exactly when
-        n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS, None above it, to bound
-        memory. Use get_bootstrap_distributions_per_subset() for access
-        with a helpful error when they were not stored.
+        Raw bootstrap draws for every subset, or None when the analysis
+        ran with keep_draws false. Use
+        get_bootstrap_distributions_per_subset() for access with a helpful
+        error when they were not kept.
     """
 
     # Attribute declaration
@@ -364,19 +357,6 @@ class SubsetPermutationResult(PermutationResult):
         except ValueError as exc:
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # Distributions are stored exactly when n_subsets is at or below
-        # the limit, so a missing one has one explanation.
-        should_store = self.n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS
-        stored = self.bootstrap_distributions_per_subset is not None
-        if stored != should_store:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bootstrap_distributions_per_subset must "
-                f"be stored when n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS "
-                f"({MAX_SUBSETS_FOR_DISTRIBUTIONS}) and None above it; got "
-                f"n_subsets={self.n_subsets} with distributions "
-                f"{'stored' if stored else 'missing'}"
-            )
-
         # Call parent validation
         try:
             super().__post_init__()
@@ -419,11 +399,11 @@ class SubsetPermutationResult(PermutationResult):
 
     def get_bootstrap_distributions_per_subset(self) -> dict:
         """
-        Return per-subset bootstrap distributions, or raise if not stored.
+        Return per-subset bootstrap distributions, or raise if not kept.
 
-        The per-subset bootstrap always runs, but its raw draws are only
-        stored when n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS, to bound
-        memory. This method says so rather than returning None.
+        The per-subset bootstrap always runs; its raw draws are kept unless
+        the analysis ran with keep_draws false. This method says so rather
+        than returning None.
 
         Returns
         -------
@@ -433,15 +413,15 @@ class SubsetPermutationResult(PermutationResult):
         Raises
         ------
         RuntimeError
-            If n_subsets is above MAX_SUBSETS_FOR_DISTRIBUTIONS.
+            If the analysis ran with keep_draws false.
         """
         if self.bootstrap_distributions_per_subset is not None:
             return self.bootstrap_distributions_per_subset
         raise RuntimeError(
             f"{_ERROR_PREFIX}: per-subset bootstrap distributions were not "
-            f"stored because n_subsets ({self.n_subsets}) > "
-            f"MAX_SUBSETS_FOR_DISTRIBUTIONS ({MAX_SUBSETS_FOR_DISTRIBUTIONS}). "
-            f"Per-subset CIs are in bootstrap_cis_per_subset."
+            f"kept: the analysis ran with keep_draws false. Rerun with "
+            f"keep_draws: true to keep them. Per-subset CIs are in "
+            f"bootstrap_cis_per_subset."
         )
 
     def summary(self) -> dict:

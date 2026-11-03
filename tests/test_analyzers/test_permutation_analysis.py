@@ -45,11 +45,9 @@ from interrater.analyzers.configs.permutation_bootstrap_mean_config import (
 from interrater.contracts import EMPTY
 from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.results.permutation_results.pairwise_permutation_result import (
-    MAX_PAIRS_FOR_DISTRIBUTIONS,
     PairwisePermutationResult,
 )
 from interrater.intermediates.results.permutation_results.subset_permutation_result import (
-    MAX_SUBSETS_FOR_DISTRIBUTIONS,
     SubsetPermutationResult,
 )
 from interrater.intermediates.results.permutation_results.multi_k_subset_result import (
@@ -107,6 +105,7 @@ def _pairwise_config(
     random_state: int = 42,
     ci_method: str = "percentile",
     bootstrap_mean: str | None = None,
+    keep_draws: bool = True,
 ) -> PairwisePermutationConfig:
     """Build a PairwisePermutationConfig for testing."""
     config_map = {
@@ -126,6 +125,7 @@ def _pairwise_config(
         coefficient_to_compute=coefficient,
         config_of_coefficient=coc,
         bootstrap_mean_config=bmc,
+        keep_draws=keep_draws,
     )
 
 
@@ -138,6 +138,7 @@ def _subset_config(
     bootstrap_mean: str | None = None,
     balanced_data_only: bool | None = None,
     panel_balanced_data_only: bool = False,
+    keep_draws: bool = True,
 ) -> SubsetPermutationConfig:
     """
     Build a SubsetPermutationConfig for testing.
@@ -165,6 +166,7 @@ def _subset_config(
         subset_k=subset_k,
         bootstrap_mean_config=bmc,
         balanced_data_only=panel_balanced_data_only,
+        keep_draws=keep_draws,
     )
 
 
@@ -505,29 +507,32 @@ class TestPairwiseComputationB:
             else:
                 assert ci.method_used is None
 
-    def test_per_pair_distributions_stored_when_few_pairs(self):
-        """Distributions stored when n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS."""
+    def test_per_pair_draws_kept_by_default(self):
         ratings = _make_ratings(20, 3)  # 3 pairs
         config = _pairwise_config(n_resamples=100)
         result = PairwisePermutationAnalysis(ratings, config).run()
-        assert 3 <= MAX_PAIRS_FOR_DISTRIBUTIONS
         assert result.bootstrap_distributions_per_pair is not None
         for pair, dist in result.bootstrap_distributions_per_pair.items():
             assert isinstance(dist, np.ndarray)
             assert dist.shape == (100,)
 
-    def test_per_pair_draws_not_stored_says_why(self):
-        """Above the limit, with no bootstrap of the mean, the accessor
-        names the storage limit. It used to say the bootstrap was not
-        performed, while every pair had its interval."""
+    def test_per_pair_draws_kept_past_the_old_limit(self):
+        """2.0.0 dropped them above 20 pairs."""
         ratings = _make_ratings(30, 7)  # 21 pairs
         result = PairwisePermutationAnalysis(
             ratings, _pairwise_config(n_resamples=20)
         ).run()
-        assert result.n_pairs > MAX_PAIRS_FOR_DISTRIBUTIONS
-        assert result.bootstrap_mean_method is None
+        assert len(result.get_bootstrap_distributions_per_pair()) == 21
+
+    def test_per_pair_draws_not_kept_says_why(self):
+        """keep_draws: false runs everything and leaves out only the draws."""
+        ratings = _make_ratings(30, 7)  # 21 pairs
+        result = PairwisePermutationAnalysis(
+            ratings, _pairwise_config(n_resamples=20, keep_draws=False)
+        ).run()
+        assert result.bootstrap_distributions_per_pair is None
         assert len(result.bootstrap_cis_per_pair) == 21
-        with pytest.raises(RuntimeError, match="not stored because n_pairs"):
+        with pytest.raises(RuntimeError, match="keep_draws false"):
             result.get_bootstrap_distributions_per_pair()
 
     def test_reproducible_with_same_seed(self):
@@ -786,12 +791,16 @@ class TestMeanUsesTheSamePairs:
             self._ratings(), self._config("independent")
         ).run()
         defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
-        stacked = np.array([result.bootstrap_distributions_per_pair[p] for p in defined])
-        indices = np.random.default_rng(42).integers(
-            0, stacked.shape[1], size=(self.N, len(defined))
-        )
-        sampled = stacked[np.arange(len(defined))[np.newaxis, :], indices]
-        expected = sampled.mean(axis=1)  # NaN if any pair's value is NaN
+        # The picks come one pair at a time, in pair order, from the
+        # coefficient's seed (see IndependentMeanDraws).
+        rng = np.random.default_rng(42)
+        sampled = np.array([
+            result.bootstrap_distributions_per_pair[p][
+                rng.integers(0, self.N, size=self.N)
+            ]
+            for p in defined
+        ])
+        expected = sampled.mean(axis=0)  # NaN if any pair's value is NaN
         draws = result.bootstrap_distribution_of_mean
         np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
         np.testing.assert_allclose(draws[~np.isnan(draws)], expected[~np.isnan(expected)])
@@ -1076,27 +1085,32 @@ class TestSubsetComputationB:
                     f"interval {ci}"
                 )
 
-    def test_distributions_stored_when_few_subsets(self):
-        """Distributions stored when n_subsets <= MAX_SUBSETS_FOR_DISTRIBUTIONS."""
+    def test_draws_kept_by_default(self):
         ratings = _make_ratings(20, 4)  # C(4,3) = 4 subsets
         config = _subset_config(n_resamples=100, subset_k=3)
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
-        assert 4 <= MAX_SUBSETS_FOR_DISTRIBUTIONS
         assert r.bootstrap_distributions_per_subset is not None
 
-    def test_per_subset_draws_not_stored_says_why(self):
-        """Above the limit, with no bootstrap of the mean, the accessor
-        names the storage limit rather than claiming no bootstrap ran."""
+    def test_per_subset_draws_kept_past_the_old_limit(self):
+        """2.0.0 dropped them above 120 subsets."""
         ratings = _make_ratings(30, 12)  # C(12,3) = 220 subsets
         result = SubsetPermutationAnalysis(
             ratings, _subset_config(n_resamples=20, subset_k=3)
         ).run()
         r = result.per_k_results[3]
-        assert r.n_subsets > MAX_SUBSETS_FOR_DISTRIBUTIONS
-        assert r.bootstrap_mean_method is None
+        assert len(r.get_bootstrap_distributions_per_subset()) == 220
+
+    def test_per_subset_draws_not_kept_says_why(self):
+        """keep_draws: false runs everything and leaves out only the draws."""
+        ratings = _make_ratings(30, 12)  # C(12,3) = 220 subsets
+        result = SubsetPermutationAnalysis(
+            ratings, _subset_config(n_resamples=20, subset_k=3, keep_draws=False)
+        ).run()
+        r = result.per_k_results[3]
+        assert r.bootstrap_distributions_per_subset is None
         assert len(r.bootstrap_cis_per_subset) == 220
-        with pytest.raises(RuntimeError, match="not stored because n_subsets"):
+        with pytest.raises(RuntimeError, match="keep_draws false"):
             r.get_bootstrap_distributions_per_subset()
 
     def test_reproducible_with_same_seed(self):
@@ -1335,3 +1349,69 @@ class TestResultSummary:
         s = result.summary()
         assert "coefficient_name" in s
         assert "ks" in s
+
+
+class TestKeepDrawsChangesNoNumber:
+    """
+    keep_draws is about storage, so it must not change a result: the same
+    seed gives the same values, per-unit intervals and mean, kept or not.
+    The independent mean is the case that needs care -- it samples from the
+    per-unit draws, so it is built while they exist, the same way under
+    both settings.
+    """
+
+    @staticmethod
+    def _same(a, b, units):
+        cis_a, cis_b = (
+            (a.bootstrap_cis_per_pair, b.bootstrap_cis_per_pair)
+            if hasattr(a, "bootstrap_cis_per_pair")
+            else (a.bootstrap_cis_per_subset, b.bootstrap_cis_per_subset)
+        )
+        for unit in units:
+            assert cis_a[unit].summary() == cis_b[unit].summary(), unit
+        np.testing.assert_array_equal(
+            a.bootstrap_distribution_of_mean, b.bootstrap_distribution_of_mean,
+        )
+        assert a.bootstrap_ci_of_mean.summary() == b.bootstrap_ci_of_mean.summary()
+
+    @pytest.mark.parametrize("method", ["correlated", "independent"])
+    def test_pairwise(self, method):
+        ratings = _make_ratings(30, 5, n_categories=3, sparse=True, seed=3)
+        kept, tossed = (
+            PairwisePermutationAnalysis(ratings, _pairwise_config(
+                n_resamples=100, bootstrap_mean=method, keep_draws=keep,
+            )).run()
+            for keep in (True, False)
+        )
+        assert kept.bootstrap_distributions_per_pair is not None
+        assert tossed.bootstrap_distributions_per_pair is None
+        self._same(kept, tossed, kept.pairwise_values)
+
+    @pytest.mark.parametrize("method", ["correlated", "independent"])
+    def test_subsets(self, method):
+        ratings = _make_ratings(30, 5, n_categories=3, sparse=True, seed=3)
+        kept, tossed = (
+            SubsetPermutationAnalysis(ratings, _subset_config(
+                n_resamples=100, subset_k=3, bootstrap_mean=method,
+                balanced_data_only=False, keep_draws=keep,
+            )).run().per_k_results[3]
+            for keep in (True, False)
+        )
+        assert kept.bootstrap_distributions_per_subset is not None
+        assert tossed.bootstrap_distributions_per_subset is None
+        self._same(kept, tossed, kept.subset_values)
+
+    def test_independent_mean_is_the_mean_of_picks_from_each_unit(self):
+        """The running total gives what picking from every unit's draws does."""
+        ratings = _make_ratings(30, 4, seed=5)
+        r = PairwisePermutationAnalysis(ratings, _pairwise_config(
+            n_resamples=50, bootstrap_mean="independent",
+        )).run()
+        draws = r.bootstrap_distributions_per_pair
+        rng = np.random.default_rng(42)  # the coefficient's random_state
+        expected = np.zeros(50)
+        for pair in sorted(draws):
+            expected += draws[pair][rng.integers(0, 50, size=50)]
+        np.testing.assert_allclose(
+            r.bootstrap_distribution_of_mean, expected / len(draws),
+        )

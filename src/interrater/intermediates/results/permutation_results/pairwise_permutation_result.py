@@ -17,11 +17,6 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[PairwisePermutationResult] Error"
 
-# Default threshold for storing per-pair bootstrap distributions.
-# Above this many pairs, raw distributions are not stored to save memory.
-# Per-pair CIs are always stored regardless of this threshold.
-MAX_PAIRS_FOR_DISTRIBUTIONS: int = 20
-
 
 @dataclass(frozen=True)
 class PairwisePermutationResult(PermutationResult):
@@ -65,8 +60,8 @@ class PairwisePermutationResult(PermutationResult):
     - bootstrap_ci_of_mean: CI on the mean
     - bootstrap_distribution_of_mean: raw draws of the mean
     - bootstrap_cis_per_pair: CI per pair (always computed and stored)
-    - bootstrap_distributions_per_pair: raw draws per pair (only when
-      n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS, to bound memory)
+    - bootstrap_distributions_per_pair: raw draws per pair (None when the
+      analysis ran with keep_draws false)
 
     Observed spread and bootstrap width answer different questions with
     different remedies. High spread across pairs means raters disagree
@@ -119,10 +114,9 @@ class PairwisePermutationResult(PermutationResult):
         present: the analyzer config requires n_resamples >= 1, so the
         per-pair bootstrap always runs.
     bootstrap_distributions_per_pair : dict[tuple[int, int], np.ndarray] | None
-        Raw bootstrap draws per pair. Stored exactly when
-        n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS, None above it, to bound
-        memory. Use get_bootstrap_distributions_per_pair() for access
-        with a helpful error when they were not stored.
+        Raw bootstrap draws for every pair, or None when the analysis ran
+        with keep_draws false. Use get_bootstrap_distributions_per_pair()
+        for access with a helpful error when they were not kept.
     """
 
     # Attribute declaration
@@ -332,19 +326,6 @@ class PairwisePermutationResult(PermutationResult):
         except ValueError as exc:
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # Distributions are stored exactly when n_pairs is at or below
-        # the limit, so a missing one has one explanation.
-        should_store = self.n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS
-        stored = self.bootstrap_distributions_per_pair is not None
-        if stored != should_store:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bootstrap_distributions_per_pair must "
-                f"be stored when n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS "
-                f"({MAX_PAIRS_FOR_DISTRIBUTIONS}) and None above it; got "
-                f"n_pairs={self.n_pairs} with distributions "
-                f"{'stored' if stored else 'missing'}"
-            )
-
         # Call parent validation
         try:
             super().__post_init__()
@@ -386,11 +367,11 @@ class PairwisePermutationResult(PermutationResult):
 
     def get_bootstrap_distributions_per_pair(self) -> dict:
         """
-        Return per-pair bootstrap distributions, or raise if not stored.
+        Return per-pair bootstrap distributions, or raise if not kept.
 
-        The per-pair bootstrap always runs, but its raw draws are only
-        stored when n_pairs <= MAX_PAIRS_FOR_DISTRIBUTIONS, to bound
-        memory. This method says so rather than returning None.
+        The per-pair bootstrap always runs; its raw draws are kept unless
+        the analysis ran with keep_draws false. This method says so rather
+        than returning None.
 
         Returns
         -------
@@ -400,15 +381,15 @@ class PairwisePermutationResult(PermutationResult):
         Raises
         ------
         RuntimeError
-            If n_pairs is above MAX_PAIRS_FOR_DISTRIBUTIONS.
+            If the analysis ran with keep_draws false.
         """
         if self.bootstrap_distributions_per_pair is not None:
             return self.bootstrap_distributions_per_pair
         raise RuntimeError(
             f"{_ERROR_PREFIX}: per-pair bootstrap distributions were not "
-            f"stored because n_pairs ({self.n_pairs}) > "
-            f"MAX_PAIRS_FOR_DISTRIBUTIONS ({MAX_PAIRS_FOR_DISTRIBUTIONS}). "
-            f"Per-pair CIs are in bootstrap_cis_per_pair."
+            f"kept: the analysis ran with keep_draws false. Rerun with "
+            f"keep_draws: true to keep them. Per-pair CIs are in "
+            f"bootstrap_cis_per_pair."
         )
 
     def summary(self) -> dict:
