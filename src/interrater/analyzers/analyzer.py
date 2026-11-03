@@ -122,10 +122,16 @@ class Analyzer(ABC):
 
     # Public API ------------------------------------------------------------- #
 
-    @abstractmethod
     def estimate(self) -> AnalysisResult:
         """
         Compute the agreement coefficient and return the result.
+
+        The same three steps for every coefficient, so they are written once
+        here: the point from the ratings, the interval (bootstrap, or the
+        null variance for ``parametric_null``), then the coefficient's own
+        result. Each analyzer supplies only what differs: the coefficient
+        (``_estimate_from_array``), its result (``_result``), and, where it
+        has one, its null variance (``_parametric_null_interval``).
 
         Returns
         -------
@@ -135,15 +141,35 @@ class Analyzer(ABC):
 
         Raises
         ------
-        NotImplementedError
-            If called on the abstract base class.
         ValueError
-            If ratings or config are invalid for this analyzer.
+            If this analyzer was built from an NijMatrix: use
+            ``estimate_from_nij_matrix()``.
+        NotImplementedError
+            If config.convergence_test is set; it is not implemented yet.
         """
-        raise NotImplementedError(
-            f"[Analyzer] Error: estimate() must be implemented by subclass, "
-            f"got {type(self).__name__}"
-        )
+        if self.ratings is None:
+            raise ValueError(
+                f"[{type(self).__name__}] Error: estimate() needs ratings, but "
+                f"this analyzer was built from an NijMatrix. Use "
+                f"estimate_from_nij_matrix() instead."
+            )
+        if self.config.convergence_test is not None:
+            raise NotImplementedError(
+                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
+            )
+
+        point = self._estimate_from_array(self.ratings.category_index)
+
+        if self.config.ci_method == "parametric_null":
+            ci = self._parametric_null_interval(point)
+            bootstrap_distribution = None
+        else:
+            bootstrap_distribution = self._bootstrap_distribution()
+            ci = self._compute_ci(
+                bootstrap_distribution, point, self._jackknife_estimates
+            )
+
+        return self._result(point, ci, bootstrap_distribution)
 
     @abstractmethod
     def hypothesis_test(self, method: str = "permutation") -> HypothesisTestResult:
@@ -303,6 +329,60 @@ class Analyzer(ABC):
             self._estimate_from_array(subset)
             for subset in subject_jackknife(self.ratings.category_index)
         ], dtype=np.float64)
+
+    def _compute_ci(
+        self,
+        bootstrap_distribution: np.ndarray,
+        point: float,
+        jackknife_fn,
+    ):
+        """
+        Build my interval from my draws: percentile or BCa.
+
+        ``jackknife_fn`` is called only for BCa, whose acceleration needs the
+        leave-one-out estimates; percentile never pays for them.
+        ``parametric_null`` does not come here -- it has no draws.
+        """
+        from .ci_methods import bca_ci, percentile_ci
+
+        if self.config.ci_method == "percentile":
+            return percentile_ci(bootstrap_distribution, self.config.alpha)
+        if self.config.ci_method == "bca":
+            return bca_ci(
+                bootstrap_distribution,
+                point,
+                self.config.alpha,
+                jackknife_estimates=jackknife_fn(),
+            )
+        raise ValueError(
+            f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}' "
+            f"for a bootstrap interval. Expected 'percentile' or 'bca'."
+        )
+
+    @abstractmethod
+    def _result(self, point: float, ci, bootstrap_distribution):
+        """
+        Package my point, interval and draws into my result class.
+
+        The last step of ``estimate()``, kept separate so that whatever
+        computed the point and interval -- ``estimate()`` itself, or a
+        permutation analysis that bootstrapped a pair or subset with its own
+        seeds -- gets the same result, built and checked the same way.
+        """
+
+    def _parametric_null_interval(self, point: float):
+        """
+        The interval from the null variance, for ``parametric_null``.
+
+        Only coefficients with a published null variance override this
+        (Cohen, Scott, Fleiss). Their configs and analyzers refuse
+        ``parametric_null`` everywhere else, so reaching here is a bug.
+        """
+        raise ValueError(
+            f"{_ERROR_PREFIX}: {type(self).__name__} has no null variance, "
+            f"so ci_method='parametric_null' cannot be used. This should have "
+            f"been refused when the config was built; this is a bug."
+        )
 
     # Private helpers -------------------------------------------------------- #
 

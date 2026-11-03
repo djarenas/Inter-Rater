@@ -78,15 +78,17 @@ class PointEstimateResult(AnalysisResult):
     ----------
     point : float
         The coefficient value.
-    confidence_interval : BootstrapCIResult | None
+    confidence_interval : CIResult | None
         The interval and an account of how it was produced: bounds, alpha,
         the method asked for against the one that ran, and the number of
         resamples that failed. None if no interval was computed.
-    bootstrap_distribution : np.ndarray | None
+    bootstrap_distribution : np.ndarray | NotComputed | None
         Array of shape (n_resamples,) containing coefficient values from each
         bootstrap resample, NaN where a resample's coefficient was undefined.
         Present exactly when confidence_interval is a BootstrapCIResult; None
-        otherwise (no interval, or a parametric one).
+        otherwise (no interval, or a parametric one). NotComputed when the
+        bootstrap ran but its draws were not kept (a permutation analysis
+        with keep_draws false), saying so.
     balance_profile : BalanceProfile | None
         Structural metadata about the data: n_subjects, n_raters, balance
         structure. None if not available at construction time.
@@ -104,8 +106,8 @@ class PointEstimateResult(AnalysisResult):
     """
 
     point: float
-    confidence_interval: BootstrapCIResult | None
-    bootstrap_distribution: np.ndarray | None
+    confidence_interval: CIResult | None
+    bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
@@ -151,10 +153,12 @@ class PointEstimateResult(AnalysisResult):
                 )
 
         # If bootstrap_distribution is provided, validate it
-        if self.bootstrap_distribution is not None:
+        if self.bootstrap_distribution is not None and not isinstance(
+            self.bootstrap_distribution, NotComputed
+        ):
             if not isinstance(self.bootstrap_distribution, np.ndarray):
                 raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution must be np.ndarray or None, "
+                    f"{_ERROR_PREFIX}: bootstrap_distribution must be np.ndarray, NotComputed or None, "
                     f"got {type(self.bootstrap_distribution).__name__}"
                 )
 
@@ -372,7 +376,8 @@ class PointEstimateResult(AnalysisResult):
             what a reader scans for; if bootstrap_distribution is not None,
             'bootstrap_draws_mean' and 'bootstrap_se' (the mean and standard
             error of the usable draws, None when too few are usable -- the
-            draw counts are in 'ci'); 'balance' if balance_profile is
+            draw counts are in 'ci'; ``{"not_computed": reason}`` when the
+            draws were not kept); 'balance' if balance_profile is
             not None; and 'parts', 'kappa_max' and 'agreement_profile', each
             a plain value or ``{"not_computed": reason}``.
         """
@@ -382,7 +387,10 @@ class PointEstimateResult(AnalysisResult):
             result["ci_lower"] = self.confidence_interval.lower
             result["ci_upper"] = self.confidence_interval.upper
             result["point_outside_interval"] = self.point_outside_interval
-        if self.bootstrap_distribution is not None:
+        if isinstance(self.bootstrap_distribution, NotComputed):
+            result["bootstrap_draws_mean"] = self.bootstrap_distribution.summary()
+            result["bootstrap_se"] = self.bootstrap_distribution.summary()
+        elif self.bootstrap_distribution is not None:
             mean, se = draw_moments(self.bootstrap_distribution)
             result["bootstrap_draws_mean"] = mean
             result["bootstrap_se"] = se

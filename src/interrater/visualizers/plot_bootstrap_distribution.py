@@ -91,7 +91,15 @@ def plot_bootstrap_distribution(
             f"estimate(), got {type(result).__name__}"
         )
 
+    from ..intermediates.not_computed import NotComputed
+
     ci = result.confidence_interval
+    if isinstance(result.bootstrap_distribution, NotComputed):
+        raise ValueError(
+            f"{_ERROR_PREFIX}: this result's bootstrap draws were not kept "
+            f"({result.bootstrap_distribution.reason}). Rerun with "
+            f"keep_draws: true to plot them."
+        )
     if not isinstance(ci, BootstrapCIResult) or result.bootstrap_distribution is None:
         raise ValueError(
             f"{_ERROR_PREFIX}: this result has no bootstrap distribution. "

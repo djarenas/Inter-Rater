@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -11,14 +11,12 @@ from .agreement_functions.krippendorff import (
     observed_disagreement,
 )
 from .weightable_group_analyzer import WeightableGroupAnalyzer
-from ..intermediates.data_profiles import AgreementProfile
 from ..intermediates.estimator_parts import NijMatrix
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.krippendorff_alpha_result import (
     KAPPA_MAX_NOT_COMPUTED,
 )
-from ..intermediates.results.ci_results import BootstrapCIResult
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
@@ -179,137 +177,6 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self) -> KrippendorffAlphaResult:
-        """
-        Compute Krippendorff's alpha from ratings and return the result.
-
-        Performs point estimation and bootstrap confidence interval computation.
-        The bootstrap loop resamples subjects with replacement, recomputes the
-        coefficient on each resample, and builds a distribution for CI bounds.
-
-        Returns
-        -------
-        KrippendorffAlphaResult
-            Point estimate, confidence interval, and bootstrap distribution.
-
-        Raises
-        ------
-        ValueError
-            If self.ratings is None (should use estimate_from_nij_matrix instead).
-        NotImplementedError
-            If config.convergence_test is set (not yet implemented).
-        """
-        from ..intermediates.estimator_parts import NijMatrix
-        from .agreement_functions.krippendorff import krippendorff_alpha
-        from .resampling_functions.subject_resampling import subject_bootstrap
-        from ..array_utils import category_counts
-        from ..intermediates.results import KrippendorffAlphaResult
-
-        # Guard: ratings must be available for this path
-        if self.ratings is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: estimate() requires ratings data. "
-                f"This analyzer was built from NijMatrix -- use "
-                f"estimate_from_nij_matrix() instead."
-            )
-
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Get number of categories
-        # Compute point estimate from original data
-        nij_array = category_counts(
-            self.ratings.category_index, self._n_categories()
-        )
-        point = self._estimate_from_nij(nij_array)
-
-        bootstrap_distribution = self._bootstrap_distribution()
-
-        # Compute confidence interval
-        ci = self._compute_ci(
-            bootstrap_distribution, point, self._jackknife_estimates
-        )
-
-        # Build and return result
-        return KrippendorffAlphaResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=self._disagreement_parts(nij_array),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
-            ci_method=self.config.ci_method,
-            weights_type=self._weights_kind(),
-            weight_matrix=self._weight_matrix(),
-        )
-
-    def estimate_from_nij_matrix(self) -> KrippendorffAlphaResult:
-        """
-        Compute Krippendorff's alpha from NijMatrix and return the result.
-
-        Uses subject bootstrap resampling on the counts matrix directly.
-
-        Returns
-        -------
-        KrippendorffAlphaResult
-            Point estimate, confidence interval, and bootstrap distribution.
-
-        Raises
-        ------
-        ValueError
-            If self.nij_matrix is None (should use estimate instead).
-        NotImplementedError
-            If config.convergence_test is set (not yet implemented).
-        """
-        from .agreement_functions.krippendorff import krippendorff_alpha
-        from .resampling_functions.subject_resampling import subject_bootstrap_from_nij_matrix
-        from ..intermediates.estimator_parts import NijMatrix
-        from ..intermediates.results import KrippendorffAlphaResult
-
-        # Guard: nij_matrix must be available for this path
-        if self.nij_matrix is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: estimate_from_nij_matrix() requires nij_matrix. "
-                f"This analyzer was built from Ratings -- use estimate() instead."
-            )
-
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from nij_matrix
-        nij_array = self.nij_matrix.matrix
-        point = self._estimate_from_nij(nij_array)
-
-        bootstrap_distribution = self._bootstrap_distribution_from_nij(nij_array)
-
-        # Compute confidence interval
-        ci = self._compute_ci(
-            bootstrap_distribution,
-            point,
-            lambda: self._jackknife_estimates_from_nij(nij_array),
-        )
-
-        # Build and return result
-        return KrippendorffAlphaResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=self._disagreement_parts(nij_array),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
-            ci_method=self.config.ci_method,
-            weights_type=self._weights_kind(),
-            weight_matrix=self._weight_matrix(),
-        )
-
     def hypothesis_test(self) -> HypothesisTestResult:
         """
         Test the null hypothesis that alpha = 0 (agreement is due to chance).
@@ -466,44 +333,25 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             weighted=self.weights is not None and not self.weights.is_identity,
         )
 
-    def _compute_ci(
-        self,
-        bootstrap_distribution: np.ndarray,
-        point: float,
-        jackknife_fn: Callable[[], np.ndarray],
-    ) -> BootstrapCIResult:
+    def _result(
+        self, point: float, ci, bootstrap_distribution: np.ndarray | None
+    ) -> KrippendorffAlphaResult:
         """
-        Compute confidence interval from bootstrap distribution.
-
-        Parameters
-        ----------
-        bootstrap_distribution : np.ndarray
-            Array of bootstrap coefficient values.
-        point : float
-            Point estimate of Krippendorff's alpha.
-        jackknife_fn : Callable[[], np.ndarray]
-            Produces leave-one-subject-out estimates when called. A callable
-            rather than an array because only BCa needs them, and producing
-            them costs one coefficient evaluation per subject.
-
-        Returns
-        -------
-        BootstrapCIResult
-            Lower and upper bounds of the confidence interval.
+        My result: the point, interval and draws ``estimate()`` (or a
+        permutation analysis) computed, with my parts, ceiling and profiles.
         """
-        from .ci_methods import percentile_ci, bca_ci
+        from ..intermediates.results import KrippendorffAlphaResult
 
-        if self.config.ci_method == "percentile":
-            return percentile_ci(bootstrap_distribution, self.config.alpha)
-        elif self.config.ci_method == "bca":
-            return bca_ci(
-                bootstrap_distribution,
-                point,
-                self.config.alpha,
-                jackknife_estimates=jackknife_fn(),
-            )
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}'. "
-                f"Expected 'percentile' or 'bca'."
-            )
+        nij_array = self._nij_array()
+        return KrippendorffAlphaResult(
+            point=point,
+            confidence_interval=ci,
+            bootstrap_distribution=bootstrap_distribution,
+            balance_profile=self.balance_profile,
+            parts=self._disagreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=self._agreement_profile(),
+            ci_method=self.config.ci_method,
+            weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
+        )

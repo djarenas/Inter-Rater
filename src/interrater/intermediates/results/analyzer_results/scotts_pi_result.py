@@ -56,8 +56,9 @@ class ScottsPiResult(PointEstimateResult):
         Scott's pi (inherited from PointEstimateResult).
     confidence_interval : CIResult | None
         The interval, bootstrap or parametric (inherited).
-    bootstrap_distribution : np.ndarray | None
-        Bootstrap distribution (inherited).
+    bootstrap_distribution : np.ndarray | NotComputed | None
+        Bootstrap distribution (inherited); NotComputed when the draws were
+        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
@@ -77,7 +78,7 @@ class ScottsPiResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult | None
-    bootstrap_distribution: np.ndarray | None
+    bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
     parts: AgreementParts
     kappa_max: NotComputed

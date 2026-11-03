@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..not_computed import NotComputed
 from .ci_results.bootstrap_ci_result import BootstrapCIResult
 
 
 def check_draws_match_interval(
-    draws: np.ndarray | None,
+    draws: np.ndarray | NotComputed | None,
     interval: object,
     *,
     draws_name: str,
@@ -28,15 +29,25 @@ def check_draws_match_interval(
 
     Draws are present exactly when the interval is a ``BootstrapCIResult``;
     there are as many draws as it resampled, and as many unusable draws as
-    it counted failed.
+    it counted failed. A bootstrap interval whose draws were not kept holds
+    ``NotComputed`` in their place, saying why; ``None`` means there was no
+    bootstrap at all.
 
     Raises
     ------
     ValueError
         If any of the three does not hold.
     """
-    has_draws = draws is not None
     is_bootstrap = isinstance(interval, BootstrapCIResult)
+    if isinstance(draws, NotComputed):
+        if not is_bootstrap:
+            raise ValueError(
+                f"{draws_name} says the draws were not kept ({draws.reason}), "
+                f"but {interval_name} is {type(interval).__name__}, not a "
+                f"BootstrapCIResult; only a bootstrap has draws to not keep"
+            )
+        return
+    has_draws = draws is not None
     if has_draws and not is_bootstrap:
         raise ValueError(
             f"{draws_name} is present but {interval_name} is "
@@ -46,7 +57,8 @@ def check_draws_match_interval(
     if is_bootstrap and not has_draws:
         raise ValueError(
             f"{interval_name} is a BootstrapCIResult but {draws_name} is "
-            f"None; a bootstrap interval comes with the draws it was made from"
+            f"None; a bootstrap interval comes with the draws it was made from, "
+            f"or with NotComputed saying why they were not kept"
         )
     if not has_draws:
         return

@@ -12,7 +12,6 @@ from .analyzer import Analyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.results import AnalysisResult
     from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile
     from ..intermediates.estimator_parts.estimator_input import EstimatorInput
@@ -159,22 +158,6 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         self.estimator_input = self._build_estimator_input()
 
     # Public API ------------------------------------------------------------- #
-
-    @abstractmethod
-    def estimate(self) -> AnalysisResult:
-        """
-        Compute the agreement coefficient and return the result.
-
-        Returns
-        -------
-        AnalysisResult
-            Subclass-specific result (CohenKappaResult, CongerKappaResult, etc.)
-            holding point estimate, confidence interval, and relevant metadata.
-        """
-        raise NotImplementedError(
-            f"{_ERROR_PREFIX}: estimate() must be implemented by subclass, "
-            f"got {type(self).__name__}"
-        )
 
     @abstractmethod
     def hypothesis_test(self) -> HypothesisTestResult:

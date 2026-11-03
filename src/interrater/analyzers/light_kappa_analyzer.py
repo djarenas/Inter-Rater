@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 from math import comb
 
 import numpy as np
@@ -30,9 +28,6 @@ from ..intermediates.results.analyzer_results.light_kappa_result import (
     KAPPA_MAX_NOT_COMPUTED,
     PARTS_NOT_COMPUTED,
 )
-from .resampling_functions.subject_resampling import subject_bootstrap
-from .ci_methods import percentile_ci, bca_ci
-from ..intermediates.results.ci_results import BootstrapCIResult
 
 _ERROR_PREFIX = "[LightKappaAnalyzer] Error"
 
@@ -138,50 +133,6 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
     # Public API ------------------------------------------------------------- #
-
-    def estimate(self) -> LightKappaResult:
-        """
-        Compute Light's kappa and return the result.
-
-        Performs point estimation and bootstrap confidence interval computation.
-        Only "percentile" and "bca" CI methods are supported -- there is no
-        closed-form null variance for Light's kappa.
-
-        Returns
-        -------
-        LightKappaResult
-        """
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from original data
-        point = light_kappa(self.estimator_input)
-
-        bootstrap_distribution = self._bootstrap_distribution()
-        ci = self._compute_ci(
-            bootstrap_distribution, point, self._jackknife_estimates
-        )
-
-        # Build and return result
-        n_pairs = comb(self.balance_profile.n_raters, 2)
-
-        pair_parts, pair_kappa_max = self._pairs()
-        return LightKappaResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=NotComputed(PARTS_NOT_COMPUTED),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
-            n_pairs=n_pairs,
-            ci_method=self.config.ci_method,
-            pair_parts=pair_parts,
-            pair_kappa_max=pair_kappa_max,
-        )
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
@@ -332,54 +283,29 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         )
         return light_kappa(ei)
 
-    def _compute_ci(
-        self,
-        bootstrap_distribution: np.ndarray,
-        point: float,
-        jackknife_fn: Callable[[], np.ndarray],
-    ) -> BootstrapCIResult:
+    def _result(
+        self, point: float, ci, bootstrap_distribution: np.ndarray | None
+    ) -> LightKappaResult:
         """
-        Compute confidence interval from bootstrap distribution.
+        My result: the point, interval and draws ``estimate()`` (or a
+        permutation analysis) computed, with my parts, ceiling and profiles.
 
-        Only "percentile" and "bca" are supported. There is no closed-form
-        null variance for Light's kappa, so "parametric_null" is not
-        available.
-
-        Parameters
-        ----------
-        bootstrap_distribution : np.ndarray
-            Array of bootstrap kappa values.
-        point : float
-            The point estimate of kappa.
-        jackknife_fn : Callable[[], np.ndarray]
-            Produces leave-one-subject-out estimates when called. A callable
-            rather than an array because only BCa needs them, and producing
-            them costs one coefficient evaluation per subject.
-
-        Returns
-        -------
-        BootstrapCIResult
-            Bounds, the method asked for against the one that ran, and how
-            many resamples failed.
-
-        Raises
-        ------
-        ValueError
-            If ci_method is unknown.
+        Only percentile and bca intervals: there is no closed-form null
+        variance for Light's kappa.
         """
-        if self.config.ci_method == "percentile":
-            return percentile_ci(bootstrap_distribution, self.config.alpha)
-        elif self.config.ci_method == "bca":
-            return bca_ci(
-                bootstrap_distribution,
-                point,
-                self.config.alpha,
-                jackknife_estimates=jackknife_fn(),
-            )
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown ci_method "
-                f"'{self.config.ci_method}'. Light's kappa has no "
-                f"closed-form null variance, so only 'percentile' and "
-                f"'bca' are available."
-            )
+        n_pairs = comb(self.balance_profile.n_raters, 2)
+
+        pair_parts, pair_kappa_max = self._pairs()
+        return LightKappaResult(
+            point=point,
+            confidence_interval=ci,
+            bootstrap_distribution=bootstrap_distribution,
+            balance_profile=self.balance_profile,
+            parts=NotComputed(PARTS_NOT_COMPUTED),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
+            n_pairs=n_pairs,
+            ci_method=self.config.ci_method,
+            pair_parts=pair_parts,
+            pair_kappa_max=pair_kappa_max,
+        )

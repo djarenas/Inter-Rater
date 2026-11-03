@@ -1751,3 +1751,52 @@ class TestCountsNeedTwoRatings:
             ValueError, match="1 rated by nobody and 1 rated by only one rater",
         ):
             analyzer.build_from_nij_matrix(nij, config)
+
+
+_ALL_ANALYZERS = [
+    ("CohenKappa", 2), ("ScottsAnalyzer", 2), ("CongerKappa", 3),
+    ("LightKappa", 3), ("FleissKappa", 3), ("GwetAC1", 3),
+    ("BrennanPrediger", 3), ("KrippendorffAlpha", 3),
+]
+
+
+def _analyzer_and_config(name: str):
+    import interrater.analyzers as analyzers
+    import interrater.analyzers.configs as configs
+
+    if name == "ScottsAnalyzer":
+        return analyzers.ScottsAnalyzer, configs.ScottsConfig
+    return getattr(analyzers, f"{name}Analyzer"), getattr(configs, f"{name}Config")
+
+
+class TestOneEstimate:
+    """
+    estimate() is written once, on Analyzer. Each analyzer supplies the
+    coefficient and its result; none writes its own estimate(). _result is
+    what a permutation analysis will call for each pair or subset, so it
+    must give exactly what estimate() gives from the same point, interval
+    and draws.
+    """
+
+    @pytest.mark.parametrize("name, n_raters", _ALL_ANALYZERS)
+    def test_no_analyzer_writes_its_own_estimate(self, name, n_raters):
+        analyzer_cls, _ = _analyzer_and_config(name)
+        assert "estimate" not in vars(analyzer_cls)
+        assert "estimate_from_nij_matrix" not in vars(analyzer_cls)
+        assert "_compute_ci" not in vars(analyzer_cls)
+        assert "_result" in vars(analyzer_cls)
+
+    @pytest.mark.parametrize("name, n_raters", _ALL_ANALYZERS)
+    def test_result_matches_estimate(self, name, n_raters):
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        analyzer = analyzer_cls(
+            _three_cat_ratings(n_raters),
+            config_cls(n_resamples=50, random_state=42, ci_method="percentile"),
+        )
+        result = analyzer.estimate()
+        again = analyzer._result(
+            result.point, result.confidence_interval, result.bootstrap_distribution,
+        )
+        assert type(again) is type(result)
+        assert str(again) == str(result)
+        assert again.summary() == result.summary()

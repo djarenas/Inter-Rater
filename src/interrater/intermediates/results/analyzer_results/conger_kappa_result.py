@@ -64,8 +64,9 @@ class CongerKappaResult(IndividualMarginalResult):
         Conger's kappa (inherited from PointEstimateResult).
     confidence_interval : CIResult | None
         Bootstrap confidence interval (inherited).
-    bootstrap_distribution : np.ndarray | None
-        Bootstrap distribution (inherited).
+    bootstrap_distribution : np.ndarray | NotComputed | None
+        Bootstrap distribution (inherited); NotComputed when the draws were
+        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited).
     parts : AgreementParts
@@ -85,7 +86,7 @@ class CongerKappaResult(IndividualMarginalResult):
     # balance_profile is not None and n_raters is not None)
     point: float
     confidence_interval: CIResult | None
-    bootstrap_distribution: np.ndarray | None
+    bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
     parts: AgreementParts
     kappa_max: float | NotComputed

@@ -67,8 +67,9 @@ class CohenKappaResult(IndividualMarginalResult):
         Cohen's kappa (inherited from PointEstimateResult).
     confidence_interval : CIResult | None
         Bootstrap or parametric confidence interval (inherited).
-    bootstrap_distribution : np.ndarray | None
-        Bootstrap distribution (inherited).
+    bootstrap_distribution : np.ndarray | NotComputed | None
+        Bootstrap distribution (inherited); NotComputed when the draws were
+        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Always populated for
         Cohen's kappa. n_subjects available via balance_profile.n_subjects.
@@ -97,7 +98,7 @@ class CohenKappaResult(IndividualMarginalResult):
     # balance_profile is not None and n_raters is not None)
     point: float
     confidence_interval: CIResult | None
-    bootstrap_distribution: np.ndarray | None
+    bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
     parts: AgreementParts
     kappa_max: float

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 import numpy as np
 
 from .weightable_individual_analyzer import WeightableIndividualAnalyzer
@@ -24,12 +22,7 @@ from .agreement_functions.individual_marginals import (
 )
 from ..intermediates.data_profiles import AgreementProfile
 from ..intermediates.results import AgreementParts
-from .resampling_functions.subject_resampling import subject_bootstrap
-from .ci_methods import percentile_ci, bca_ci
-from ..intermediates.results.ci_results import (
-    BootstrapCIResult,
-    ParametricCIResult,
-)
+from ..intermediates.results.ci_results import ParametricCIResult
 
 _ERROR_PREFIX = "[CohenKappaAnalyzer] Error"
 
@@ -131,59 +124,6 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         self._validate_n_raters()
 
     # Public API ------------------------------------------------------------- #
-
-    def estimate(self) -> CohenKappaResult:
-        """
-        Compute Cohen's kappa and return the result.
-
-        Performs point estimation and confidence interval computation.
-
-        When ci_method is "percentile" or "bca", runs the bootstrap loop.
-        When ci_method is "parametric_null", uses Fleiss, Cohen & Everitt (1969)
-        null variance -- no bootstrap is performed and bootstrap_distribution
-        is None.
-
-        Returns
-        -------
-        CohenKappaResult
-        """
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        n_categories = self.ratings.semantics.n_categories
-        n_subjects = self._get_n_subjects()
-
-        # Compute point estimate from original data
-        point = cohen_kappa(self.estimator_input, self.weights)
-
-        # CI path depends on ci_method
-        if self.config.ci_method == "parametric_null":
-            # Parametric null CI: no bootstrap needed
-            p_a, p_b = self._compute_marginals()
-            ci = self._parametric_null_ci(point, p_a, p_b, n_subjects)
-            bootstrap_distribution = None
-        else:
-            bootstrap_distribution = self._bootstrap_distribution()
-            ci = self._compute_ci(
-                bootstrap_distribution, point, self._jackknife_estimates
-            )
-
-        # Build and return result
-        return CohenKappaResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=self._agreement_parts(),
-            kappa_max=self._kappa_max(),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
-            ci_method=self.config.ci_method,
-            weights_type=self._weights_kind(),
-            weight_matrix=self._weight_matrix(),
-        )
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
@@ -472,49 +412,30 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             variance_source="null",
         )
 
-    def _compute_ci(
-        self,
-        bootstrap_distribution: np.ndarray,
-        point: float,
-        jackknife_fn: Callable[[], np.ndarray],
-    ) -> BootstrapCIResult:
+    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
         """
-        Compute confidence interval from bootstrap distribution.
-
-        Parameters
-        ----------
-        bootstrap_distribution : np.ndarray
-            Array of bootstrap kappa values.
-        point : float
-            The point estimate of kappa.
-        jackknife_fn : Callable[[], np.ndarray]
-            Produces leave-one-subject-out estimates when called. A callable
-            rather than an array because only BCa needs them, and producing
-            them costs one coefficient evaluation per subject.
-
-        Returns
-        -------
-        BootstrapCIResult
-            Bounds, the method asked for against the one that ran, and how
-            many resamples failed.
-
-        Raises
-        ------
-        ValueError
-            If ci_method is unknown.
+        The interval from Fleiss, Cohen & Everitt (1969) null variance, for
+        ``ci_method="parametric_null"``: no bootstrap, so no draws.
         """
-        if self.config.ci_method == "percentile":
-            return percentile_ci(bootstrap_distribution, self.config.alpha)
-        elif self.config.ci_method == "bca":
-            return bca_ci(
-                bootstrap_distribution,
-                point,
-                self.config.alpha,
-                jackknife_estimates=jackknife_fn(),
-            )
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown ci_method "
-                f"'{self.config.ci_method}'. Expected 'percentile', "
-                f"'bca', or 'parametric_null'."
-            )
+        p_a, p_b = self._compute_marginals()
+        return self._parametric_null_ci(point, p_a, p_b, self._get_n_subjects())
+
+    def _result(
+        self, point: float, ci, bootstrap_distribution: np.ndarray | None
+    ) -> CohenKappaResult:
+        """
+        My result: the point, interval and draws ``estimate()`` (or a
+        permutation analysis) computed, with my parts, ceiling and profiles.
+        """
+        return CohenKappaResult(
+            point=point,
+            confidence_interval=ci,
+            bootstrap_distribution=bootstrap_distribution,
+            balance_profile=self.balance_profile,
+            parts=self._agreement_parts(),
+            kappa_max=self._kappa_max(),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
+            ci_method=self.config.ci_method,
+            weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
+        )

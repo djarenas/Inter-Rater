@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 import numpy as np
 
 from .individual_marginal_analyzer import IndividualMarginalAnalyzer, check_complete
@@ -26,9 +24,6 @@ from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.conger_kappa_result import (
     KAPPA_MAX_NOT_COMPUTED,
 )
-from .resampling_functions.subject_resampling import subject_bootstrap
-from .ci_methods import percentile_ci, bca_ci
-from ..intermediates.results.ci_results import BootstrapCIResult
 
 _ERROR_PREFIX = "[CongerKappaAnalyzer] Error"
 
@@ -135,44 +130,6 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
     # Public API ------------------------------------------------------------- #
-
-    def estimate(self) -> CongerKappaResult:
-        """
-        Compute Conger's kappa and return the result.
-
-        Performs point estimation and bootstrap confidence interval computation.
-        Only "percentile" and "bca" CI methods are supported -- there is no
-        closed-form null variance for Conger's kappa.
-
-        Returns
-        -------
-        CongerKappaResult
-        """
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from original data
-        point = conger_kappa(self.estimator_input)
-
-        bootstrap_distribution = self._bootstrap_distribution()
-        ci = self._compute_ci(
-            bootstrap_distribution, point, self._jackknife_estimates
-        )
-
-        # Build and return result
-        return CongerKappaResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=self._agreement_parts(),
-            kappa_max=self._kappa_max(),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
-            ci_method=self.config.ci_method,
-        )
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
@@ -318,54 +275,23 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         )
         return conger_kappa(ei)
 
-    def _compute_ci(
-        self,
-        bootstrap_distribution: np.ndarray,
-        point: float,
-        jackknife_fn: Callable[[], np.ndarray],
-    ) -> BootstrapCIResult:
+    def _result(
+        self, point: float, ci, bootstrap_distribution: np.ndarray | None
+    ) -> CongerKappaResult:
         """
-        Compute confidence interval from bootstrap distribution.
+        My result: the point, interval and draws ``estimate()`` (or a
+        permutation analysis) computed, with my parts, ceiling and profiles.
 
-        Only "percentile" and "bca" are supported. There is no closed-form
-        null variance for Conger's kappa, so "parametric_null" is not
-        available.
-
-        Parameters
-        ----------
-        bootstrap_distribution : np.ndarray
-            Array of bootstrap kappa values.
-        point : float
-            The point estimate of kappa.
-        jackknife_fn : Callable[[], np.ndarray]
-            Produces leave-one-subject-out estimates when called. A callable
-            rather than an array because only BCa needs them, and producing
-            them costs one coefficient evaluation per subject.
-
-        Returns
-        -------
-        BootstrapCIResult
-            Bounds, the method asked for against the one that ran, and how
-            many resamples failed.
-
-        Raises
-        ------
-        ValueError
-            If ci_method is unknown.
+        Only percentile and bca intervals: there is no closed-form null
+        variance for Conger's kappa.
         """
-        if self.config.ci_method == "percentile":
-            return percentile_ci(bootstrap_distribution, self.config.alpha)
-        elif self.config.ci_method == "bca":
-            return bca_ci(
-                bootstrap_distribution,
-                point,
-                self.config.alpha,
-                jackknife_estimates=jackknife_fn(),
-            )
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown ci_method "
-                f"'{self.config.ci_method}'. Conger's kappa has no "
-                f"closed-form null variance, so only 'percentile' and "
-                f"'bca' are available."
-            )
+        return CongerKappaResult(
+            point=point,
+            confidence_interval=ci,
+            bootstrap_distribution=bootstrap_distribution,
+            balance_profile=self.balance_profile,
+            parts=self._agreement_parts(),
+            kappa_max=self._kappa_max(),
+            agreement_profile=AgreementProfile.from_ratings(self.ratings),
+            ci_method=self.config.ci_method,
+        )

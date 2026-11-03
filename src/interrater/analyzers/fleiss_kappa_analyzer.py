@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 import numpy as np
 
 from .weightable_group_analyzer import WeightableGroupAnalyzer
 
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import FleissKappaResult, HypothesisTestResult
-from ..intermediates.results.ci_results import (
-    BootstrapCIResult,
-    ParametricCIResult,
-)
+from ..intermediates.results.ci_results import ParametricCIResult
 from .configs import FleissKappaConfig
 
 from .agreement_functions.group_agreement import (
@@ -21,11 +16,10 @@ from .agreement_functions.group_agreement import (
     fleiss_kappa,
     observed_agreement,
 )
-from .ci_methods import percentile_ci, bca_ci
 from ..array_utils import category_counts
 
 from ..intermediates.estimator_parts import NijMatrix, Weights
-from ..intermediates.data_profiles import AgreementProfile, BalanceProfile
+from ..intermediates.data_profiles import BalanceProfile
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.fleiss_kappa_result import (
@@ -182,136 +176,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         return instance
 
     # Public API ------------------------------------------------------------- #
-
-    def estimate(self) -> FleissKappaResult:
-        """
-        Compute Fleiss' kappa and return the result.
-        Performs point estimation and confidence interval computation.
-
-        When ci_method is "percentile" or "bca", runs the bootstrap loop.
-        When ci_method is "parametric_null", uses Fleiss (1979) null variance
-        -- no bootstrap is performed and bootstrap_distribution is None.
-
-        Returns
-        -------
-        FleissKappaResult
-        """
-
-        # Guard: ratings must be available for this path
-        if self.ratings is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ratings is None. "
-                f"Use estimate_from_nij_matrix() when initialized from NijMatrix."
-            )
-
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from original data
-        nij_array = category_counts(
-            self.ratings.category_index, self._n_categories()
-        )
-        point = self._estimate_from_nij(nij_array)
-
-        # CI path depends on ci_method
-        if self.config.ci_method == "parametric_null":
-            # Parametric null CI: no bootstrap needed
-            pj = self._compute_pj(NijMatrix(matrix=nij_array))
-            ci = self._parametric_null_ci(point, pj)
-            bootstrap_distribution = None
-        else:
-            bootstrap_distribution = self._bootstrap_distribution()
-            ci = self._compute_ci(
-                bootstrap_distribution, point, self._jackknife_estimates
-            )
-
-        # Build and return result
-        return FleissKappaResult(
-            point=point,
-            confidence_interval=ci,
-            balance_profile=self.balance_profile,
-            bootstrap_distribution=bootstrap_distribution,
-            parts=self._agreement_parts(nij_array),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
-            ci_method=self.config.ci_method,
-            weights_type=self._weights_kind(),
-            weight_matrix=self._weight_matrix(),
-        )
-
-    def estimate_from_nij_matrix(self) -> FleissKappaResult:
-        """
-        Compute Fleiss' kappa from nij_matrix (NijMatrix-based path).
-
-        Called when analyzer was initialized via build_from_nij_matrix(nij, config).
-        Performs point estimation and confidence interval computation
-        directly from the counts matrix.
-
-        When ci_method is "percentile" or "bca", runs the bootstrap loop.
-        When ci_method is "parametric_null", uses Fleiss (1979) null variance
-        -- no bootstrap is performed and bootstrap_distribution is None.
-
-        Returns
-        -------
-        FleissKappaResult
-            Point estimate, CI, bootstrap distribution, balance profile, is_exact flag.
-
-        Raises
-        ------
-        ValueError
-            If self.nij_matrix is None.
-        NotImplementedError
-            If config.convergence_test is set.
-        """
-        # Guard: nij_matrix must be available for this path
-        if self.nij_matrix is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: nij_matrix is None. "
-                f"Use estimate() when initialized from Ratings."
-            )
-
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from original nij_matrix
-        point = self._estimate_from_nij(self.nij_matrix.matrix)
-
-        # CI path depends on ci_method
-        if self.config.ci_method == "parametric_null":
-            # Parametric null CI: no bootstrap needed
-            pj = self._compute_pj(self.nij_matrix)
-            ci = self._parametric_null_ci(point, pj)
-            bootstrap_distribution = None
-        else:
-            nij_array = self.nij_matrix.matrix
-            bootstrap_distribution = self._bootstrap_distribution_from_nij(
-                nij_array
-            )
-            ci = self._compute_ci(
-                bootstrap_distribution,
-                point,
-                lambda: self._jackknife_estimates_from_nij(nij_array),
-            )
-
-        # Build and return result
-        return FleissKappaResult(
-            point=point,
-            confidence_interval=ci,
-            balance_profile=self.balance_profile,
-            bootstrap_distribution=bootstrap_distribution,
-            parts=self._agreement_parts(self.nij_matrix.matrix),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
-            ci_method=self.config.ci_method,
-            weights_type=self._weights_kind(),
-            weight_matrix=self._weight_matrix(),
-        )
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
@@ -571,51 +435,33 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             variance_source="null",
         )
 
-    def _compute_ci(
-        self,
-        bootstrap_distribution: np.ndarray,
-        point: float,
-        jackknife_fn: Callable[[], np.ndarray],
-    ) -> BootstrapCIResult:
+    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
         """
-        Compute confidence interval from bootstrap distribution.
-
-        Parameters
-        ----------
-        bootstrap_distribution : np.ndarray
-            Array of bootstrap coefficient values. NaN entries mark resamples
-            whose coefficient was undefined; the CI method counts them.
-        point : float
-            The point estimate of the coefficient.
-        jackknife_fn : Callable[[], np.ndarray]
-            Produces leave-one-subject-out estimates when called. Taken as a
-            callable rather than an array because only BCa needs them, and
-            computing them costs one coefficient evaluation per subject. I am
-            the only place that knows which methods need a jackknife, so I am
-            the only place that decides whether to pay for one.
-
-        Returns
-        -------
-        BootstrapCIResult
-            Which carries the bounds, the method that was asked for against
-            the one that ran, and how many resamples failed.
-
-        Raises
-        ------
-        ValueError
-            If ci_method is unknown.
+        The interval from Fleiss (1979) null variance, for
+        ``ci_method="parametric_null"``: no bootstrap, so no draws.
         """
-        if self.config.ci_method == "percentile":
-            return percentile_ci(bootstrap_distribution, self.config.alpha)
-        elif self.config.ci_method == "bca":
-            return bca_ci(
-                bootstrap_distribution,
-                point,
-                self.config.alpha,
-                jackknife_estimates=jackknife_fn(),
-            )
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}'. "
-                f"Expected 'percentile', 'bca', or 'parametric_null'."
-            )
+        nij_array = self._nij_array()
+        return self._parametric_null_ci(
+            point, self._compute_pj(NijMatrix(matrix=nij_array))
+        )
+
+    def _result(
+        self, point: float, ci, bootstrap_distribution: np.ndarray | None
+    ) -> FleissKappaResult:
+        """
+        My result: the point, interval and draws ``estimate()`` (or a
+        permutation analysis) computed, with my parts, ceiling and profiles.
+        """
+        nij_array = self._nij_array()
+        return FleissKappaResult(
+            point=point,
+            confidence_interval=ci,
+            balance_profile=self.balance_profile,
+            bootstrap_distribution=bootstrap_distribution,
+            parts=self._agreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=self._agreement_profile(),
+            ci_method=self.config.ci_method,
+            weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
+        )

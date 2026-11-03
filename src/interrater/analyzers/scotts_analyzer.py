@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from ..intermediates.data_profiles.balance_profile import BalanceProfile
 
 from ..intermediates.estimator_parts import NijMatrix
-from ..intermediates.data_profiles import AgreementProfile
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.scotts_pi_result import (
@@ -26,11 +25,7 @@ from .agreement_functions.group_agreement import (
     observed_agreement,
     scotts_pi,
 )
-from .ci_methods import percentile_ci, bca_ci
-from ..intermediates.results.ci_results import (
-    BootstrapCIResult,
-    ParametricCIResult,
-)
+from ..intermediates.results.ci_results import ParametricCIResult
 from ..array_utils import category_counts
 
 _ERROR_PREFIX = "[ScottsAnalyzer] Error"
@@ -172,115 +167,6 @@ class ScottsAnalyzer(GroupAnalyzer):
         return instance
 
     # Public API ------------------------------------------------------------- #
-
-    def estimate(self) -> ScottsPiResult:
-        """
-        Compute Scott's pi and return the result.
-
-        When ci_method is "percentile" or "bca", runs the bootstrap loop.
-        When ci_method is "parametric_null", uses Fleiss (1979) null variance
-        -- no bootstrap is performed and bootstrap_distribution is None.
-
-        Returns
-        -------
-        ScottsPiResult
-        """
-        from ..intermediates.results import ScottsPiResult
-
-        # Guard: ratings must be available for this path
-        if self.ratings is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ratings is None. "
-                f"Use estimate_from_nij_matrix() when initialized from NijMatrix."
-            )
-
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from original data
-        nij_array = category_counts(
-            self.ratings.category_index, self._n_categories()
-        )
-        point = self._estimate_from_nij(nij_array)
-
-        # CI path depends on ci_method
-        if self.config.ci_method == "parametric_null":
-            pj = self._compute_pj(NijMatrix(matrix=nij_array))
-            ci = self._parametric_null_ci(point, pj)
-            bootstrap_distribution = None
-        else:
-            bootstrap_distribution = self._bootstrap_distribution()
-            ci = self._compute_ci(
-                bootstrap_distribution, point, self._jackknife_estimates
-            )
-
-        return ScottsPiResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=self._agreement_parts(nij_array),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
-            ci_method=self.config.ci_method,
-        )
-
-    def estimate_from_nij_matrix(self) -> ScottsPiResult:
-        """
-        Compute Scott's pi from nij_matrix (NijMatrix-based path).
-
-        Returns
-        -------
-        ScottsPiResult
-        """
-        from .resampling_functions import subject_bootstrap_from_nij_matrix
-        from ..intermediates.results import ScottsPiResult
-
-        # Guard: nij_matrix must be available for this path
-        if self.nij_matrix is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: nij_matrix is None. "
-                f"Use estimate() when initialized from Ratings."
-            )
-
-        # Guard convergence_test (not yet implemented)
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
-            )
-
-        # Compute point estimate from original nij_matrix
-        point = self._estimate_from_nij(self.nij_matrix.matrix)
-
-        # CI path depends on ci_method
-        if self.config.ci_method == "parametric_null":
-            pj = self._compute_pj(self.nij_matrix)
-            ci = self._parametric_null_ci(point, pj)
-            bootstrap_distribution = None
-        else:
-            nij_array = self.nij_matrix.matrix
-            bootstrap_distribution = self._bootstrap_distribution_from_nij(
-                nij_array
-            )
-            ci = self._compute_ci(
-                bootstrap_distribution,
-                point,
-                lambda: self._jackknife_estimates_from_nij(nij_array),
-            )
-
-        return ScottsPiResult(
-            point=point,
-            confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
-            balance_profile=self.balance_profile,
-            parts=self._agreement_parts(self.nij_matrix.matrix),
-            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_nij_matrix(self.nij_matrix),
-            ci_method=self.config.ci_method,
-        )
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
@@ -492,31 +378,33 @@ class ScottsAnalyzer(GroupAnalyzer):
             variance_source="null",
         )
 
-    def _compute_ci(
-        self,
-        bootstrap_distribution: np.ndarray,
-        point: float,
-        jackknife_fn: Callable[[], np.ndarray],
-    ) -> BootstrapCIResult:
+    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
         """
-        Compute CI from bootstrap distribution.
+        The interval from Fleiss (1979) null variance, for
+        ``ci_method="parametric_null"``: no bootstrap, so no draws.
+        """
+        nij_array = self._nij_array()
+        return self._parametric_null_ci(
+            point, self._compute_pj(NijMatrix(matrix=nij_array))
+        )
 
-        ``jackknife_fn`` is a callable rather than an array because only BCa
-        needs leave-one-out estimates, and producing them costs one
-        coefficient evaluation per subject. I am the only place that knows
-        which methods need them, so I am the only place that pays for them.
+    def _result(
+        self, point: float, ci, bootstrap_distribution: np.ndarray | None
+    ) -> ScottsPiResult:
         """
-        if self.config.ci_method == "percentile":
-            return percentile_ci(bootstrap_distribution, self.config.alpha)
-        elif self.config.ci_method == "bca":
-            return bca_ci(
-                bootstrap_distribution,
-                point,
-                self.config.alpha,
-                jackknife_estimates=jackknife_fn(),
-            )
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown ci_method '{self.config.ci_method}'. "
-                f"Expected 'percentile', 'bca', or 'parametric_null'."
-            )
+        My result: the point, interval and draws ``estimate()`` (or a
+        permutation analysis) computed, with my parts, ceiling and profiles.
+        """
+        from ..intermediates.results import ScottsPiResult
+
+        nij_array = self._nij_array()
+        return ScottsPiResult(
+            point=point,
+            confidence_interval=ci,
+            bootstrap_distribution=bootstrap_distribution,
+            balance_profile=self.balance_profile,
+            parts=self._agreement_parts(nij_array),
+            kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
+            agreement_profile=self._agreement_profile(),
+            ci_method=self.config.ci_method,
+        )

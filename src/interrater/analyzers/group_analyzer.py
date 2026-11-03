@@ -175,38 +175,15 @@ class GroupAnalyzer(Analyzer, ABC):
 
     # Public API ------------------------------------------------------------- #
 
-    @abstractmethod
-    def estimate(self) -> AnalysisResult:
-        """
-        Compute the group coefficient from ratings (Ratings-based path).
-
-        Must be implemented by subclass. Called when analyzer was initialized
-        via __init__(ratings, config).
-
-        Returns
-        -------
-        AnalysisResult
-            The coefficient with point estimate, CI, and metadata.
-
-        Raises
-        ------
-        ValueError
-            If self.ratings is None (should use estimate_from_nij_matrix instead).
-        NotImplementedError
-            If not implemented by subclass.
-        """
-        raise NotImplementedError(
-            f"{_ERROR_PREFIX}: estimate() must be implemented by subclass, "
-            f"got {type(self).__name__}"
-        )
-
-    @abstractmethod
     def estimate_from_nij_matrix(self) -> AnalysisResult:
         """
-        Compute the group coefficient from nij_matrix (NijMatrix-based path).
+        Compute the group coefficient from the counts matrix and return it.
 
-        Must be implemented by subclass. Called when analyzer was initialized
-        via build_from_nij_matrix(nij, config).
+        The counts-path twin of ``estimate()``, written once for every group
+        coefficient: the point from the counts, the interval (bootstrap over
+        rows, or the null variance for ``parametric_null``), then the
+        coefficient's own ``_result``. Only the source differs from
+        ``estimate()``; the coefficient and its result are the same methods.
 
         Returns
         -------
@@ -216,14 +193,38 @@ class GroupAnalyzer(Analyzer, ABC):
         Raises
         ------
         ValueError
-            If self.nij_matrix is None (should use estimate instead).
+            If this analyzer was built from Ratings: use ``estimate()``.
         NotImplementedError
-            If not implemented by subclass.
+            If config.convergence_test is set; it is not implemented yet.
         """
-        raise NotImplementedError(
-            f"{_ERROR_PREFIX}: estimate_from_nij_matrix() must be implemented by subclass, "
-            f"got {type(self).__name__}"
-        )
+        if self.nij_matrix is None:
+            raise ValueError(
+                f"[{type(self).__name__}] Error: estimate_from_nij_matrix() "
+                f"needs a counts matrix, but this analyzer was built from "
+                f"Ratings. Use estimate() instead."
+            )
+        if self.config.convergence_test is not None:
+            raise NotImplementedError(
+                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
+            )
+
+        nij_array = self.nij_matrix.matrix
+        point = self._estimate_from_nij(nij_array)
+
+        if self.config.ci_method == "parametric_null":
+            ci = self._parametric_null_interval(point)
+            bootstrap_distribution = None
+        else:
+            bootstrap_distribution = self._bootstrap_distribution_from_nij(
+                nij_array
+            )
+            ci = self._compute_ci(
+                bootstrap_distribution,
+                point,
+                lambda: self._jackknife_estimates_from_nij(nij_array),
+            )
+
+        return self._result(point, ci, bootstrap_distribution)
 
     # Resampling ------------------------------------------------------------- #
 
@@ -318,6 +319,34 @@ class GroupAnalyzer(Analyzer, ABC):
         ], dtype=np.float64)
 
     # Private helpers -------------------------------------------------------- #
+
+    def _nij_array(self) -> np.ndarray:
+        """
+        The counts matrix, from whichever source I was built from.
+
+        Lets ``_result`` and ``_parametric_null_interval`` serve both
+        ``estimate()`` and ``estimate_from_nij_matrix()``.
+        """
+        from ..array_utils import category_counts
+
+        if self.ratings is not None:
+            return category_counts(
+                self.ratings.category_index, self._n_categories()
+            )
+        return self.nij_matrix.matrix
+
+    def _agreement_profile(self):
+        """
+        My agreement profile, from whichever source I was built from.
+
+        From counts it has no per-rater marginals: counts do not say who
+        gave which rating.
+        """
+        from ..intermediates.data_profiles import AgreementProfile
+
+        if self.ratings is not None:
+            return AgreementProfile.from_ratings(self.ratings)
+        return AgreementProfile.from_nij_matrix(self.nij_matrix)
 
     def _n_categories(self) -> int:
         """

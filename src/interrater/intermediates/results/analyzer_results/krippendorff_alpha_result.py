@@ -67,8 +67,9 @@ class KrippendorffAlphaResult(PointEstimateResult):
         Krippendorff's alpha (inherited from PointEstimateResult).
     confidence_interval : CIResult | None
         The bootstrap interval (inherited).
-    bootstrap_distribution : np.ndarray | None
-        Bootstrap distribution (inherited).
+    bootstrap_distribution : np.ndarray | NotComputed | None
+        Bootstrap distribution (inherited); NotComputed when the draws were
+        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Informational only --
         alpha handles both balanced and unbalanced data exactly.
@@ -96,7 +97,7 @@ class KrippendorffAlphaResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult | None
-    bootstrap_distribution: np.ndarray | None
+    bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
     parts: AgreementParts
     kappa_max: NotComputed

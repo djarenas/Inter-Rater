@@ -890,6 +890,40 @@ class TestPointEstimateResultDrawsMatchInterval:
             PointEstimateResult(0.5, _ci(0.3, 0.7), None, None, **_NOT_UNDER_TEST)
 
 
+class TestPointEstimateResultDrawsNotKept:
+    """
+    A bootstrap whose draws were not kept (keep_draws: false in a permutation
+    analysis) holds NotComputed in their place, saying why. None still means
+    no bootstrap at all.
+    """
+
+    NOT_KEPT = NotComputed("draws not kept: keep_draws false")
+
+    def test_bootstrap_interval_with_draws_not_kept(self):
+        r = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, None, **_NOT_UNDER_TEST)
+        assert r.bootstrap_distribution is self.NOT_KEPT
+
+    def test_none_still_refused_with_a_bootstrap_interval(self):
+        with pytest.raises(ValueError, match="or with NotComputed saying why"):
+            PointEstimateResult(0.5, _ci(0.3, 0.7), None, None, **_NOT_UNDER_TEST)
+
+    def test_not_kept_needs_a_bootstrap_interval(self):
+        with pytest.raises(ValueError, match="only a bootstrap has draws to not keep"):
+            PointEstimateResult(0.5, None, self.NOT_KEPT, None, **_NOT_UNDER_TEST)
+
+    def test_summary_says_why(self):
+        d = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, None, **_NOT_UNDER_TEST).summary()
+        assert d["bootstrap_draws_mean"] == {"not_computed": "draws not kept: keep_draws false"}
+        assert d["bootstrap_se"] == {"not_computed": "draws not kept: keep_draws false"}
+
+    def test_plot_says_why(self):
+        from interrater.visualizers import plot_bootstrap_distribution
+
+        r = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, None, **_NOT_UNDER_TEST)
+        with pytest.raises(ValueError, match="draws were not kept"):
+            plot_bootstrap_distribution(r)
+
+
 class TestPointEstimateResultDrawMoments:
     """bootstrap_draws_mean and bootstrap_se use the usable draws only."""
 

@@ -62,12 +62,15 @@ the type.
 - Stores Ratings and Config
 - Computes BalanceProfile (how subjects were rated -- constant vs. variable
   raters per subject, fill rate, distribution of subject coverage)
-- Declares the abstract `estimate()` interface
+- Writes `estimate()` once for every coefficient (see below), with the one
+  `_compute_ci` it uses
 
 ### GroupAnalyzer
 
 - Validates Config is GroupCoefficientConfig
 - Supports two initialization paths: from Ratings, or from NijMatrix directly
+- Writes `estimate_from_nij_matrix()` once for every group coefficient: the
+  counts-path twin of `estimate()`, calling the same `_result`
 - Enforces balance constraints when `config.balanced_data_only=True`
 
 ### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
@@ -85,20 +88,37 @@ the type.
 ### Leaf analyzers (e.g. FleissKappaAnalyzer)
 
 - Validate their own config type (FleissKappaConfig, etc.)
-- Implement `estimate()` with the coefficient-specific bootstrap loop
-- Return a coefficient-specific result object (FleissKappaResult, etc.)
+- Supply only what is specific to their coefficient: the coefficient itself
+  (`_estimate_from_array`), the result it is packaged into (`_result`), and,
+  for Cohen, Scott and Fleiss, the null-variance interval
+  (`_parametric_null_interval`)
 
 
 ## The estimate() flow
 
-Every leaf analyzer's `estimate()` follows the same pattern:
+`estimate()` is the same for every coefficient, so it is written once, on
+`Analyzer`:
 
-1. **Point estimate.** Compute the coefficient on the original data.
-2. **Bootstrap loop.** Resample subjects with replacement, compute the
-   coefficient on each resample, collect the distribution.
-3. **Confidence interval.** Compute the CI from the bootstrap distribution
-   using the method specified in `config.ci_method`.
-4. **Return result.** Package everything into a frozen result object.
+1. **Point estimate.** `_estimate_from_array` on the original data.
+2. **Bootstrap loop.** Resample subjects with replacement and call
+   `_estimate_from_array` on each resample. The bootstrap uses the same
+   function as the point, so the two cannot drift apart.
+3. **Confidence interval.** Percentile or BCa from the draws; for
+   `parametric_null`, `_parametric_null_interval` instead, with no draws.
+4. **Return result.** `_result(point, ci, draws)` packages everything into
+   the coefficient's frozen result object.
+
+A leaf analyzer writes only the coefficient-specific pieces: steps 2 and 3
+need nothing from it beyond `_estimate_from_array`. `_result` is separate
+from the rest so that a permutation analysis, which bootstraps each pair or
+subset with its own seeds, can package a unit's point, interval and draws
+through the same method and get a result built and checked the same way.
+
+The counts path, `estimate_from_nij_matrix()`, is the same four steps on the
+counts matrix, written once on `GroupAnalyzer`. `_result` reads its counts and
+agreement profile through `_nij_array()` and `_agreement_profile()`, which
+take them from whichever source the analyzer was built from, so one `_result`
+serves both paths.
 
 ```python
 analyzer = FleissKappaAnalyzer(ratings, config)
