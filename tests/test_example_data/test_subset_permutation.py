@@ -31,9 +31,9 @@ cases makes both fail, with ``method_used=None`` and 250 of 250 draws
 failed on three subsets.
 
 ``test_subset_sizes_use_the_measurable_pool`` does *not* fail under the old
-rule, and is not a regression test despite reading like one.
-``subjects_per_subset`` comes from Computation A, which hands the whole
-array to the estimator and was never wrong. It is here to establish the
+rule, and is not a regression test despite reading like one. Each subset's
+subject count comes from its own result, built on the same pool Computation
+A hands the estimator, which was never wrong. It is here to establish the
 numbers the other tests rest on, and to record the divergence.
 
 SR1 main: ratings, 1617 subjects, 4 raters, K=3, partially crossed.
@@ -45,6 +45,7 @@ import pytest
 
 from interrater import SubsetPermutationAnalysis
 from interrater.contracts import EMPTY
+from interrater.intermediates.not_computed import NotComputed
 
 # Tolerance: 3 decimal places.
 TOL = 5e-4
@@ -57,6 +58,19 @@ MEASURABLE_K3 = {
     (0, 2, 3): 757,
     (1, 2, 3): 967,
 }
+
+
+def _subjects(per_k) -> dict:
+    """Each subset's subject count, from its own result.
+
+    Every subset here is computed; one that is not fails loudly rather than
+    being counted as 0.
+    """
+    counts = {}
+    for subset, unit in per_k.subset_results.items():
+        assert not isinstance(unit, NotComputed), f"subset {subset}: {unit}"
+        counts[subset] = unit.balance_profile.n_subjects
+    return counts
 
 
 def _complete_case_counts(ratings, k: int) -> dict:
@@ -83,9 +97,9 @@ class TestSR1MainSubsetsK3:
         """Record the divergence, and pin Computation A's pool.
 
         This is **not** a regression test for the bootstrap bug, though it
-        reads like one. ``subjects_per_subset`` comes from Computation A,
-        which was always correct; reverting the bootstrap's pool leaves
-        this passing. The tests below are the ones that fail.
+        reads like one. The subject counts come from the pool Computation
+        A uses, which was always correct; reverting the bootstrap's pool
+        leaves this passing. The tests below are the ones that fail.
 
         What it does do is establish that measurable and complete-case
         differ on this dataset, which is what makes the tests below mean
@@ -99,7 +113,7 @@ class TestSR1MainSubsetsK3:
         ).run()
         per_k = result.per_k_results[3]
 
-        assert per_k.subjects_per_subset == MEASURABLE_K3
+        assert _subjects(per_k) == MEASURABLE_K3
 
         complete = _complete_case_counts(sr1_main_ratings, 3)
         assert complete == {
@@ -110,7 +124,7 @@ class TestSR1MainSubsetsK3:
         }
         # Every subset must be measured on more subjects than the old rule
         # allowed -- that difference is the bug.
-        for subset, n_measurable in per_k.subjects_per_subset.items():
+        for subset, n_measurable in _subjects(per_k).items():
             assert n_measurable > complete[subset]
 
     def test_every_subset_brackets_its_own_estimate(
@@ -132,8 +146,9 @@ class TestSR1MainSubsetsK3:
         ).run()
         per_k = result.per_k_results[3]
 
-        for subset, ci in per_k.bootstrap_cis_per_subset.items():
-            point = per_k.subset_values[subset]
+        for subset, unit in per_k.subset_results.items():
+            assert not isinstance(unit, NotComputed), f"subset {subset}: {unit}"
+            ci, point = unit.confidence_interval, unit.point
             assert ci.is_defined, f"subset {subset} produced no interval: {ci}"
             assert ci.lower <= point <= ci.upper, (
                 f"subset {subset}: point {point:.4f} outside its own "
@@ -159,7 +174,9 @@ class TestSR1MainSubsetsK3:
         per_k = result.per_k_results[3]
 
         assert per_k.n_subsets == 4
-        for subset, ci in per_k.bootstrap_cis_per_subset.items():
+        for subset, unit in per_k.subset_results.items():
+            assert not isinstance(unit, NotComputed), f"subset {subset}: {unit}"
+            ci = unit.confidence_interval
             assert ci.method_used == "percentile", f"subset {subset}: {ci}"
             assert ci.n_failed == 0, f"subset {subset}: {ci}"
             assert ci.below_recommended_resamples is False
@@ -185,19 +202,20 @@ class TestSR1MainSubsetsK2:
         per_k = result.per_k_results[2]
 
         complete = _complete_case_counts(sr1_main_ratings, 2)
-        assert per_k.subjects_per_subset == complete
+        assert _subjects(per_k) == complete
 
     def test_subsets_vary_in_size(self, sr1_main_ratings, subset_config):
         """Partially crossed data means pairs rest on different studies.
 
-        Spelled out because it is the reason subjects_per_subset exists:
+        Spelled out because it is why each subset's result carries its
+        own subject count:
         a pair measured on 164 subjects and one measured on 426 are not
         estimating the same thing, however close their coefficients look.
         """
         result = SubsetPermutationAnalysis(
             sr1_main_ratings, subset_config(2)
         ).run()
-        sizes = result.per_k_results[2].subjects_per_subset
+        sizes = _subjects(result.per_k_results[2])
 
         assert len(set(sizes.values())) > 1
         assert min(sizes.values()) < max(sizes.values()) / 2

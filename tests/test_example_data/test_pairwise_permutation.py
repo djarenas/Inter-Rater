@@ -120,4 +120,4 @@ class TestSR1PrelimPairwise:
         result = PairwisePermutationAnalysis(sr1_prelim_ratings, config).run()
 
         assert result.n_pairs == 6
-        assert len(result.pairwise_values) == 6
+        assert len(result.pair_results) == 6

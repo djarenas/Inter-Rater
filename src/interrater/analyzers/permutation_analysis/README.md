@@ -1,7 +1,7 @@
 # Permutation Analysis
 
 Permutation analyses run a coefficient across subsets of the rater panel.
-They are standalone -- they are NOT in the Analyzer tree. An Analyzer
+They are standalone and NOT in the Analyzer tree. An Analyzer
 computes one coefficient on one data slice. A PermutationAnalysis
 enumerates subsets (pairs, leave-one-out, arbitrary size) and calls an
 estimator on each, then assembles the results.
@@ -15,6 +15,10 @@ PermutationAnalysis                (parent -- shared validation, estimator resol
   └── SubsetPermutationAnalysis    (every C(n,k) subset)
 ```
 
+Scott's pi is pairwise only. It is defined for two raters; on a subset of
+three or more it is Fleiss' kappa under another name, so subset
+permutation refuses it and points to `fleiss_kappa`.
+
 
 ## Three Computations
 
@@ -22,13 +26,15 @@ PermutationAnalysis                (parent -- shared validation, estimator resol
 
 Run the estimator on each pair using the actual data. No resampling.
 
-- `over_pairs(estimator_input, estimator)` --> pairwise_values
-- `subjects_per_subset(estimator_input, 2)` --> subjects_per_pair
-- `mean_over_subsets(pairwise_values)` --> mean_over_pairs
+- `over_pairs(estimator_input, estimator)` --> each pair's value (NaN for
+  a pair with no coefficient; see *When a pair or subset has no number*)
+- `subjects_per_subset(estimator_input, 2)` --> each pair's subject count,
+  checked against the subjects its result was built on
+- `mean_over_subsets(values)` --> mean_over_pairs
 
 Cost: C(n,2) estimator calls.
 
-No config needed beyond the coefficient itself.
+No config imnformation needed beyond the coefficient itself.
 
 
 ### Computation B -- Per-subset bootstrap (always)
@@ -75,10 +81,27 @@ subjects. Draw from the complete cases of a 3-rater subset instead and you
 have quietly switched estimands; on partially crossed data the mistake
 surfaces as an interval that does not contain its own point estimate.
 
-**Subsets with fewer than two measurable subjects** have nothing to resample.
-They get a NaN distribution and an interval whose `method_used` is `None` --
-no method ran, which is a different statement from an interval that could not
-be computed.
+#### When a pair or subset has no number
+
+**One rule, written once**, in `unit_problem` in
+`agreement_functions/rater_combinations.py`. A pair or subset has no
+coefficient when:
+
+- fewer than two of its subjects are usable (rated by at least two of its
+  raters), or
+- one of its raters rated none of the usable subjects. The subset is really
+  a smaller one, and its number would be that smaller subset's.
+
+Every place that measures a unit goes through `estimate_unit`, which applies
+the rule and returns NaN when it says no: the observed value (A), every
+bootstrap draw and jackknife value (B), and every draw of the mean (C). So a
+resample that leaves a rater idle fails like any other draw, rather than
+reporting the smaller subset's number. The unit's result is `NotComputed`,
+with the rule's reason, and the mean leaves it out.
+
+Until 2.1.0 the values ran the estimator on whatever they got, so a subset
+with one usable subject, or with an idle rater, could still get a number and
+go into the mean.
 
 
 ### Computation C -- Mean bootstrap (if bootstrap_mean_config is set)
@@ -131,7 +154,9 @@ panel could not show a single pair's distribution.
 subset is bootstrapped, its interval built, its share of the mean added, and
 then its draws are tossed. Memory holds one unit's draws at a time, whatever
 the number of units. Every value, interval and mean interval is the same as
-with `keep_draws: true`; only the draws are missing from the result.
+with `keep_draws: true`; only the draws are missing: each unit's
+`bootstrap_distribution` is `NotComputed("draws not kept: keep_draws
+false")`.
 
 **The same seed gives the same numbers either way.** The independent mean
 samples from each unit's draws, so it is built as the units are bootstrapped:
@@ -172,6 +197,27 @@ and **the unit left out must be the unit that was resampled**.
   never touches a subject. There is nothing to leave out, so there is no
   acceleration to compute. Requesting `ci_method="bca"` for it raises rather
   than approximating one.
+
+
+## Each pair or subset is a result
+
+After the three computations, each unit becomes the result its coefficient's
+own analyzer gives on that unit's usable subjects: the analyzer is built on
+those subjects, with injection off (the panel's injection already happened),
+and handed the point, interval and draws this analysis computed, through the
+same `_result` its `estimate()` uses. The analysis checks that the analyzer
+computes the same point on those subjects; a different number is a bug.
+
+**The point matches a direct run; the interval does not, on purpose.** Run
+the analyzer alone on a pair's subjects and the point, Po and Pe, kappa_max
+and profiles are identical. The interval and draws differ, because each unit
+draws from its own child seed, spawned from `random_state`
+(`np.random.SeedSequence(random_state).spawn(n_units)`), while a direct run
+draws from `random_state` itself. Separate streams keep the units' draws
+independent of each other.
+
+See `intermediates/results/permutation_results/README.md` for what the
+result holds and checks.
 
 
 ## Why Computation B is separate from Computation C

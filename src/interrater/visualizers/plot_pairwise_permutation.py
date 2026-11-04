@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..intermediates.not_computed import NotComputed
 from ..intermediates.results.permutation_results.permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
 )
@@ -80,7 +81,7 @@ def plot_pairwise_permutation(
 
     # Collect all unique rater indices from pair keys
     all_rater_indices = sorted(
-        {idx for pair in result.pairwise_values for idx in pair}
+        {idx for pair in result.pair_results for idx in pair}
     )
     n_raters = len(all_rater_indices)
 
@@ -98,12 +99,13 @@ def plot_pairwise_permutation(
     # Group pairs by rater
     # ------------------------------------------------------------------ #
 
-    # For each rater, collect (partner_index, pair_key, value)
+    # For each rater, collect (partner_index, pair_key, pair_result). A pair
+    # with too few shared subjects holds NotComputed and draws nothing.
     rater_pairs = defaultdict(list)
-    for pair, value in result.pairwise_values.items():
+    for pair, unit in result.pair_results.items():
         r_a, r_b = pair
-        rater_pairs[r_a].append((r_b, pair, value))
-        rater_pairs[r_b].append((r_a, pair, value))
+        rater_pairs[r_a].append((r_b, pair, unit))
+        rater_pairs[r_b].append((r_a, pair, unit))
 
     # Sort each rater's partners by index for consistent ordering
     for rater_idx in rater_pairs:
@@ -184,12 +186,13 @@ def plot_pairwise_permutation(
         else:
             offsets = np.linspace(-jitter_width, jitter_width, n_pts)
 
-        for j, (partner_idx, pair_key, value) in enumerate(partners):
+        for j, (partner_idx, pair_key, unit) in enumerate(partners):
             x_pos = x_center + offsets[j]
 
-            # Skip NaN values
-            if np.isnan(value):
+            # Skip pairs not computed, and NaN values
+            if isinstance(unit, NotComputed) or np.isnan(unit.point):
                 continue
+            value = unit.point
 
             # Style from partner rater
             style = rater_style[partner_idx]
@@ -198,7 +201,7 @@ def plot_pairwise_permutation(
             # bounds -- every draw failed, so no method ran. There is
             # nothing to draw for one, so the marker carries the news
             # instead.
-            pair_ci = result.bootstrap_cis_per_pair[pair_key]
+            pair_ci = unit.confidence_interval
             has_interval = pair_ci.is_defined
             if not has_interval:
                 any_undefined_ci = True
@@ -264,7 +267,11 @@ def plot_pairwise_permutation(
     )
 
     # Y-axis: default [0, 1] for kappa scale, widen if data falls outside
-    all_values = [v for v in result.pairwise_values.values() if not np.isnan(v)]
+    computed = [
+        unit for unit in result.pair_results.values()
+        if not isinstance(unit, NotComputed)
+    ]
+    all_values = [unit.point for unit in computed if not np.isnan(unit.point)]
     y_min = 0.0
     y_max = 1.0
     if all_values:
@@ -273,7 +280,8 @@ def plot_pairwise_permutation(
         # Include CI bounds if present. Undefined intervals are skipped --
         # min() against a NaN returns whichever argument came first, so one
         # of them would set the axis limits at random.
-        for pair_ci in result.bootstrap_cis_per_pair.values():
+        for unit in computed:
+            pair_ci = unit.confidence_interval
             if pair_ci.is_defined:
                 data_min = min(data_min, pair_ci.lower)
                 data_max = max(data_max, pair_ci.upper)

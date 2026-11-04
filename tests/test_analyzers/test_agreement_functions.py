@@ -61,6 +61,7 @@ from interrater.analyzers.agreement_functions.krippendorff import (
 
 # -- rater_combinations ----------------------------------------------------- #
 from interrater.analyzers.agreement_functions.rater_combinations import (
+    estimate_unit,
     leave_one_rater_out,
     mean_over_same_subsets,
     mean_over_subsets,
@@ -69,6 +70,7 @@ from interrater.analyzers.agreement_functions.rater_combinations import (
     rater_subsets,
     subjects_per_leave_one_out,
     subjects_per_subset,
+    unit_problem,
 )
 
 
@@ -733,6 +735,71 @@ class TestOverSubsets:
         # One subset: all 3 raters. Po = 2/3.
         assert len(result) == 1
         assert abs(result[(0, 1, 2)] - 2 / 3) < TOL
+
+
+class TestUnitProblem:
+    """
+    I test the one rule for whether a pair or subset has a coefficient.
+
+    Its values, its bootstrap, the bootstrap of the mean and its result
+    object all use it, so they cannot disagree about which subsets count.
+    """
+
+    # Raters a, b rate subjects 0-3; c rates subject 0 only; d rates 2-3
+    INDEX = np.array([
+        [0, 1, 1, EMPTY],
+        [1, 1, EMPTY, EMPTY],
+        [0, 0, EMPTY, 1],
+        [1, 0, EMPTY, 0],
+    ])
+
+    def _problem(self, unit):
+        present = self.INDEX[:, list(unit)] != EMPTY
+        return unit_problem(present, ["abcd"[i] for i in unit])
+
+    def test_pair_with_subjects_has_none(self):
+        assert self._problem((0, 1)) is None
+
+    def test_pair_sharing_one_subject(self):
+        assert self._problem((0, 2)) == "raters a, c share 1 subject"
+
+    def test_pair_sharing_no_subject(self):
+        assert self._problem((2, 3)) == "raters c, d share 0 subjects"
+
+    def test_subset_whose_raters_have_too_few_subjects_together(self):
+        """Each subject has one rating among x, y, z: none is usable."""
+        present = np.array([[True, False, False], [False, True, False]])
+        assert unit_problem(present, ["x", "y", "z"]) == (
+            "raters x, y, z: 0 subjects rated by at least two of them"
+        )
+
+    def test_subset_whose_raters_all_rated_a_usable_subject(self):
+        assert self._problem((0, 1, 2)) is None
+        assert self._problem((0, 1, 3)) is None
+
+    def test_idle_rater(self):
+        """x and y share both subjects; z rated neither. The subset is
+        really the pair x, y, so it gets no number of its own."""
+        present = np.array([[True, True, False], [True, True, False]])
+        assert unit_problem(present, ["x", "y", "z"]) == (
+            "rater z rated none of the 2 subjects the others share"
+        )
+
+    def test_estimate_unit_is_nan_when_there_is_a_problem(self):
+        data = EstimatorInput(category_index=self.INDEX[:, [0, 2]], n_categories=2)
+        assert math.isnan(estimate_unit(data, _po_estimator))
+
+    def test_estimate_unit_runs_the_estimator_otherwise(self):
+        data = EstimatorInput(category_index=self.INDEX[:, [0, 1]], n_categories=2)
+        assert estimate_unit(data, _po_estimator) == _po_estimator(data)
+
+    def test_over_subsets_follows_the_rule(self):
+        """(0, 2) shares one subject: NaN, though Po on it would be 1."""
+        data = EstimatorInput(category_index=self.INDEX, n_categories=2)
+        values = over_pairs(data, _po_estimator)
+        assert math.isnan(values[(0, 2)])
+        assert math.isnan(values[(2, 3)])
+        assert values[(0, 1)] == pytest.approx(2 / 4, abs=TOL)
 
 
 class TestLeaveOneRaterOut:

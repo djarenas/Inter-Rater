@@ -319,20 +319,22 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         n_subsets = len(subset_values)
 
+        subset_results = self._unit_results(
+            subset_values, subjects_per_subset, subset_cis,
+            subset_distributions,
+        )
+
         return SubsetPermutationResult(
             coefficient_name=self.config.coefficient_to_compute,
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
-            subset_values=subset_values,
-            subjects_per_subset=subjects_per_subset,
+            subset_results=subset_results,
             n_subsets=n_subsets,
             subset_k=k,
             mean_over_subsets=mean_over_subsets,
             bootstrap_mean_method=mean_method,
             bootstrap_ci_of_mean=mean_ci,
             bootstrap_distribution_of_mean=mean_distribution,
-            bootstrap_cis_per_subset=subset_cis,
-            bootstrap_distributions_per_subset=subset_distributions,
         )
 
     def _compute_observed(
@@ -442,6 +444,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ci_method = coc.ci_method
         keep_draws = self.config.keep_draws
 
+        # Every draw and jackknife value obeys the one rule for whether a
+        # subset has a coefficient (unit_problem)
+        from ..agreement_functions.rater_combinations import estimate_unit
+
         # Spawn one child seed per subset for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
         subsets = sorted(subset_values.keys())
@@ -487,8 +493,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 resampled = rng.choice(
                     measurable, size=measurable.size, replace=True
                 )
-                draws[b] = self.estimator(
-                    subset_data.take_subjects(resampled)
+                draws[b] = estimate_unit(
+                    subset_data.take_subjects(resampled), self.estimator
                 )
 
             if independent is not None:
@@ -504,7 +510,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             # deviation representing no influence at all.
             def _jackknife(sd=subset_data, sh=measurable) -> np.ndarray:
                 return np.array([
-                    self.estimator(sd.take_subjects(np.delete(sh, i)))
+                    estimate_unit(
+                        sd.take_subjects(np.delete(sh, i)),
+                        self.estimator,
+                    )
                     for i in range(sh.size)
                 ], dtype=np.float64)
 

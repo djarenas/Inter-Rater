@@ -38,6 +38,7 @@ from interrater.contracts import (
     SUBSET_PERMUTATION_COEFFICIENTS,
 )
 from interrater.data_objects.ratings import Ratings
+from interrater.intermediates.not_computed import NotComputed
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
@@ -93,6 +94,14 @@ def _config(name: str):
     return CONFIGS[name](n_resamples=2, random_state=42, ci_method="percentile", **flag)
 
 
+def _points(results: dict) -> dict:
+    """Each pair's or subset's point; NaN where it was not computed."""
+    return {
+        key: float("nan") if isinstance(unit, NotComputed) else unit.point
+        for key, unit in results.items()
+    }
+
+
 def _same(a: float, b: float) -> bool:
     return (np.isnan(a) and np.isnan(b)) or abs(a - b) < 1e-12
 
@@ -110,7 +119,7 @@ def test_pairwise_point_uses_only_shared_subjects(name):
         config = C.PairwisePermutationConfig(
             coefficient_to_compute=name, config_of_coefficient=_config(name),
         )
-        return PairwisePermutationAnalysis(_ratings(data), config).run().pairwise_values
+        return _points(PairwisePermutationAnalysis(_ratings(data), config).run().pair_results)
 
     full = run(codes)
     for a, b in combinations(range(codes.shape[1]), 2):
@@ -133,7 +142,7 @@ def test_subset_point_uses_only_subjects_rated_twice(name):
             subset_k=3,
         )
         result = SubsetPermutationAnalysis(_ratings(data), config).run()
-        return result.per_k_results[3].subset_values
+        return _points(result.per_k_results[3].subset_results)
 
     full = run(codes)
     for trio in combinations(range(codes.shape[1]), 3):
@@ -154,7 +163,7 @@ def test_conger_equals_cohen_on_a_pair():
         config = C.PairwisePermutationConfig(
             coefficient_to_compute=name, config_of_coefficient=_config(name),
         )
-        return PairwisePermutationAnalysis(_ratings(codes), config).run().pairwise_values
+        return _points(PairwisePermutationAnalysis(_ratings(codes), config).run().pair_results)
 
     conger, cohen = run("conger_kappa"), run("cohen_kappa")
     for pair in cohen:

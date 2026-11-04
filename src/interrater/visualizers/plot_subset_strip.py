@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..intermediates.not_computed import NotComputed
 from ..intermediates.results.permutation_results.permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
 )
@@ -86,7 +87,7 @@ def plot_subset_strip(
     all_rater_indices = set()
     for k in result.ks:
         per_k = result[k]
-        for subset in per_k.subset_values:
+        for subset in per_k.subset_results:
             all_rater_indices.update(subset)
     all_rater_indices = sorted(all_rater_indices)
     n_raters = len(all_rater_indices)
@@ -159,8 +160,12 @@ def plot_subset_strip(
 
     for i, k in enumerate(result.ks):
         per_k = result[k]
-        values = list(per_k.subset_values.values())
-        subsets = list(per_k.subset_values.keys())
+        # A subset with too few usable subjects holds NotComputed: no value
+        values = [
+            np.nan if isinstance(unit, NotComputed) else unit.point
+            for unit in per_k.subset_results.values()
+        ]
+        subsets = list(per_k.subset_results.keys())
         n_subsets = len(values)
 
         # Filter NaN for plotting

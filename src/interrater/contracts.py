@@ -211,7 +211,6 @@ or for understanding how each pair of raters agrees.
 
 SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([
     "fleiss_kappa",
-    "scotts_pi",
     "gwet_ac1",
     "brennan_prediger",
     "krippendorff_alpha",
@@ -220,11 +219,13 @@ SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([
 ])
 """Coefficients that support subset permutation (all k-subsets of raters).
 
-A coefficient is eligible for subset permutation if it can be computed on
-subsets of the rater pool. This includes all group coefficients (which read
-counts matrices and are rater-agnostic):
-- Fleiss' kappa, Scott's pi, Gwet AC1, Brennan-Prediger
+A coefficient is eligible for subset permutation if it is defined for any
+number of raters, since a subset can have any size from 2 up:
+- Fleiss' kappa, Gwet AC1, Brennan-Prediger
 - Krippendorff's alpha
+
+Scott's pi is not: it is defined for exactly two raters, and with more it
+is Fleiss' kappa under another name. Its pairs are pairwise permutation.
 
 Subset permutation is useful for understanding how agreement scales with panel
 size or for analyzing specific subgroups of raters.

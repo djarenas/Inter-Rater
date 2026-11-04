@@ -35,6 +35,18 @@ _LABELS = {
 }
 
 
+# The result class every pair or subset of each coefficient holds
+_RESULT_CLASSES = {
+    "cohen_kappa": "CohenKappaResult",
+    "conger_kappa": "CongerKappaResult",
+    "fleiss_kappa": "FleissKappaResult",
+    "scotts_pi": "ScottsPiResult",
+    "gwet_ac1": "GwetsAC1Result",
+    "brennan_prediger": "BrennanPredigerResult",
+    "krippendorff_alpha": "KrippendorffAlphaResult",
+}
+
+
 def coefficient_label(name: str) -> tuple[str, str]:
     """The printed name and the column symbol, e.g. ("Cohen's κ", "κ")."""
     return _LABELS.get(name, (name, name))
@@ -175,27 +187,40 @@ class PermutationResult(AnalysisResult):
         -------
         pd.DataFrame
             Columns: raters ("0, 1" -- positions in the ratings), estimate,
-            ci_lower, ci_upper, method_used, n_failed, subjects. Undefined
-            values are NaN.
+            ci_lower, ci_upper, point_outside_interval, method_used,
+            n_failed, subjects, not_computed.
+            Undefined or empty values are NaN, in text columns too, so the
+            frame reads back from CSV unchanged. A pair or subset that has
+            no result leaves the other columns NaN and says why in
+            not_computed; one that has a result has NaN there.
         """
         import pandas as pd
 
+        nan = float("nan")
         return pd.DataFrame(
             [
                 {
                     "raters": ", ".join(map(str, raters)),
                     "estimate": float(value),
-                    "ci_lower": float(ci.lower),
-                    "ci_upper": float(ci.upper),
-                    "method_used": ci.method_used,
-                    "n_failed": int(ci.n_failed),
-                    "subjects": int(subjects),
+                    "ci_lower": float(ci.lower) if ci is not None else nan,
+                    "ci_upper": float(ci.upper) if ci is not None else nan,
+                    "point_outside_interval": outside if outside is not None else nan,
+                    # None from an interval where no method ran
+                    "method_used": (
+                        ci.method_used
+                        if ci is not None and ci.method_used is not None
+                        else nan
+                    ),
+                    "n_failed": int(ci.n_failed) if ci is not None else nan,
+                    "subjects": int(subjects) if subjects is not None else nan,
+                    "not_computed": reason if reason is not None else nan,
                 }
-                for raters, value, ci, subjects in self._units()
+                for raters, value, ci, outside, subjects, reason in self._units()
             ],
             columns=[
                 "raters", "estimate", "ci_lower", "ci_upper",
-                "method_used", "n_failed", "subjects",
+                "point_outside_interval", "method_used", "n_failed",
+                "subjects", "not_computed",
             ],
         )
 
@@ -218,9 +243,113 @@ class PermutationResult(AnalysisResult):
 
     # Printed form, shared by pairs and subsets ------------------------------ #
 
-    def _units(self) -> list[tuple]:
-        """(raters, value, interval, subjects) for each pair or subset, in order."""
+    def _unit_results(self) -> dict:
+        """My pairs or subsets: each one's result, or NotComputed."""
         raise NotImplementedError
+
+    def _units(self) -> list[tuple]:
+        """
+        (raters, value, interval, outside, subjects, reason) for each pair
+        or subset, in order. ``outside`` is the unit's own
+        point_outside_interval. A unit with a result has no reason; one
+        without a result has only its raters and the reason (its subject
+        count is in it).
+        """
+        from ...not_computed import NotComputed
+
+        rows = []
+        for raters, unit in self._unit_results().items():
+            if isinstance(unit, NotComputed):
+                rows.append((raters, float("nan"), None, None, None, unit.reason))
+            else:
+                rows.append((
+                    raters, float(unit.point), unit.confidence_interval,
+                    unit.point_outside_interval,
+                    unit.balance_profile.n_subjects, None,
+                ))
+        return rows
+
+    def _check_unit_results(
+        self, results: dict, k: int, n_units: int, mean: float, word: str,
+    ) -> None:
+        """
+        My pairs or subsets are the results they claim to be, and the mean
+        is theirs.
+
+        Each unit is the coefficient's own result class or NotComputed, keyed
+        by a sorted tuple of k rater indices, built with my interval method.
+        The mean must be the mean of the units' points that are defined: a
+        mean that disagrees with its own units was built from something else.
+        """
+        from ...not_computed import NotComputed
+        from ..analyzer_results.point_estimate_result import PointEstimateResult
+        from ..ci_results.bootstrap_ci_result import BootstrapCIResult
+
+        if not isinstance(results, dict):
+            raise TypeError(
+                f"{word}_results must be a dict, got {type(results).__name__}"
+            )
+        if len(results) != n_units:
+            raise ValueError(
+                f"{word}_results has {len(results)} entries but there are "
+                f"{n_units} {word}s"
+            )
+        expected = _RESULT_CLASSES.get(self.coefficient_name)
+        points = []
+        kept = set()  # whether each computed unit kept its draws
+        for key, unit in results.items():
+            if (
+                not isinstance(key, tuple) or len(key) != k
+                or not all(isinstance(i, int) for i in key)
+                or list(key) != sorted(set(key))
+            ):
+                raise ValueError(
+                    f"{word}_results keys must be sorted tuples of {k} "
+                    f"distinct rater indices, got {key!r}"
+                )
+            if isinstance(unit, NotComputed):
+                continue
+            if not isinstance(unit, PointEstimateResult):
+                raise TypeError(
+                    f"{word} {key} must be a result or NotComputed, got "
+                    f"{type(unit).__name__}"
+                )
+            if expected is not None and type(unit).__name__ != expected:
+                raise TypeError(
+                    f"{word} {key} is a {type(unit).__name__}, but "
+                    f"{self.coefficient_name} {word}s are {expected}"
+                )
+            if not isinstance(unit.confidence_interval, BootstrapCIResult):
+                raise TypeError(
+                    f"{word} {key} has no bootstrap interval; the per-{word} "
+                    f"bootstrap always runs"
+                )
+            if unit.ci_method != self.ci_method:
+                raise ValueError(
+                    f"{word} {key} was built with ci_method "
+                    f"'{unit.ci_method}', not '{self.ci_method}'"
+                )
+            points.append(float(unit.point))
+            kept.add(not isinstance(unit.bootstrap_distribution, NotComputed))
+
+        # keep_draws applies to the whole analysis, so a mix is a bug
+        if len(kept) > 1:
+            raise ValueError(
+                f"some {word}s kept their draws and others did not; "
+                f"keep_draws applies to every {word}"
+            )
+
+        defined = [p for p in points if not math.isnan(p)]
+        theirs = sum(defined) / len(defined) if defined else float("nan")
+        if math.isnan(theirs) or math.isnan(mean):
+            agree = math.isnan(theirs) and math.isnan(mean)
+        else:
+            agree = math.isclose(theirs, mean, rel_tol=1e-12, abs_tol=1e-12)
+        if not agree:
+            raise ValueError(
+                f"the mean is {mean!r}, but the {word}s' defined points "
+                f"average {theirs!r}"
+            )
 
     def _printed(
         self,
@@ -271,15 +400,24 @@ class PermutationResult(AnalysisResult):
             return "\n".join(lines)
 
         _, symbol = coefficient_label(self.coefficient_name)
-        level = f"{rows[0][2].confidence_level:.0%} CI" if rows else "CI"
+        intervals = [row[2] for row in rows if row[2] is not None]
+        level = f"{intervals[0].confidence_level:.0%} CI" if intervals else "CI"
         cells = []
-        for raters, value, ci, subjects in rows:
+        for raters, value, ci, outside, subjects, reason in rows:
+            if ci is None:
+                cells.append((
+                    ", ".join(map(str, raters)), "not computed", "", "", reason,
+                ))
+                continue
             estimate = "undefined" if math.isnan(value) else f"{value:.3f}"
             bounds = (
                 f"[{ci.lower:.3f}, {ci.upper:.3f}]" if ci.is_defined
                 else "[undefined]"
             )
-            notes = "; ".join(interval_notes(ci))
+            # The unit's own flag: said on its row, since no warning is raised
+            notes = "; ".join(
+                (["POINT OUTSIDE INTERVAL"] if outside else []) + interval_notes(ci)
+            )
             cells.append((
                 ", ".join(map(str, raters)), estimate, bounds,
                 f"{subjects:,}", notes,
@@ -299,14 +437,14 @@ class PermutationResult(AnalysisResult):
             )
             lines.append(f"{line}  {notes}" if notes else line)
 
-        short = sum(1 for _, _, ci, _ in rows if ci.below_recommended_resamples)
+        short = sum(1 for ci in intervals if ci.below_recommended_resamples)
         if short:
             recommended = next(
-                ci.recommended_resamples for _, _, ci, _ in rows
+                ci.recommended_resamples for ci in intervals
                 if ci.below_recommended_resamples
             )
             lines.append(
-                f"  {short} of {len(rows)} intervals rest on fewer usable "
+                f"  {short} of {len(intervals)} intervals rest on fewer usable "
                 f"draws than the {recommended} recommended"
             )
         return "\n".join(lines)

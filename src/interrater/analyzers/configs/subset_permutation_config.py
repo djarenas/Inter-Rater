@@ -9,6 +9,14 @@ from ...contracts import SUBSET_PERMUTATION_COEFFICIENTS
 
 _ERROR_PREFIX = "[SubsetPermutationConfig] Error"
 
+# Refused by name: listed among the subset coefficients until 2.1.0
+_SCOTTS_PI_NOT_FOR_SUBSETS = (
+    "Scott's pi is defined for exactly two raters, so it has no subsets: "
+    "with more raters it is Fleiss' kappa under another name. Use "
+    "coefficient_to_compute: fleiss_kappa for subsets, or pairwise "
+    "permutation for Scott's pi on every pair."
+)
+
 
 @dataclass(frozen=True)
 class SubsetPermutationConfig(PermutationConfig):
@@ -29,8 +37,6 @@ class SubsetPermutationConfig(PermutationConfig):
     - coefficient_to_compute is in SUBSET_PERMUTATION_COEFFICIENTS
     - config_of_coefficient is the correct config type for that coefficient
     - subset_k is provided and structurally valid (>= 2 for every k)
-    - if bootstrap_mean_config uses "independent", config_of_coefficient
-      must give at least 2 per-subset draws (n_resamples >= 2)
 
     The analysis class is responsible for:
     - Normalizing int to [int]
@@ -40,11 +46,11 @@ class SubsetPermutationConfig(PermutationConfig):
     Attributes
     ----------
     coefficient_to_compute : str
-        Must be one of: "fleiss_kappa", "scotts_pi", "gwet_ac1",
-        "brennan_prediger", "krippendorff_alpha"
+        Must be one of: "fleiss_kappa", "gwet_ac1", "brennan_prediger",
+        "krippendorff_alpha". Not "scotts_pi": it is two-rater only.
     config_of_coefficient : AnalyzerConfig
         The nested config matching the coefficient
-        (FleissKappaConfig, ScottsConfig, GwetAC1Config, etc.)
+        (FleissKappaConfig, GwetAC1Config, etc.)
     subset_k : int | list[int] | str | None, default None
         Must be provided (not None). A single int, a list of ints
         (each >= 2), or "all". The analysis class expands "all" and
@@ -57,6 +63,9 @@ class SubsetPermutationConfig(PermutationConfig):
         """Validate subset permutation configuration."""
 
         # Call parent validation first
+        if self.coefficient_to_compute == "scotts_pi":
+            raise ValueError(f"{_ERROR_PREFIX}: {_SCOTTS_PI_NOT_FOR_SUBSETS}")
+
         try:
             super().__post_init__()
         except (TypeError, ValueError) as e:
@@ -87,7 +96,6 @@ class SubsetPermutationConfig(PermutationConfig):
         # Map coefficient names to expected config class names
         expected_config_map = {
             "fleiss_kappa": "FleissKappaConfig",
-            "scotts_pi": "ScottsConfig",
             "gwet_ac1": "GwetAC1Config",
             "brennan_prediger": "BrennanPredigerConfig",
             "krippendorff_alpha": "KrippendorffAlphaConfig",
@@ -109,21 +117,6 @@ class SubsetPermutationConfig(PermutationConfig):
                 f"{_ERROR_PREFIX}: coefficient_to_compute='{self.coefficient_to_compute}' "
                 f"requires config_of_coefficient to be {expected_config_class}, "
                 f"got {actual_config_class}"
-            )
-
-        # Cross-validate: the "independent" mean draws one value from
-        # each subset's bootstrap draws, so it needs at least two of them.
-        # The per-subset bootstrap always runs; only its size can fall short.
-        if (
-            self.bootstrap_mean_config is not None
-            and self.bootstrap_mean_config.method == "independent"
-            and self.config_of_coefficient.n_resamples < 2
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bootstrap_mean_config method "
-                f"'independent' needs at least 2 per-subset draws "
-                f"(config_of_coefficient.n_resamples >= 2), "
-                f"but n_resamples={self.config_of_coefficient.n_resamples}"
             )
 
     # Public API ------------------------------------------------------------- #
@@ -164,14 +157,12 @@ class SubsetPermutationConfig(PermutationConfig):
 
         # Map subset coefficients to their config classes
         from .fleiss_kappa_config import FleissKappaConfig
-        from .scotts_config import ScottsConfig
         from .gwet_ac1_config import GwetAC1Config
         from .brennan_prediger_config import BrennanPredigerConfig
         from .krippendorff_alpha_config import KrippendorffAlphaConfig
 
         config_class_map = {
             "fleiss_kappa": FleissKappaConfig,
-            "scotts_pi": ScottsConfig,
             "gwet_ac1": GwetAC1Config,
             "brennan_prediger": BrennanPredigerConfig,
             "krippendorff_alpha": KrippendorffAlphaConfig,
@@ -179,6 +170,8 @@ class SubsetPermutationConfig(PermutationConfig):
 
         # Hydrate config_of_coefficient if it is still a raw dict
         coefficient = data_dict.get("coefficient_to_compute")
+        if coefficient == "scotts_pi":
+            raise ValueError(f"{_ERROR_PREFIX}: {_SCOTTS_PI_NOT_FOR_SUBSETS}")
         config_class = config_class_map.get(coefficient)
 
         if config_class is not None:

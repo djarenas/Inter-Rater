@@ -25,18 +25,21 @@ class PairwisePermutationResult(PermutationResult):
 
     I hold two kinds of statistics, and the field names make them unmistakable:
 
-    **Observed (over pairs, rater heterogeneity):**
-    Fields with no prefix. Computed once on the actual data. They answer
-    "how do the raters compare to each other?"
+    **Each pair (rater heterogeneity):**
+    pair_results holds, for every pair, the coefficient's own result -- a
+    pair of Cohen's kappa is a CohenKappaResult, with its point, interval,
+    draws, parts and profiles, printed and checked like any single run --
+    or NotComputed saying why the pair has none (raters 0 and 4 share 1
+    subject). They answer "how do the raters compare to each other?"
 
-    - pairwise_values: the coefficient for each pair
-    - subjects_per_pair: how many subjects each pair shared
+    - pair_results: each pair's result, or NotComputed
     - n_pairs: C(n_raters, 2)
-    - mean_over_pairs: the mean across pairs (NaN-skipping)
+    - mean_over_pairs: the mean of the pairs' defined points
 
-    **Bootstrap (over draws, sampling uncertainty):**
-    Fields prefixed with ``bootstrap_``. Computed across resamples. They
-    answer "how stable are these numbers?"
+    **The mean's bootstrap (over draws, sampling uncertainty):**
+    Fields prefixed with ``bootstrap_``. Each pair's own interval and draws
+    are in its result; these are the mean's. They answer "how stable is the
+    mean?"
 
     Two bootstrap procedures are supported, recorded in
     ``bootstrap_mean_method``:
@@ -59,9 +62,6 @@ class PairwisePermutationResult(PermutationResult):
     - bootstrap_mean_method: "correlated" or "independent"
     - bootstrap_ci_of_mean: CI on the mean
     - bootstrap_distribution_of_mean: raw draws of the mean
-    - bootstrap_cis_per_pair: CI per pair (always computed and stored)
-    - bootstrap_distributions_per_pair: raw draws per pair (None when the
-      analysis ran with keep_draws false)
 
     Observed spread and bootstrap width answer different questions with
     different remedies. High spread across pairs means raters disagree
@@ -80,17 +80,18 @@ class PairwisePermutationResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
-    pairwise_values : dict[tuple[int, int], float]
-        Coefficient per pair. NaN for pairs that could not be computed
-        (fewer than 2 shared subjects, all ratings in one category).
-    subjects_per_pair : dict[tuple[int, int], int]
-        Surviving subjects per pair -- the denominator each coefficient
-        was actually computed on. A pair whose coefficient rests on 756
-        subjects and one resting on 966 are not measuring the same study.
+    pair_results : dict[tuple[int, int], PointEstimateResult | NotComputed]
+        Each pair's result, computed on the subjects both raters rated: its
+        balance profile says how many, since a pair resting on 756 subjects
+        and one resting on 966 are not measuring the same study. Its draws
+        are NotComputed when the analysis ran with keep_draws false. A pair
+        with fewer than 2 shared subjects holds NotComputed instead,
+        naming the count. A pair whose coefficient is undefined (all
+        ratings in one category) has a result with a NaN point.
     n_pairs : int
         Number of pairs: C(n_raters, 2).
     mean_over_pairs : float
-        Mean across pairs, skipping NaN pairs.
+        Mean of the pairs' defined points. Checked against them.
     bootstrap_mean_method : str | None
         Which procedure produced the mean-level bootstrap:
         "correlated" (same resampled subjects across all pairs in each
@@ -106,17 +107,6 @@ class PairwisePermutationResult(PermutationResult):
     bootstrap_distribution_of_mean : np.ndarray | None
         Raw bootstrap draws of the mean (shape: n_resamples,). None if
         no bootstrap of the mean was requested.
-    bootstrap_cis_per_pair : dict[tuple[int, int], BootstrapCIResult]
-        Bootstrap CI per pair, one interval object each. Pairs do not fail
-        alike -- a pair with few shared subjects can lose draws that a
-        well-covered pair never loses -- so each interval carries its own
-        counts and its own method rather than a shared summary. Always
-        present: the analyzer config requires n_resamples >= 1, so the
-        per-pair bootstrap always runs.
-    bootstrap_distributions_per_pair : dict[tuple[int, int], np.ndarray] | None
-        Raw bootstrap draws for every pair, or None when the analysis ran
-        with keep_draws false. Use get_bootstrap_distributions_per_pair()
-        for access with a helpful error when they were not kept.
     """
 
     # Attribute declaration
@@ -126,9 +116,8 @@ class PairwisePermutationResult(PermutationResult):
     ci_method: str
     balance_profile: BalanceProfile
 
-    # Observed, over pairs (rater heterogeneity)
-    pairwise_values: dict
-    subjects_per_pair: dict
+    # Each pair (rater heterogeneity)
+    pair_results: dict   # values are a coefficient's result, or NotComputed
     n_pairs: int
     mean_over_pairs: float
 
@@ -136,32 +125,15 @@ class PairwisePermutationResult(PermutationResult):
     bootstrap_mean_method: str | None
     bootstrap_ci_of_mean: BootstrapCIResult | None
     bootstrap_distribution_of_mean: np.ndarray | None
-    bootstrap_cis_per_pair: dict   # values are BootstrapCIResult
-    bootstrap_distributions_per_pair: dict | None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate pairwise permutation result attributes."""
 
-        # --- Observed -------------------------------------------------------- #
+        # --- Each pair ------------------------------------------------------- #
 
-        # Validate pairwise_values
-        if not isinstance(self.pairwise_values, dict):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: pairwise_values must be dict, "
-                f"got {type(self.pairwise_values).__name__}"
-            )
-
-        # All keys must be 2-tuples of ints
-        for key in self.pairwise_values:
-            if not isinstance(key, tuple) or len(key) != 2:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: pairwise_values keys must be "
-                    f"2-tuples, got {key!r}"
-                )
-
-        # Validate n_pairs matches
+        # Validate n_pairs
         if not isinstance(self.n_pairs, int):
             raise TypeError(
                 f"{_ERROR_PREFIX}: n_pairs must be int, "
@@ -172,24 +144,6 @@ class PairwisePermutationResult(PermutationResult):
                 f"{_ERROR_PREFIX}: n_pairs must be >= 1, "
                 f"got {self.n_pairs}"
             )
-        if len(self.pairwise_values) != self.n_pairs:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: pairwise_values has "
-                f"{len(self.pairwise_values)} entries but "
-                f"n_pairs is {self.n_pairs}"
-            )
-
-        # Validate subjects_per_pair has same keys
-        if not isinstance(self.subjects_per_pair, dict):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: subjects_per_pair must be dict, "
-                f"got {type(self.subjects_per_pair).__name__}"
-            )
-        if set(self.subjects_per_pair.keys()) != set(self.pairwise_values.keys()):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: subjects_per_pair must have the same "
-                f"keys as pairwise_values"
-            )
 
         # Validate mean_over_pairs
         if not isinstance(self.mean_over_pairs, (int, float)):
@@ -197,6 +151,15 @@ class PairwisePermutationResult(PermutationResult):
                 f"{_ERROR_PREFIX}: mean_over_pairs must be float, "
                 f"got {type(self.mean_over_pairs).__name__}"
             )
+
+        # Each pair is its coefficient's result or NotComputed, and the mean
+        # is the mean of their defined points
+        try:
+            self._check_unit_results(
+                self.pair_results, 2, self.n_pairs, self.mean_over_pairs, "pair",
+            )
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
         # --- Bootstrap ------------------------------------------------------- #
 
@@ -242,28 +205,6 @@ class PairwisePermutationResult(PermutationResult):
                     f"{type(self.bootstrap_ci_of_mean).__name__}"
                 )
 
-        # Validate bootstrap_cis_per_pair. Always present: the per-pair
-        # bootstrap cannot be turned off (n_resamples >= 1).
-        if not isinstance(self.bootstrap_cis_per_pair, dict):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: bootstrap_cis_per_pair must be "
-                f"a dict (the per-pair bootstrap always runs), got "
-                f"{type(self.bootstrap_cis_per_pair).__name__}"
-            )
-        if set(self.bootstrap_cis_per_pair.keys()) != set(
-            self.pairwise_values.keys()
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bootstrap_cis_per_pair must have "
-                f"the same keys as pairwise_values"
-            )
-        for key, ci in self.bootstrap_cis_per_pair.items():
-            if not isinstance(ci, BootstrapCIResult):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap CI for pair {key} must "
-                    f"be BootstrapCIResult, got {type(ci).__name__}"
-                )
-
         # Validate bootstrap_distribution_of_mean
         if self.bootstrap_distribution_of_mean is not None:
             if not isinstance(self.bootstrap_distribution_of_mean, np.ndarray):
@@ -284,30 +225,8 @@ class PairwisePermutationResult(PermutationResult):
                     f"must have at least 1 value"
                 )
 
-        # Validate bootstrap_distributions_per_pair
-        if self.bootstrap_distributions_per_pair is not None:
-            if not isinstance(self.bootstrap_distributions_per_pair, dict):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_distributions_per_pair "
-                    f"must be dict, got "
-                    f"{type(self.bootstrap_distributions_per_pair).__name__}"
-                )
-            if set(self.bootstrap_distributions_per_pair.keys()) != set(
-                self.pairwise_values.keys()
-            ):
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_distributions_per_pair "
-                    f"must have the same keys as pairwise_values"
-                )
-            for key, dist in self.bootstrap_distributions_per_pair.items():
-                if not isinstance(dist, np.ndarray) or dist.ndim != 1:
-                    raise ValueError(
-                        f"{_ERROR_PREFIX}: bootstrap distribution for "
-                        f"pair {key} must be a 1-D np.ndarray"
-                    )
-
-        # The mean's draws and interval describe one bootstrap, and so do
-        # each pair's, when its draws are stored.
+        # The mean's draws and interval describe one bootstrap. Each pair's
+        # result checked its own when it was built.
         try:
             check_draws_match_interval(
                 self.bootstrap_distribution_of_mean,
@@ -315,14 +234,6 @@ class PairwisePermutationResult(PermutationResult):
                 draws_name="bootstrap_distribution_of_mean",
                 interval_name="bootstrap_ci_of_mean",
             )
-            if self.bootstrap_distributions_per_pair is not None:
-                for key, draws in self.bootstrap_distributions_per_pair.items():
-                    check_draws_match_interval(
-                        draws,
-                        self.bootstrap_cis_per_pair[key],
-                        draws_name=f"pair {key}",
-                        interval_name="its interval",
-                    )
         except ValueError as exc:
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -359,38 +270,8 @@ class PairwisePermutationResult(PermutationResult):
             pool="the subjects both raters rated",
         )
 
-    def _units(self) -> list[tuple]:
-        return [
-            (pair, value, self.bootstrap_cis_per_pair[pair], self.subjects_per_pair[pair])
-            for pair, value in self.pairwise_values.items()
-        ]
-
-    def get_bootstrap_distributions_per_pair(self) -> dict:
-        """
-        Return per-pair bootstrap distributions, or raise if not kept.
-
-        The per-pair bootstrap always runs; its raw draws are kept unless
-        the analysis ran with keep_draws false. This method says so rather
-        than returning None.
-
-        Returns
-        -------
-        dict[tuple[int, int], np.ndarray]
-            Raw bootstrap draws per pair.
-
-        Raises
-        ------
-        RuntimeError
-            If the analysis ran with keep_draws false.
-        """
-        if self.bootstrap_distributions_per_pair is not None:
-            return self.bootstrap_distributions_per_pair
-        raise RuntimeError(
-            f"{_ERROR_PREFIX}: per-pair bootstrap distributions were not "
-            f"kept: the analysis ran with keep_draws false. Rerun with "
-            f"keep_draws: true to keep them. Per-pair CIs are in "
-            f"bootstrap_cis_per_pair."
-        )
+    def _unit_results(self) -> dict:
+        return self.pair_results
 
     def summary(self) -> dict:
         """
@@ -399,10 +280,10 @@ class PairwisePermutationResult(PermutationResult):
         Returns
         -------
         dict
-            Parent keys (coefficient_name, ci_method, balance); the
-            observed statistics (pairwise_values, subjects_per_pair,
-            n_pairs, mean_over_pairs); bootstrap_cis_per_pair;
-            and, when the mean was bootstrapped, bootstrap_mean_method,
+            Parent keys (coefficient_name, ci_method, balance); n_pairs,
+            mean_over_pairs; pair_results (each pair's own summary, or
+            ``{"not_computed": reason}``); and, when the mean was
+            bootstrapped, bootstrap_mean_method,
             mean_ci (with its draw counts), mean_ci_lower, mean_ci_upper,
             bootstrap_draws_mean and bootstrap_se (the mean and standard
             error of the usable draws of the mean, None when too few are
@@ -414,11 +295,8 @@ class PairwisePermutationResult(PermutationResult):
         # Observed
         result["n_pairs"] = self.n_pairs
         result["mean_over_pairs"] = self.mean_over_pairs
-        result["pairwise_values"] = {
-            str(k): v for k, v in self.pairwise_values.items()
-        }
-        result["subjects_per_pair"] = {
-            str(k): v for k, v in self.subjects_per_pair.items()
+        result["pair_results"] = {
+            str(k): v.summary() for k, v in self.pair_results.items()
         }
 
         # Bootstrap
@@ -430,20 +308,9 @@ class PairwisePermutationResult(PermutationResult):
             result["mean_ci_lower"] = self.bootstrap_ci_of_mean.lower
             result["mean_ci_upper"] = self.bootstrap_ci_of_mean.upper
 
-        result["bootstrap_cis_per_pair"] = {
-            str(k): v.summary()
-            for k, v in self.bootstrap_cis_per_pair.items()
-        }
-
         if self.bootstrap_distribution_of_mean is not None:
             mean, se = draw_moments(self.bootstrap_distribution_of_mean)
             result["bootstrap_draws_mean"] = mean
             result["bootstrap_se"] = se
-
-        # Per-pair distributions are NOT included in summary (too large).
-        # Access them directly via the field.
-        result["pair_distributions_stored"] = (
-            self.bootstrap_distributions_per_pair is not None
-        )
 
         return result

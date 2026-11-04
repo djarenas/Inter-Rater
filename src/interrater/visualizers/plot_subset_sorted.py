@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..intermediates.not_computed import NotComputed
 from ..intermediates.results.permutation_results.permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
 )
@@ -81,7 +82,7 @@ def plot_subset_sorted(
     # ------------------------------------------------------------------ #
 
     all_rater_indices = sorted(
-        {idx for subset in result.subset_values for idx in subset}
+        {idx for subset in result.subset_results for idx in subset}
     )
     n_raters = len(all_rater_indices)
 
@@ -99,8 +100,15 @@ def plot_subset_sorted(
     # Sort subsets by coefficient value
     # ------------------------------------------------------------------ #
 
+    # (subset, value, interval). A subset with too few usable subjects
+    # holds NotComputed: no value, no interval.
+    units = [
+        (subset, np.nan, None) if isinstance(unit, NotComputed)
+        else (subset, unit.point, unit.confidence_interval)
+        for subset, unit in result.subset_results.items()
+    ]
     sorted_subsets = sorted(
-        result.subset_values.items(),
+        units,
         key=lambda item: (
             item[1] if not np.isnan(item[1]) else float("-inf")
         ),
@@ -122,13 +130,13 @@ def plot_subset_sorted(
     # Per-subset intervals, in the same sorted order
     # ------------------------------------------------------------------ #
 
-    # Every subset has an interval. One that is not is_defined was
+    # Every computed subset has an interval. One that is not is_defined was
     # attempted and every draw failed, so it is drawn differently.
-    subset_cis = [
-        result.bootstrap_cis_per_subset[subset] for subset in subset_keys
-    ]
+    subset_cis = [s[2] for s in sorted_subsets]
 
-    ci_undefined = [not ci.is_defined for ci in subset_cis]
+    ci_undefined = [
+        ci is not None and not ci.is_defined for ci in subset_cis
+    ]
     any_undefined_ci = any(ci_undefined)
 
     # ------------------------------------------------------------------ #
@@ -174,7 +182,7 @@ def plot_subset_sorted(
     # ------------------------------------------------------------------ #
 
     for i, ci in enumerate(subset_cis):
-        if not ci.is_defined:
+        if ci is None or not ci.is_defined:
             continue
         ci_lo, ci_hi = ci.lower, ci.upper
         ax.plot(
@@ -274,7 +282,7 @@ def plot_subset_sorted(
         data_max = max(all_values)
         # Include CI bounds if present
         for ci in subset_cis:
-            if ci.is_defined:
+            if ci is not None and ci.is_defined:
                 data_min = min(data_min, ci.lower)
                 data_max = max(data_max, ci.upper)
         if mean_ci is not None and mean_ci.is_defined:

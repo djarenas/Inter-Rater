@@ -16,7 +16,8 @@ Key behaviours:
 - Subject ids must match row count and must be unique (unless the semantics
   says otherwise).
 - No rater may be entirely idle; every subject must be rated at least twice.
-- Arrays are frozen read-only after construction.
+- Ratings cannot be changed once built: it copies its input, its arrays are
+  read-only, and its attributes cannot be reassigned or deleted.
 - check_my_balance, check_my_crossing, check_my_pairing delegate to
   array_utils and report structural properties.
 - to_nij_matrix builds the counts matrix verified against hand computation.
@@ -85,6 +86,47 @@ class TestConstruction:
             simple_ratings.subject_ids[0] = "tampered"
 
 
+class TestCannotBeChanged:
+    """
+    Once built, a Ratings cannot change; a change is a new Ratings.
+
+    Writing through it was already refused. These are the two ways that got
+    through before 2.1.0: editing the array it was built from, which it
+    shared, and reassigning an attribute.
+    """
+
+    def test_edit_to_callers_array_does_not_reach_it(self, simple_semantics):
+        arr = SIMPLE_INDEX.copy()  # int8 already: no cast, so it used to be shared
+        r = Ratings(arr, simple_semantics)
+        arr[0, 0] = 1
+        assert r.category_index[0, 0] == SIMPLE_INDEX[0, 0]
+
+    def test_edit_to_callers_ids_does_not_reach_it(self, simple_semantics):
+        ids = np.array(["a", "b", "c"], dtype=object)
+        r = Ratings(SIMPLE_INDEX.copy(), simple_semantics, subject_ids=ids)
+        ids[0] = "tampered"
+        assert r.subject_ids[0] == "a"
+
+    @pytest.mark.parametrize("attr", ["category_index", "subject_ids", "semantics", "anything_new"])
+    def test_attributes_cannot_be_set(self, simple_ratings, attr):
+        with pytest.raises(
+            AttributeError,
+            match=rf"Ratings is read-only, so {attr} cannot be set. Build a new Ratings",
+        ):
+            setattr(simple_ratings, attr, None)
+
+    def test_attributes_cannot_be_deleted(self, simple_ratings):
+        with pytest.raises(AttributeError, match="category_index cannot be deleted"):
+            del simple_ratings.category_index
+
+    def test_subclass_names_itself(self, simple_semantics):
+        from interrater.data_objects.paired_ratings import PairedRatings
+
+        r = PairedRatings(SIMPLE_INDEX.copy(), simple_semantics)
+        with pytest.raises(AttributeError, match=r"\[PairedRatings\] Error: PairedRatings is read-only"):
+            r.category_index = None
+
+
 # -- Dtype validation -------------------------------------------------------- #
 
 
@@ -149,6 +191,23 @@ class TestValidationAgainstSemantics:
         arr[0, 0] = 5  # K=2, so 5 is invalid
         with pytest.raises(ValueError, match="outside"):
             Ratings(arr, simple_semantics)
+
+    def test_values_checked_before_the_int8_cast(self, simple_semantics):
+        """int8 wraps: 256 and 257 would become 0 and 1, valid categories."""
+        arr = np.array([[256, 0], [1, 257], [0, 1]])
+        with pytest.raises(ValueError, match=r"outside its categories \(e.g. \[256, 257\]\)"):
+            Ratings(arr, simple_semantics)
+
+    def test_uint8_255_is_not_empty(self, two_cat):
+        """A uint8 255 would become -1, EMPTY: a rating silently missing.
+
+        Three raters, so the subject still has two ratings after the wrap
+        and the twice-rated rule cannot refuse it by luck.
+        """
+        sem = RatingsSemantics(raters=3, categories=two_cat)
+        arr = np.array([[255, 0, 1], [1, 1, 0], [0, 1, 1]], dtype=np.uint8)
+        with pytest.raises(ValueError, match=r"outside its categories \(e.g. \[255\]\)"):
+            Ratings(arr, sem)
 
 
 # -- Subject id validation -------------------------------------------------- #

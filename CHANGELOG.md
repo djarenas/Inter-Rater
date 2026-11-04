@@ -55,9 +55,18 @@ version does not warn you, so this section does.
 - `Ratings` refuses subjects with fewer than two ratings, and
   `build_from_nij_matrix` refuses count rows that sum to less than two.
   2.0.0 refused only subjects rated by nobody; a subject rated once joins no
-  comparison either. The cleaner's floor of two per subject is unchanged, but
-  its one-pass drop methods can leave a subject rated once, which now stops
-  with this error; `method: iterate` meets both minimums.
+  comparison either.
+- The cleaner always drops until nothing more falls below the minimums,
+  as `method: iterate` did. `method` is removed from `insufficient_data_drops`
+  and `InsufficientDataPolicy`, and a config that still has it is refused
+  with a message saying so. The default was `raters_first`; the one-pass
+  methods could return raters and subjects below the declared minimums,
+  including subjects rated once. What iterating leaves is the largest data
+  meeting both minimums, the same whichever axis is swept first.
+  `MAX_DROP_PASSES` and `DropReport.method` and `.converged` are removed.
+- `rater_jackknife: true` is refused by every coefficient config: leave-one-rater-out
+  is not supported in this version yet. 2.0.0's group configs (Fleiss, Scott,
+  Gwet, Brennan-Prediger, Krippendorff) accepted it and silently did nothing.
 - `build_from_nij_matrix` is always unweighted.
 - `CustomWeightsInput` is removed. Nothing used it.
 - `Weights.from_file` is removed, with its JSON, CSV and text formats.
@@ -131,11 +140,28 @@ version does not warn you, so this section does.
   bootstrap resamples, and none matches the independent mean; it is refused
   when the config is built.
 - `DropReport` takes two required fields, `min_ratings_per_rater` and
-  `min_ratings_per_subject`, after `method`: the drop rule it applied. Code
+  `min_ratings_per_subject`: the drop rule it applied. Code
   that builds one by hand must pass them; the cleaner does.
+- Pairwise and subset results keep every pair's or subset's bootstrap draws.
+  2.0.0 kept them only up to 20 pairs or 120 subsets, after holding them
+  through the whole run; `MAX_PAIRS_FOR_DISTRIBUTIONS` and
+  `MAX_SUBSETS_FOR_DISTRIBUTIONS` are removed. `keep_draws: false` (below)
+  leaves them out.
+- The independent mean is built while the per-pair or per-subset bootstrap
+  runs, from one value picked from each unit's draws in unit order. The
+  method is unchanged, but the picks come in a different order, so
+  independent intervals differ slightly from 2.0.0 at the same seed.
 
 ### Added
 
+- `keep_draws` on pairwise and subset permutation configs, default `true`.
+  `false` tosses each pair's or subset's draws once its interval is built
+  and its share of the mean added, so memory holds one unit's draws at a
+  time. Values and intervals are the same either way.
+- `max_evaluations` on pairwise and subset permutation configs, default
+  `GUARD_MAX_EVALUATIONS` (2,000,000, in `contracts`). The analysis counts
+  the coefficient evaluations a run would make and refuses, before anything
+  runs, a run above it. Raise it to run a larger analysis on purpose.
 - `BootstrapCIResult` and `ParametricCIResult`: bounds plus `method_used`,
   `n_usable`, `degraded` and `summary()`.
 - `recommended_resamples` — 250 for percentile, 1000 for BCa — and
@@ -185,9 +211,19 @@ version does not warn you, so this section does.
 - Pairwise and subset plots note in the legend that an independent mean's
   interval ignores the correlation between combinations sharing raters, so
   tends to be too narrow.
+- A point estimate outside its own interval no longer raises a warning; with
+  every pair a result, a run printed one per pair. The result says it itself:
+  `point_outside_interval`, the same key in `summary()`, and
+  `POINT OUTSIDE INTERVAL` in the printed form. Pairwise and subset tables
+  show it on the pair's row, and `to_frame()` has a `point_outside_interval`
+  column.
 
 ### Fixed
 
+- Subset permutation checks every k before running any: `subset_k: "all"`
+  on 20 raters used to run k = 2, 3 and 4 in full before k = 5 hit the
+  10,000-subset cap. The cap is now `GUARD_MAX_SUBSETS` in `contracts`
+  (it was `MAX_SUBSETS` in `rater_combinations`).
 - A subset with fewer than two measurable subjects returns
   `method_used = None` rather than a tuple of NaNs.
 - `hypothesis_test()` with `method="parametric_null"` raised `TypeError`

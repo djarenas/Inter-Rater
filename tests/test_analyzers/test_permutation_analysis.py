@@ -54,6 +54,7 @@ from interrater.intermediates.results.permutation_results.multi_k_subset_result 
     MultiKSubsetResult,
 )
 from interrater.intermediates.results.ci_results import BootstrapCIResult
+from interrater.intermediates.not_computed import NotComputed
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.estimator_parts.estimator_input import EstimatorInput
 from interrater.semantics.ratings_semantics import RatingsSemantics
@@ -151,7 +152,6 @@ def _subset_config(
     """
     config_map = {
         "fleiss_kappa": FleissKappaConfig,
-        "scotts_pi": ScottsConfig,
     }
     flag = {} if balanced_data_only is None else {"balanced_data_only": balanced_data_only}
     coc = config_map[coefficient](
@@ -172,6 +172,22 @@ def _subset_config(
         keep_draws=keep_draws,
         **({} if max_evaluations is None else {"max_evaluations": max_evaluations}),
     )
+
+
+def _points(results: dict) -> dict:
+    """Each pair's or subset's point; NaN where it was not computed."""
+    return {
+        key: float("nan") if isinstance(unit, NotComputed) else unit.point
+        for key, unit in results.items()
+    }
+
+
+def _computed(results: dict) -> dict:
+    """The pairs or subsets that hold a result."""
+    return {
+        key: unit for key, unit in results.items()
+        if not isinstance(unit, NotComputed)
+    }
 
 
 # ------------------------------------------------------------------ #
@@ -443,26 +459,29 @@ class TestPairwiseComputationA:
         ratings = _make_ratings(20, 4)
         config = _pairwise_config()
         result = PairwisePermutationAnalysis(ratings, config).run()
-        for key in result.pairwise_values:
+        for key in result.pair_results:
             assert isinstance(key, tuple)
             assert len(key) == 2
             assert key[0] < key[1]
 
-    def test_subjects_per_pair_matches_values(self):
-        """subjects_per_pair should have the same keys as pairwise_values."""
+    def test_each_pair_is_its_coefficient_result(self):
+        """Each pair is a CohenKappaResult on that pair's subjects."""
+        from interrater.intermediates.results import CohenKappaResult
+
         ratings = _make_ratings(20, 3)
         config = _pairwise_config()
         result = PairwisePermutationAnalysis(ratings, config).run()
-        assert set(result.subjects_per_pair.keys()) == set(
-            result.pairwise_values.keys()
-        )
+        for pair, unit in result.pair_results.items():
+            assert isinstance(unit, CohenKappaResult), pair
+            assert unit.balance_profile.n_raters == 2
 
     def test_balanced_data_all_subjects_shared(self):
         """With balanced data every pair should share all subjects."""
         ratings = _make_ratings(30, 3)
         config = _pairwise_config()
         result = PairwisePermutationAnalysis(ratings, config).run()
-        for pair, count in result.subjects_per_pair.items():
+        for pair, unit in result.pair_results.items():
+            count = unit.balance_profile.n_subjects
             assert count == 30, f"pair {pair}: expected 30 subjects, got {count}"
 
     def test_mean_is_average_of_values(self):
@@ -470,7 +489,7 @@ class TestPairwiseComputationA:
         ratings = _make_ratings(20, 3)
         config = _pairwise_config()
         result = PairwisePermutationAnalysis(ratings, config).run()
-        values = list(result.pairwise_values.values())
+        values = list(_points(result.pair_results).values())
         expected_mean = np.nanmean(values)
         assert abs(result.mean_over_pairs - expected_mean) < TOL
 
@@ -499,8 +518,8 @@ class TestPairwiseComputationB:
         ratings = _make_ratings(20, 3)
         config = _pairwise_config(n_resamples=100)
         result = PairwisePermutationAnalysis(ratings, config).run()
-        assert result.bootstrap_cis_per_pair is not None
-        for pair, ci in result.bootstrap_cis_per_pair.items():
+        for pair, unit in result.pair_results.items():
+            ci = unit.confidence_interval
             assert isinstance(ci, BootstrapCIResult)
             assert ci.n_resamples == 100
             assert ci.method_intended == "percentile"
@@ -515,8 +534,8 @@ class TestPairwiseComputationB:
         ratings = _make_ratings(20, 3)  # 3 pairs
         config = _pairwise_config(n_resamples=100)
         result = PairwisePermutationAnalysis(ratings, config).run()
-        assert result.bootstrap_distributions_per_pair is not None
-        for pair, dist in result.bootstrap_distributions_per_pair.items():
+        for pair, unit in result.pair_results.items():
+            dist = unit.bootstrap_distribution
             assert isinstance(dist, np.ndarray)
             assert dist.shape == (100,)
 
@@ -526,7 +545,10 @@ class TestPairwiseComputationB:
         result = PairwisePermutationAnalysis(
             ratings, _pairwise_config(n_resamples=20)
         ).run()
-        assert len(result.get_bootstrap_distributions_per_pair()) == 21
+        assert sum(
+            isinstance(unit.bootstrap_distribution, np.ndarray)
+            for unit in result.pair_results.values()
+        ) == 21
 
     def test_per_pair_draws_not_kept_says_why(self):
         """keep_draws: false runs everything and leaves out only the draws."""
@@ -534,10 +556,12 @@ class TestPairwiseComputationB:
         result = PairwisePermutationAnalysis(
             ratings, _pairwise_config(n_resamples=20, keep_draws=False)
         ).run()
-        assert result.bootstrap_distributions_per_pair is None
-        assert len(result.bootstrap_cis_per_pair) == 21
-        with pytest.raises(RuntimeError, match="keep_draws false"):
-            result.get_bootstrap_distributions_per_pair()
+        assert len(result.pair_results) == 21
+        for unit in result.pair_results.values():
+            assert isinstance(unit.confidence_interval, BootstrapCIResult)
+            assert unit.bootstrap_distribution.reason == (
+                "draws not kept: keep_draws false"
+            )
 
     def test_reproducible_with_same_seed(self):
         """Same random_state should produce identical results."""
@@ -545,11 +569,11 @@ class TestPairwiseComputationB:
         config = _pairwise_config(n_resamples=100, random_state=42)
         r1 = PairwisePermutationAnalysis(ratings, config).run()
         r2 = PairwisePermutationAnalysis(ratings, config).run()
-        for pair in r1.pairwise_values:
-            assert r1.pairwise_values[pair] == r2.pairwise_values[pair]
+        for pair in r1.pair_results:
+            assert r1.pair_results[pair].point == r2.pair_results[pair].point
             np.testing.assert_array_equal(
-                r1.bootstrap_distributions_per_pair[pair],
-                r2.bootstrap_distributions_per_pair[pair],
+                r1.pair_results[pair].bootstrap_distribution,
+                r2.pair_results[pair].bootstrap_distribution,
             )
 
     def test_different_seed_produces_different_bootstrap(self):
@@ -562,15 +586,15 @@ class TestPairwiseComputationB:
             ratings, _pairwise_config(n_resamples=100, random_state=99)
         ).run()
         # Observed values should be identical (same data)
-        for pair in r1.pairwise_values:
+        for pair in r1.pair_results:
             assert abs(
-                r1.pairwise_values[pair] - r2.pairwise_values[pair]
+                r1.pair_results[pair].point - r2.pair_results[pair].point
             ) < TOL
         # Bootstrap distributions should differ
-        pair = sorted(r1.pairwise_values.keys())[0]
+        pair = sorted(r1.pair_results.keys())[0]
         assert not np.array_equal(
-            r1.bootstrap_distributions_per_pair[pair],
-            r2.bootstrap_distributions_per_pair[pair],
+            r1.pair_results[pair].bootstrap_distribution,
+            r2.pair_results[pair].bootstrap_distribution,
         )
 
 
@@ -584,11 +608,14 @@ class TestPairwiseSparseData:
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.n_pairs == 3
         # Subjects per pair may differ
-        counts = list(result.subjects_per_pair.values())
-        assert all(c >= 0 for c in counts)
+        counts = [
+            unit.balance_profile.n_subjects
+            for unit in _computed(result.pair_results).values()
+        ]
+        assert all(c >= 2 for c in counts)
 
-    def test_pair_with_too_few_shared_subjects_gets_nan(self):
-        """Pair with < 2 shared subjects should get NaN coefficient."""
+    def test_pair_with_no_shared_subjects_is_not_computed(self):
+        """A pair with < 2 shared subjects has no result, and says why."""
         # Create data where raters 0 and 1 never overlap
         category_index = np.full((10, 3), EMPTY, dtype=np.int64)
         # Rater 0 rates subjects 0-4, rater 1 rates subjects 5-9
@@ -605,9 +632,12 @@ class TestPairwiseSparseData:
         config = _pairwise_config(n_resamples=50)
         result = PairwisePermutationAnalysis(ratings, config).run()
 
-        # Pair (0, 1) should have 0 shared subjects -> NaN
-        assert result.subjects_per_pair[(0, 1)] == 0
-        assert math.isnan(result.pairwise_values[(0, 1)])
+        # Pair (0, 1) has 0 shared subjects -> NotComputed, left out of the mean
+        unit = result.pair_results[(0, 1)]
+        assert isinstance(unit, NotComputed)
+        assert unit.reason == "raters r0, r1 share 0 subjects"
+        others = [result.pair_results[p].point for p in [(0, 2), (1, 2)]]
+        assert result.mean_over_pairs == pytest.approx(np.mean(others), abs=TOL)
 
 
 class TestPairwiseComputationC:
@@ -687,7 +717,7 @@ class TestPairwiseComputationC:
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         mean_ci = result.bootstrap_ci_of_mean
-        pair_ci = next(iter(result.bootstrap_cis_per_pair.values()))
+        pair_ci = next(iter(result.pair_results.values())).confidence_interval
         assert result.ci_method == mean_ci.method_intended == "bca"
         assert mean_ci.method_intended == pair_ci.method_intended
         assert mean_ci.alpha == pair_ci.alpha
@@ -746,8 +776,8 @@ class TestMeanUsesTheSamePairs:
         return Ratings(category_index=index, semantics=sem)
 
     def _config(self, method, cls=PairwisePermutationConfig, **extra):
-        coefficient = "cohen_kappa" if cls is PairwisePermutationConfig else "scotts_pi"
-        coc = (CohenKappaConfig if cls is PairwisePermutationConfig else ScottsConfig)(
+        coefficient = "cohen_kappa" if cls is PairwisePermutationConfig else "fleiss_kappa"
+        coc = (CohenKappaConfig if cls is PairwisePermutationConfig else FleissKappaConfig)(
             n_resamples=self.N, random_state=42,
         )
         return cls(
@@ -779,7 +809,7 @@ class TestMeanUsesTheSamePairs:
 
         analysis = PairwisePermutationAnalysis(self._ratings(), self._config("correlated"))
         result = analysis.run()
-        defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
+        defined = sorted(p for p, v in _points(result.pair_results).items() if not np.isnan(v))
         assert len(defined) == 3
         expected = self._expected_correlated(
             analysis, defined, lambda d: over_pairs(d, analysis.estimator)
@@ -794,12 +824,12 @@ class TestMeanUsesTheSamePairs:
         result = PairwisePermutationAnalysis(
             self._ratings(), self._config("independent")
         ).run()
-        defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
+        defined = sorted(p for p, v in _points(result.pair_results).items() if not np.isnan(v))
         # The picks come one pair at a time, in pair order, from the
         # coefficient's seed (see IndependentMeanDraws).
         rng = np.random.default_rng(42)
         sampled = np.array([
-            result.bootstrap_distributions_per_pair[p][
+            result.pair_results[p].bootstrap_distribution[
                 rng.integers(0, self.N, size=self.N)
             ]
             for p in defined
@@ -819,7 +849,7 @@ class TestMeanUsesTheSamePairs:
             self._config("correlated"),
         )
         result = analysis.run()
-        defined = sorted(p for p, v in result.pairwise_values.items() if not np.isnan(v))
+        defined = sorted(p for p, v in _points(result.pair_results).items() if not np.isnan(v))
         assert len(defined) == 3
         jackknife = analysis._mean_jackknife_correlated(defined)
         assert np.isnan(jackknife[1])
@@ -832,7 +862,7 @@ class TestMeanUsesTheSamePairs:
             self._ratings(), self._config("correlated", SubsetPermutationConfig, subset_k=2)
         )
         result = analysis.run()[2]
-        defined = sorted(s for s, v in result.subset_values.items() if not np.isnan(v))
+        defined = sorted(s for s, v in _points(result.subset_results).items() if not np.isnan(v))
         expected = self._expected_correlated(
             analysis, defined, lambda d: over_subsets(d, analysis.estimator, 2)
         )
@@ -881,7 +911,7 @@ class TestPairwiseDifferentCoefficients:
 
         # For the pair (0,1) with very different marginals, values should differ
         assert abs(
-            r_cohen.pairwise_values[(0, 1)] - r_scotts.pairwise_values[(0, 1)]
+            r_cohen.pair_results[(0, 1)].point - r_scotts.pair_results[(0, 1)].point
         ) > 0.01
 
 
@@ -984,18 +1014,21 @@ class TestSubsetComputationA:
         ratings = _make_ratings(20, 4)
         config = _subset_config(subset_k=3)
         result = SubsetPermutationAnalysis(ratings, config).run()
-        for key in result.per_k_results[3].subset_values:
+        for key in result.per_k_results[3].subset_results:
             assert isinstance(key, tuple)
             assert len(key) == 3
             assert key == tuple(sorted(key))
 
-    def test_subjects_per_subset_matches_values(self):
-        """subjects_per_subset should have same keys as subset_values."""
+    def test_each_subset_is_its_coefficient_result(self):
+        """Each subset is a FleissKappaResult on that subset's subjects."""
+        from interrater.intermediates.results import FleissKappaResult
+
         ratings = _make_ratings(20, 4)
         config = _subset_config(subset_k=3)
         result = SubsetPermutationAnalysis(ratings, config).run()
-        r = result.per_k_results[3]
-        assert set(r.subjects_per_subset.keys()) == set(r.subset_values.keys())
+        for subset, unit in result.per_k_results[3].subset_results.items():
+            assert isinstance(unit, FleissKappaResult), subset
+            assert unit.balance_profile.n_subjects == 20
 
     def test_mean_is_average_of_values(self):
         """mean_over_subsets should be NaN-skipping mean of subset values."""
@@ -1003,7 +1036,7 @@ class TestSubsetComputationA:
         config = _subset_config(subset_k=3)
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
-        values = list(r.subset_values.values())
+        values = list(_points(r.subset_results).values())
         expected = np.nanmean(values)
         assert abs(r.mean_over_subsets - expected) < TOL
 
@@ -1035,7 +1068,7 @@ class TestSubsetMultiK:
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
         assert r.n_subsets == 1
-        assert (0, 1, 2) in r.subset_values
+        assert (0, 1, 2) in r.subset_results
 
     def test_each_k_independent(self):
         """Results for different k values should be independent quantities."""
@@ -1057,8 +1090,8 @@ class TestSubsetComputationB:
         config = _subset_config(n_resamples=100, subset_k=3)
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
-        assert r.bootstrap_cis_per_subset is not None
-        for subset, ci in r.bootstrap_cis_per_subset.items():
+        for subset, unit in r.subset_results.items():
+            ci = unit.confidence_interval
             assert isinstance(ci, BootstrapCIResult)
             assert ci.n_resamples == 100
             if ci.is_defined:
@@ -1081,8 +1114,8 @@ class TestSubsetComputationB:
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
 
-        for subset, ci in r.bootstrap_cis_per_subset.items():
-            point = r.subset_values[subset]
+        for subset, unit in _computed(r.subset_results).items():
+            ci, point = unit.confidence_interval, unit.point
             if ci.is_defined and not math.isnan(point):
                 assert ci.lower - TOL <= point <= ci.upper + TOL, (
                     f"subset {subset}: point {point:.4f} outside its own "
@@ -1094,7 +1127,8 @@ class TestSubsetComputationB:
         config = _subset_config(n_resamples=100, subset_k=3)
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
-        assert r.bootstrap_distributions_per_subset is not None
+        for unit in r.subset_results.values():
+            assert unit.bootstrap_distribution.shape == (100,)
 
     def test_per_subset_draws_kept_past_the_old_limit(self):
         """2.0.0 dropped them above 120 subsets."""
@@ -1103,7 +1137,10 @@ class TestSubsetComputationB:
             ratings, _subset_config(n_resamples=20, subset_k=3)
         ).run()
         r = result.per_k_results[3]
-        assert len(r.get_bootstrap_distributions_per_subset()) == 220
+        assert sum(
+            isinstance(unit.bootstrap_distribution, np.ndarray)
+            for unit in r.subset_results.values()
+        ) == 220
 
     def test_per_subset_draws_not_kept_says_why(self):
         """keep_draws: false runs everything and leaves out only the draws."""
@@ -1112,10 +1149,12 @@ class TestSubsetComputationB:
             ratings, _subset_config(n_resamples=20, subset_k=3, keep_draws=False)
         ).run()
         r = result.per_k_results[3]
-        assert r.bootstrap_distributions_per_subset is None
-        assert len(r.bootstrap_cis_per_subset) == 220
-        with pytest.raises(RuntimeError, match="keep_draws false"):
-            r.get_bootstrap_distributions_per_subset()
+        assert len(r.subset_results) == 220
+        for unit in r.subset_results.values():
+            assert isinstance(unit.confidence_interval, BootstrapCIResult)
+            assert unit.bootstrap_distribution.reason == (
+                "draws not kept: keep_draws false"
+            )
 
     def test_reproducible_with_same_seed(self):
         """Same random_state should produce identical results."""
@@ -1123,10 +1162,10 @@ class TestSubsetComputationB:
         config = _subset_config(n_resamples=100, subset_k=3, random_state=42)
         r1 = SubsetPermutationAnalysis(ratings, config).run()
         r2 = SubsetPermutationAnalysis(ratings, config).run()
-        for subset in r1.per_k_results[3].subset_values:
+        for subset in r1.per_k_results[3].subset_results:
             assert (
-                r1.per_k_results[3].subset_values[subset]
-                == r2.per_k_results[3].subset_values[subset]
+                r1.per_k_results[3].subset_results[subset].point
+                == r2.per_k_results[3].subset_results[subset].point
             )
 
 
@@ -1289,8 +1328,7 @@ class TestResultSummary:
         assert "ci_method" in s
         assert "n_pairs" in s
         assert "mean_over_pairs" in s
-        assert "pairwise_values" in s
-        assert "subjects_per_pair" in s
+        assert "pair_results" in s
 
     def test_pairwise_summary_with_bootstrap(self):
         """Summary with mean bootstrap should include bootstrap keys."""
@@ -1365,14 +1403,16 @@ class TestKeepDrawsChangesNoNumber:
     """
 
     @staticmethod
-    def _same(a, b, units):
-        cis_a, cis_b = (
-            (a.bootstrap_cis_per_pair, b.bootstrap_cis_per_pair)
-            if hasattr(a, "bootstrap_cis_per_pair")
-            else (a.bootstrap_cis_per_subset, b.bootstrap_cis_per_subset)
-        )
-        for unit in units:
-            assert cis_a[unit].summary() == cis_b[unit].summary(), unit
+    def _same(a, b, units_a, units_b):
+        """Same units, with the same points and intervals; only draws differ."""
+        assert units_a.keys() == units_b.keys()
+        for key in units_a:
+            ua, ub = units_a[key], units_b[key]
+            if isinstance(ua, NotComputed):
+                assert ub.reason == ua.reason, key
+                continue
+            assert ua.point == ub.point or (np.isnan(ua.point) and np.isnan(ub.point)), key
+            assert ua.confidence_interval.summary() == ub.confidence_interval.summary(), key
         np.testing.assert_array_equal(
             a.bootstrap_distribution_of_mean, b.bootstrap_distribution_of_mean,
         )
@@ -1387,9 +1427,11 @@ class TestKeepDrawsChangesNoNumber:
             )).run()
             for keep in (True, False)
         )
-        assert kept.bootstrap_distributions_per_pair is not None
-        assert tossed.bootstrap_distributions_per_pair is None
-        self._same(kept, tossed, kept.pairwise_values)
+        for unit in _computed(kept.pair_results).values():
+            assert isinstance(unit.bootstrap_distribution, np.ndarray)
+        for unit in _computed(tossed.pair_results).values():
+            assert isinstance(unit.bootstrap_distribution, NotComputed)
+        self._same(kept, tossed, kept.pair_results, tossed.pair_results)
 
     @pytest.mark.parametrize("method", ["correlated", "independent"])
     def test_subsets(self, method):
@@ -1401,9 +1443,11 @@ class TestKeepDrawsChangesNoNumber:
             )).run().per_k_results[3]
             for keep in (True, False)
         )
-        assert kept.bootstrap_distributions_per_subset is not None
-        assert tossed.bootstrap_distributions_per_subset is None
-        self._same(kept, tossed, kept.subset_values)
+        for unit in _computed(kept.subset_results).values():
+            assert isinstance(unit.bootstrap_distribution, np.ndarray)
+        for unit in _computed(tossed.subset_results).values():
+            assert isinstance(unit.bootstrap_distribution, NotComputed)
+        self._same(kept, tossed, kept.subset_results, tossed.subset_results)
 
     def test_independent_mean_is_the_mean_of_picks_from_each_unit(self):
         """The running total gives what picking from every unit's draws does."""
@@ -1411,7 +1455,10 @@ class TestKeepDrawsChangesNoNumber:
         r = PairwisePermutationAnalysis(ratings, _pairwise_config(
             n_resamples=50, bootstrap_mean="independent",
         )).run()
-        draws = r.bootstrap_distributions_per_pair
+        draws = {
+            pair: unit.bootstrap_distribution
+            for pair, unit in r.pair_results.items()
+        }
         rng = np.random.default_rng(42)  # the coefficient's random_state
         expected = np.zeros(50)
         for pair in sorted(draws):
@@ -1516,3 +1563,137 @@ class TestCostGuard:
         PairwisePermutationAnalysis(ratings, _pairwise_config(
             n_resamples=4000, bootstrap_mean="correlated",
         ))
+
+
+class TestEachUnitIsTheAnalyzersResult:
+    """
+    A pair or subset is the result its coefficient's own analyzer gives on
+    the unit's subjects (those at least two of its raters rated). Only the
+    interval and draws differ: each unit draws from its own child seed,
+    spawned from random_state, while a direct run draws from random_state.
+    """
+
+    # Summary keys that come from the bootstrap
+    RANDOM = {
+        "ci", "ci_lower", "ci_upper", "point_outside_interval",
+        "bootstrap_draws_mean", "bootstrap_se",
+    }
+
+    def _direct(self, analyzer_cls, ratings, unit, config):
+        """The analyzer run alone on the unit's usable subjects."""
+        columns = ratings.category_index[:, list(unit)]
+        rows = (columns != EMPTY).sum(axis=1) >= 2
+        names = [ratings.semantics.raters[i] for i in unit]
+        unit_ratings = Ratings(
+            category_index=columns[rows],
+            semantics=RatingsSemantics(
+                raters=names, categories=ratings.semantics.categories,
+            ),
+        )
+        return analyzer_cls(unit_ratings, config).estimate()
+
+    def _deterministic(self, result):
+        return {k: v for k, v in result.summary().items() if k not in self.RANDOM}
+
+    def test_pair(self):
+        from interrater.analyzers import CohenKappaAnalyzer
+
+        ratings = _make_ratings(30, 4, n_categories=3, sparse=True, seed=3)
+        config = _pairwise_config(n_resamples=50)
+        result = PairwisePermutationAnalysis(ratings, config).run()
+        for pair, unit in result.pair_results.items():
+            direct = self._direct(
+                CohenKappaAnalyzer, ratings, pair, config.config_of_coefficient,
+            )
+            assert self._deterministic(unit) == self._deterministic(direct), pair
+
+    def test_subset(self):
+        from interrater.analyzers import FleissKappaAnalyzer
+
+        ratings = _make_ratings(30, 4, n_categories=3, sparse=True, seed=3)
+        config = _subset_config(n_resamples=50, subset_k=3, balanced_data_only=False)
+        result = SubsetPermutationAnalysis(ratings, config).run()[3]
+        for subset, unit in result.subset_results.items():
+            direct = self._direct(
+                FleissKappaAnalyzer, ratings, subset, config.config_of_coefficient,
+            )
+            assert self._deterministic(unit) == self._deterministic(direct), subset
+
+
+class TestSubsetsNotComputed:
+    """
+    A subset with no result holds NotComputed and says why, and the mean
+    leaves it out. Raters r0 and r1 rate subjects 0-9; r2 and r3 rate
+    10-19; r4 rates all 20; r5 rates subject 0 only.
+    """
+
+    def _ratings(self):
+        rng = np.random.default_rng(42)
+        index = np.full((20, 6), EMPTY, dtype=np.int64)
+        index[:10, 0:2] = rng.integers(0, 2, size=(10, 2))
+        index[10:, 2:4] = rng.integers(0, 2, size=(10, 2))
+        index[:, 4] = rng.integers(0, 2, size=20)
+        index[0, 5] = 1
+        semantics = RatingsSemantics(
+            raters=[f"r{i}" for i in range(6)],
+            categories=UnorderedCategories(["A", "B"]),
+        )
+        return Ratings(category_index=index, semantics=semantics)
+
+    def _run(self):
+        config = _subset_config(n_resamples=20, subset_k=3, balanced_data_only=False)
+        return SubsetPermutationAnalysis(self._ratings(), config).run()[3]
+
+    def test_too_few_subjects(self):
+        """r0, r2, r5 share only subject 0 (r0 and r5)."""
+        unit = self._run().subset_results[(0, 2, 5)]
+        assert isinstance(unit, NotComputed)
+        assert unit.reason == "raters r0, r2, r5: 1 subject rated by at least two of them"
+
+    def test_idle_rater(self):
+        """r0 and r1 share subjects 0-9, where r2 rated nothing: the subset
+        would really be the pair r0, r1."""
+        unit = self._run().subset_results[(0, 1, 2)]
+        assert isinstance(unit, NotComputed)
+        assert unit.reason == "rater r2 rated none of the 10 subjects the others share"
+
+    def test_mean_leaves_them_out(self):
+        result = self._run()
+        points = [unit.point for unit in _computed(result.subset_results).values()]
+        assert 0 < len(points) < len(result.subset_results)
+        assert result.mean_over_subsets == pytest.approx(np.nanmean(points), abs=TOL)
+
+
+class TestResampleWithAnIdleRater:
+    """
+    Raters r0, r1 rate subjects 0-9; r2 rates subject 0 only. The subset
+    r0, r1, r2 has a coefficient, but a resample that misses subject 0
+    leaves r2 idle: that draw is really the pair r0, r1. It counts as
+    failed, under the same rule as the subset's own value.
+    """
+
+    def test_draws_that_drop_the_rater_fail(self):
+        rng = np.random.default_rng(7)
+        index = np.full((10, 3), EMPTY, dtype=np.int64)
+        index[:, :2] = rng.integers(0, 2, size=(10, 2))
+        index[0, 2] = 1
+        ratings = Ratings(
+            category_index=index,
+            semantics=RatingsSemantics(
+                raters=["r0", "r1", "r2"], categories=UnorderedCategories(["A", "B"]),
+            ),
+        )
+        n = 200
+        config = _subset_config(n_resamples=n, subset_k=3, balanced_data_only=False)
+        unit = SubsetPermutationAnalysis(ratings, config).run()[3].subset_results[(0, 1, 2)]
+
+        # Redo the resamples with the subset's own child seed
+        seed = np.random.SeedSequence(42).spawn(1)[0]
+        child = np.random.default_rng(seed)
+        drops = np.array([
+            0 not in child.choice(10, size=10, replace=True) for _ in range(n)
+        ])
+        draws = unit.bootstrap_distribution
+        assert drops.any()
+        assert np.isnan(draws[drops]).all()
+        assert unit.confidence_interval.n_failed == int(np.isnan(draws).sum())

@@ -276,36 +276,50 @@ def _bp_with_n_raters(n_raters: int = 3) -> BalanceProfile:
     )
 
 
-# -- Per-pair and per-subset bootstrap, as every analysis produces it ------- #
-# The per-unit bootstrap always runs (n_resamples >= 1), so every result has
-# an interval per unit, and its draws whenever the units fit under the
-# storage limit.
+# -- Pairs and subsets: each one is its coefficient's own result ----------- #
+# The per-unit bootstrap always runs (n_resamples >= 2), so every unit that
+# was computed has an interval, and its draws unless keep_draws was false.
 
 
-def _cis_for(values) -> dict:
-    """One interval per unit, keyed like ``values``."""
-    if not isinstance(values, dict):
-        return {}
-    return {key: _ci(0.40, 0.60) for key in values}
-
-
-def _dists_for(values) -> dict:
-    """Draws per unit that agree with ``_cis_for(values)``."""
-    return _dists_matching(_cis_for(values))
-
-
-def _dists_matching(cis) -> dict:
-    """Draws per unit that agree with each unit's interval in ``cis``.
-
-    Anything that is not an interval gets a placeholder; the result refuses
-    the interval first, so the placeholder is never compared.
+def _unit(
+    point: float,
+    coefficient: str = "cohen_kappa",
+    ci: BootstrapCIResult | None = None,
+    keep_draws: bool = True,
+):
     """
-    if not isinstance(cis, dict):
-        return {}
+    One pair's or subset's result, as the analysis builds it.
+
+    Cohen's units are two raters on _PAIR; Fleiss' and Gwet's sit on the
+    small balanced panel. The interval defaults to a plain one, and the
+    draws agree with it, or say they were not kept.
+    """
+    ci = _ci(0.40, 0.60) if ci is None else ci
+    if keep_draws:
+        draws = _draws_for(ci)
+    else:
+        draws = NotComputed("draws not kept: keep_draws false")
+    shared = dict(ci_method=ci.method_intended)
+    if coefficient == "cohen_kappa":
+        return CohenKappaResult(
+            point, ci, draws, _bp_with_n_raters(2), weights_type="identity",
+            **shared, **_cohen(point),
+        )
+    if coefficient == "fleiss_kappa":
+        return FleissKappaResult(
+            point, ci, draws, _bp(), weights_type="identity",
+            **shared, **_pooled(point),
+        )
+    if coefficient == "gwet_ac1":
+        return GwetsAC1Result(point, ci, draws, _bp(), **shared, **_gwet(point))
+    raise ValueError(f"no unit builder for {coefficient}")
+
+
+def _units(values: dict, coefficient: str = "cohen_kappa", **unit_kwargs) -> dict:
+    """One result per unit, keyed like ``values``."""
     return {
-        key: _draws_for(ci) if isinstance(ci, BootstrapCIResult)
-        else np.array([0.5])
-        for key, ci in cis.items()
+        key: _unit(value, coefficient, **unit_kwargs)
+        for key, value in values.items()
     }
 
 
@@ -317,7 +331,6 @@ def _many_units(n_raters: int, k: int) -> dict:
 # -- Pairwise test data: 3 raters → C(3,2) = 3 pairs ----------------------- #
 
 PAIRS = {(0, 1): 0.6, (0, 2): 0.4, (1, 2): 0.5}
-SUBJECTS_PER_PAIR = {(0, 1): 100, (0, 2): 80, (1, 2): 90}
 PAIRWISE_MEAN = 0.5  # (0.6 + 0.4 + 0.5) / 3
 
 
@@ -327,8 +340,7 @@ def _pairwise_kwargs(**overrides):
         coefficient_name="cohen_kappa",
         ci_method="percentile",
         balance_profile=_bp(),
-        pairwise_values=dict(PAIRS),
-        subjects_per_pair=dict(SUBJECTS_PER_PAIR),
+        pair_results=_units(PAIRS),
         n_pairs=3,
         mean_over_pairs=PAIRWISE_MEAN,
         bootstrap_mean_method=None,
@@ -336,18 +348,11 @@ def _pairwise_kwargs(**overrides):
         bootstrap_distribution_of_mean=None,
     )
     base.update(overrides)
-    base.setdefault("bootstrap_cis_per_pair", _cis_for(base["pairwise_values"]))
-    base.setdefault(
-        "bootstrap_distributions_per_pair",
-        _dists_matching(base["bootstrap_cis_per_pair"]),
-    )
     return base
 
 
 def _pairwise_with_bootstrap(**overrides):
     """Defaults for PairwisePermutationResult with correlated bootstrap."""
-    # Overrides go in before the per-unit draws are built, so draws
-    # follow any per-unit intervals a test supplies.
     return _pairwise_kwargs(**{
         "bootstrap_mean_method": "correlated",
         "bootstrap_ci_of_mean": _ci(0.45, 0.55, n_resamples=3),
@@ -359,11 +364,9 @@ def _pairwise_with_bootstrap(**overrides):
 # -- Subset test data: k=2 (same structure as pairs) and k=3 --------------- #
 
 SUBSETS_K2 = {(0, 1): 0.6, (0, 2): 0.4, (1, 2): 0.5}
-SUBJECTS_K2 = {(0, 1): 100, (0, 2): 80, (1, 2): 90}
 SUBSET_K2_MEAN = 0.5
 
 SUBSETS_K3 = {(0, 1, 2): 0.55}
-SUBJECTS_K3 = {(0, 1, 2): 70}
 SUBSET_K3_MEAN = 0.55
 
 
@@ -373,8 +376,7 @@ def _subset_kwargs(**overrides):
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
         balance_profile=_bp(),
-        subset_values=dict(SUBSETS_K2),
-        subjects_per_subset=dict(SUBJECTS_K2),
+        subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
         n_subsets=3,
         subset_k=2,
         mean_over_subsets=SUBSET_K2_MEAN,
@@ -383,18 +385,22 @@ def _subset_kwargs(**overrides):
         bootstrap_distribution_of_mean=None,
     )
     base.update(overrides)
-    base.setdefault("bootstrap_cis_per_subset", _cis_for(base["subset_values"]))
-    base.setdefault(
-        "bootstrap_distributions_per_subset",
-        _dists_matching(base["bootstrap_cis_per_subset"]),
-    )
     return base
+
+
+def _subset_k3_kwargs(**overrides):
+    """As _subset_kwargs, for k=3: one subset of the three raters."""
+    return _subset_kwargs(**{
+        "subset_results": _units(SUBSETS_K3, "fleiss_kappa"),
+        "n_subsets": 1,
+        "subset_k": 3,
+        "mean_over_subsets": SUBSET_K3_MEAN,
+        **overrides,
+    })
 
 
 def _subset_with_bootstrap(**overrides):
     """Defaults for SubsetPermutationResult (k=2) with correlated bootstrap."""
-    # Overrides go in before the per-unit draws are built, so draws
-    # follow any per-unit intervals a test supplies.
     return _subset_kwargs(**{
         "bootstrap_mean_method": "correlated",
         "bootstrap_ci_of_mean": _ci(0.45, 0.55, n_resamples=3),
@@ -410,41 +416,14 @@ def _multi_k_kwargs(**overrides):
     and the parent (identity check in validation).
     """
     bp = _bp()
-    result_k2 = SubsetPermutationResult(
-        coefficient_name="fleiss_kappa",
-        ci_method="percentile",
-        balance_profile=bp,
-        subset_values=dict(SUBSETS_K2),
-        subjects_per_subset=dict(SUBJECTS_K2),
-        n_subsets=3,
-        subset_k=2,
-        mean_over_subsets=SUBSET_K2_MEAN,
-        bootstrap_mean_method=None,
-        bootstrap_ci_of_mean=None,
-        bootstrap_distribution_of_mean=None,
-        bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
-        bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
-    )
-    result_k3 = SubsetPermutationResult(
-        coefficient_name="fleiss_kappa",
-        ci_method="percentile",
-        balance_profile=bp,
-        subset_values=dict(SUBSETS_K3),
-        subjects_per_subset=dict(SUBJECTS_K3),
-        n_subsets=1,
-        subset_k=3,
-        mean_over_subsets=SUBSET_K3_MEAN,
-        bootstrap_mean_method=None,
-        bootstrap_ci_of_mean=None,
-        bootstrap_distribution_of_mean=None,
-        bootstrap_cis_per_subset=_cis_for(SUBSETS_K3),
-        bootstrap_distributions_per_subset=_dists_for(SUBSETS_K3),
-    )
     base = dict(
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
         balance_profile=bp,
-        per_k_results={2: result_k2, 3: result_k3},
+        per_k_results={
+            2: SubsetPermutationResult(**_subset_kwargs(balance_profile=bp)),
+            3: SubsetPermutationResult(**_subset_k3_kwargs(balance_profile=bp)),
+        },
         ks=[2, 3],
     )
     base.update(overrides)
@@ -619,47 +598,36 @@ class TestPointEstimateResultPointOutsideInterval:
     one side of the point legitimately, so refusing to exist was the wrong
     response -- but it is also the signature of a degenerate bootstrap, and of
     a bootstrap that resampled a different pool than the point estimate was
-    computed from. So it is permitted and disclosed three ways.
+    computed from. So it is permitted, and the result says so itself, three
+    ways. It raises no warning: a run with many pairs would print one per
+    pair.
     """
 
     def test_point_below_interval_is_allowed(self):
-        with pytest.warns(UserWarning, match="falls outside its own interval"):
-            r = _pe(0.2, _ci(0.3, 0.7))
+        r = _pe(0.2, _ci(0.3, 0.7))
         assert r.point == 0.2
         assert r.point_outside_interval is True
 
     def test_point_above_interval_is_allowed(self):
-        with pytest.warns(UserWarning, match="falls outside its own interval"):
-            r = _pe(0.8, _ci(0.3, 0.7))
-        assert r.point_outside_interval is True
+        assert _pe(0.8, _ci(0.3, 0.7)).point_outside_interval is True
 
-    def test_point_inside_does_not_warn(self):
+    def test_no_warning_raised(self):
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            r = _pe(0.5, _ci(0.3, 0.7))
-        assert r.point_outside_interval is False
+            r = _pe(0.2, _ci(0.3, 0.7))
+        assert r.point_outside_interval is True
+
+    def test_point_inside_is_not_outside(self):
+        assert _pe(0.5, _ci(0.3, 0.7)).point_outside_interval is False
 
     def test_boundary_counts_as_inside(self):
         """A point exactly on a bound is in, not out."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            assert (
-                _pe(0.3, _ci(0.3, 0.7))
-                .point_outside_interval
-                is False
-            )
-            assert (
-                _pe(0.7, _ci(0.3, 0.7))
-                .point_outside_interval
-                is False
-            )
+        assert _pe(0.3, _ci(0.3, 0.7)).point_outside_interval is False
+        assert _pe(0.7, _ci(0.3, 0.7)).point_outside_interval is False
 
     def test_undefined_interval_is_not_outside(self):
         """No bounds means no comparison to make -- not a violation."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            r = _pe(0.5, _undefined_ci())
-        assert r.point_outside_interval is False
+        assert _pe(0.5, _undefined_ci()).point_outside_interval is False
 
     def test_no_interval_is_not_outside(self):
         assert (
@@ -668,24 +636,12 @@ class TestPointEstimateResultPointOutsideInterval:
         )
 
     def test_marker_appears_in_str(self):
-        """Channel two: visible to anyone who prints the result."""
-        with pytest.warns(UserWarning):
-            r = _pe(0.2, _ci(0.3, 0.7))
-        assert "POINT OUTSIDE INTERVAL" in str(r)
+        """Visible to anyone who prints the result."""
+        assert "POINT OUTSIDE INTERVAL" in str(_pe(0.2, _ci(0.3, 0.7)))
 
     def test_flag_appears_in_summary(self):
-        """Channel three: visible to anyone who serializes it."""
-        with pytest.warns(UserWarning):
-            r = _pe(0.2, _ci(0.3, 0.7))
-        assert r.summary()["point_outside_interval"] is True
-
-    def test_warning_names_the_two_explanations(self):
-        """The warning has to be actionable, not just alarming."""
-        with pytest.warns(UserWarning) as caught:
-            _pe(0.2, _ci(0.3, 0.7))
-        message = str(caught[0].message)
-        assert "bias correction" in message
-        assert "degenerate" in message
+        """Visible to anyone who serializes it."""
+        assert _pe(0.2, _ci(0.3, 0.7)).summary()["point_outside_interval"] is True
 
 
 class TestPointEstimateResultStr:
@@ -1524,7 +1480,10 @@ class TestPairwisePermutationResultConstruction:
         assert r.mean_over_pairs == PAIRWISE_MEAN
         assert r.bootstrap_mean_method is None
         # The per-pair bootstrap always runs
-        assert len(r.bootstrap_cis_per_pair) == r.n_pairs
+        assert all(
+            unit.confidence_interval is not None
+            for unit in r.pair_results.values()
+        )
 
     def test_with_bootstrap(self):
         r = PairwisePermutationResult(**_pairwise_with_bootstrap())
@@ -1543,21 +1502,38 @@ class TestPairwisePermutationResultConstruction:
         assert isinstance(r, PermutationResult)
         assert isinstance(r, AnalysisResult)
 
+    def test_each_pair_is_its_coefficient_result(self):
+        """A pair is a CohenKappaResult, with everything one carries."""
+        r = PairwisePermutationResult(**_pairwise_kwargs())
+        pair = r.pair_results[(0, 1)]
+        assert isinstance(pair, CohenKappaResult)
+        assert pair.point == 0.6
+        assert pair.kappa_max == 1.0
+        assert pair.balance_profile.n_subjects == 4
+
 
 class TestPairwisePermutationResultValidation:
     """Each validation constraint tested with one failing input."""
 
-    def test_pairwise_values_not_dict(self):
-        with pytest.raises(TypeError, match="pairwise_values must be dict"):
+    def test_pair_results_not_dict(self):
+        with pytest.raises(TypeError, match="pair_results must be a dict"):
             PairwisePermutationResult(
-                **_pairwise_kwargs(pairwise_values=[(0, 1, 0.6)])
+                **_pairwise_kwargs(pair_results=[(0, 1, 0.6)])
             )
 
-    def test_pairwise_values_bad_keys(self):
-        with pytest.raises(ValueError, match="pairwise_values keys must be 2-tuples"):
+    def test_pair_results_bad_keys(self):
+        with pytest.raises(
+            ValueError, match="pair_results keys must be sorted tuples of 2",
+        ):
             PairwisePermutationResult(**_pairwise_kwargs(
-                pairwise_values={0: 0.6, 1: 0.5, 2: 0.4},
+                pair_results={i: _unit(v) for i, v in enumerate(PAIRS.values())},
             ))
+
+    def test_pair_results_unsorted_key(self):
+        units = _units(PAIRS)
+        units[(2, 1)] = units.pop((1, 2))
+        with pytest.raises(ValueError, match=r"got \(2, 1\)"):
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
 
     def test_n_pairs_not_int(self):
         """Non-int n_pairs raises TypeError."""
@@ -1571,17 +1547,68 @@ class TestPairwisePermutationResultValidation:
 
     def test_n_pairs_mismatch(self):
         with pytest.raises(
-            ValueError, match="pairwise_values has .* entries but n_pairs"
+            ValueError, match="pair_results has 3 entries but there are 5 pairs"
         ):
             PairwisePermutationResult(**_pairwise_kwargs(n_pairs=5))
 
-    def test_subjects_per_pair_keys_mismatch(self):
+    def test_pair_must_be_a_result(self):
+        """A bare number is no longer a pair: a pair is a result."""
+        units = _units(PAIRS)
+        units[(0, 2)] = 0.4
+        with pytest.raises(TypeError, match=r"pair \(0, 2\) must be a result or NotComputed"):
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+
+    def test_pair_must_be_its_coefficients_class(self):
+        units = _units(PAIRS)
+        units[(0, 2)] = _unit(0.4, "fleiss_kappa")
         with pytest.raises(
-            ValueError, match="subjects_per_pair must have the same keys"
+            TypeError,
+            match=r"pair \(0, 2\) is a FleissKappaResult, but cohen_kappa pairs are CohenKappaResult",
         ):
-            PairwisePermutationResult(**_pairwise_kwargs(
-                subjects_per_pair={(0, 1): 100, (0, 2): 80, (2, 3): 90},
-            ))
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+
+    def test_pair_must_have_an_interval(self):
+        """The per-pair bootstrap always runs: no config turns it off, so a
+        computed pair without an interval can only be a bug."""
+        units = _units(PAIRS)
+        units[(0, 2)] = CohenKappaResult(
+            0.4, None, None, _bp_with_n_raters(2), ci_method="percentile",
+            weights_type="identity", **_cohen(0.4),
+        )
+        with pytest.raises(
+            TypeError,
+            match=r"pair \(0, 2\) has no bootstrap interval; the per-pair bootstrap always runs",
+        ):
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+
+    def test_pair_must_share_the_ci_method(self):
+        units = _units(PAIRS)
+        units[(0, 2)] = _unit(0.4, ci=_ci(
+            0.3, 0.5, method_intended="bca", method_used="bca",
+            acceleration=0.0, bias_correction=0.0,
+        ))
+        with pytest.raises(ValueError, match=r"pair \(0, 2\) was built with ci_method 'bca', not 'percentile'"):
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+
+    def test_mean_must_be_the_pairs_mean(self):
+        """A mean that disagrees with its own pairs was built from something else."""
+        with pytest.raises(ValueError, match="the mean is 0.6, but the pairs' defined points average 0.5"):
+            PairwisePermutationResult(**_pairwise_kwargs(mean_over_pairs=0.6))
+
+    def test_not_computed_pair_left_out_of_the_mean(self):
+        units = _units(PAIRS)
+        units[(1, 2)] = NotComputed("raters 1, 2 share 0 subjects")
+        r = PairwisePermutationResult(**_pairwise_kwargs(
+            pair_results=units, mean_over_pairs=0.5,  # (0.6 + 0.4) / 2
+        ))
+        assert r.pair_results[(1, 2)].reason == "raters 1, 2 share 0 subjects"
+
+    def test_no_pair_computed_mean_is_nan(self):
+        units = {key: NotComputed("share 0 subjects") for key in PAIRS}
+        r = PairwisePermutationResult(**_pairwise_kwargs(
+            pair_results=units, mean_over_pairs=float("nan"),
+        ))
+        assert math.isnan(r.mean_over_pairs)
 
     def test_mean_not_numeric(self):
         with pytest.raises(TypeError, match="mean_over_pairs must be float"):
@@ -1616,16 +1643,6 @@ class TestPairwisePermutationResultValidation:
                 bootstrap_ci_of_mean=(0.7, 0.3),
             ))
 
-    def test_per_pair_ci_must_be_an_interval(self):
-        with pytest.raises(TypeError, match="bootstrap CI for pair"):
-            PairwisePermutationResult(**_pairwise_with_bootstrap(
-                bootstrap_cis_per_pair={
-                    (0, 1): (0.50, 0.70),
-                    (0, 2): _ci(0.30, 0.50),
-                    (1, 2): _ci(0.40, 0.60),
-                },
-            ))
-
     def test_pairs_may_fail_independently(self):
         """The reason each pair carries its own interval object.
 
@@ -1634,13 +1651,13 @@ class TestPairwisePermutationResultValidation:
         shared summary could not say that.
         """
         r = PairwisePermutationResult(**_pairwise_with_bootstrap(
-            bootstrap_cis_per_pair={
-                (0, 1): _ci(0.50, 0.70),
-                (0, 2): _ci(0.30, 0.50, n_failed=137),
-                (1, 2): _undefined_ci(),
+            pair_results={
+                (0, 1): _unit(0.6, ci=_ci(0.50, 0.70)),
+                (0, 2): _unit(0.4, ci=_ci(0.30, 0.50, n_failed=137)),
+                (1, 2): _unit(0.5, ci=_undefined_ci(method_intended="percentile")),
             },
         ))
-        cis = r.bootstrap_cis_per_pair
+        cis = {key: unit.confidence_interval for key, unit in r.pair_results.items()}
         assert cis[(0, 1)].n_failed == 0
         assert cis[(0, 2)].n_failed == 137
         assert cis[(1, 2)].method_used is None
@@ -1658,51 +1675,51 @@ class TestPairwisePermutationResultValidation:
                 bootstrap_distribution_of_mean=np.array([]),
             ))
 
-    def test_per_pair_cis_required(self):
-        """The per-pair bootstrap always runs, so None is refused."""
-        with pytest.raises(TypeError, match="always runs"):
-            PairwisePermutationResult(**_pairwise_kwargs(bootstrap_cis_per_pair=None))
-
     def test_draws_may_be_left_out(self):
-        """None is what keep_draws: false leaves; the intervals stay."""
-        r = PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=None))
-        assert len(r.bootstrap_cis_per_pair) == 3
+        """NotComputed is what keep_draws: false leaves; the intervals stay."""
+        r = PairwisePermutationResult(**_pairwise_kwargs(
+            pair_results=_units(PAIRS, keep_draws=False),
+        ))
+        for unit in r.pair_results.values():
+            assert isinstance(unit.bootstrap_distribution, NotComputed)
+            assert unit.confidence_interval.is_defined
+
+    def test_draws_kept_for_every_pair_or_none(self):
+        """keep_draws applies to the whole analysis, so a mix is a bug."""
+        units = _units(PAIRS)
+        units[(0, 2)] = _unit(0.4, keep_draws=False)
+        with pytest.raises(
+            ValueError,
+            match="some pairs kept their draws and others did not; keep_draws applies to every pair",
+        ):
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+
+    def test_not_computed_pair_does_not_count_as_a_mix(self):
+        """A pair with no result has no draws to keep either way."""
+        units = _units(PAIRS)
+        units[(1, 2)] = NotComputed("raters 1, 2 share 0 subjects")
+        PairwisePermutationResult(**_pairwise_kwargs(
+            pair_results=units, mean_over_pairs=0.5,
+        ))
 
     def test_draws_kept_past_the_old_limit(self):
         """2.0.0 refused draws above 20 pairs; there is no limit now."""
         values = _many_units(7, 2)
         r = PairwisePermutationResult(**_pairwise_kwargs(
-            pairwise_values=values,
-            subjects_per_pair={key: 10 for key in values},
+            pair_results=_units(values),
             n_pairs=len(values),
         ))
-        assert len(r.bootstrap_distributions_per_pair) == 21
-
-    def test_draws_for_every_pair_or_none(self):
-        dists = _dists_for(PAIRS)
-        del dists[(1, 2)]
-        with pytest.raises(ValueError, match="same keys as pairwise_values"):
-            PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=dists))
-
-    def test_bootstrap_cis_per_pair_keys_mismatch(self):
-        with pytest.raises(
-            ValueError,
-            match="bootstrap_cis_per_pair must have the same keys",
-        ):
-            PairwisePermutationResult(**_pairwise_with_bootstrap(
-                bootstrap_cis_per_pair={
-                    (0, 1): (0.5, 0.7),
-                    (0, 2): (0.3, 0.5),
-                    # Missing (1, 2)
-                },
-            ))
+        assert sum(
+            isinstance(unit.bootstrap_distribution, np.ndarray)
+            for unit in r.pair_results.values()
+        ) == 21
 
     def test_error_prefix(self):
         with pytest.raises(
             TypeError, match=r"\[PairwisePermutationResult\] Error"
         ):
             PairwisePermutationResult(
-                **_pairwise_kwargs(pairwise_values="not a dict")
+                **_pairwise_kwargs(pair_results="not a dict")
             )
 
     def test_parent_validation_propagated(self):
@@ -1713,32 +1730,6 @@ class TestPairwisePermutationResultValidation:
             PairwisePermutationResult(**_pairwise_kwargs(
                 balance_profile={"not": "a profile"},
             ))
-
-
-class TestPairwisePermutationResultAccessor:
-    """get_bootstrap_distributions_per_pair() accessor method."""
-
-    def test_returns_distributions_when_stored(self):
-        """When distributions are stored, accessor returns them."""
-        dists = _dists_for(PAIRS)
-        r = PairwisePermutationResult(**_pairwise_with_bootstrap(
-            bootstrap_distributions_per_pair=dists,
-        ))
-        result = r.get_bootstrap_distributions_per_pair()
-        assert result is dists
-
-    def test_raises_when_draws_not_kept(self):
-        """The one reason draws can be missing: keep_draws was false.
-
-        It must not claim the bootstrap was not performed -- it always is.
-        """
-        r = PairwisePermutationResult(**_pairwise_kwargs(bootstrap_distributions_per_pair=None))
-        with pytest.raises(RuntimeError) as exc:
-            r.get_bootstrap_distributions_per_pair()
-        message = str(exc.value)
-        assert "keep_draws false" in message
-        assert "bootstrap_cis_per_pair" in message
-        assert "not performed" not in message
 
 
 class TestPairwisePermutationResultStr:
@@ -1763,8 +1754,9 @@ class TestPairwisePermutationResultSummary:
         assert d["n_pairs"] == 3
         assert d["mean_over_pairs"] == PAIRWISE_MEAN
         assert d["coefficient_name"] == "cohen_kappa"
-        # Tuple keys stringified for JSON
-        assert "(0, 1)" in d["pairwise_values"]
+        # Tuple keys stringified for JSON; each pair is its own summary
+        assert d["pair_results"]["(0, 1)"]["point"] == 0.6
+        assert d["pair_results"]["(0, 1)"]["ci_lower"] == 0.40
 
     def test_with_bootstrap(self):
         d = PairwisePermutationResult(**_pairwise_with_bootstrap()).summary()
@@ -1775,15 +1767,25 @@ class TestPairwisePermutationResultSummary:
         assert d["bootstrap_draws_mean"] == pytest.approx(0.50)
         assert d["bootstrap_se"] == pytest.approx(0.02)
         assert "bootstrap_n" not in d
-        assert d["pair_distributions_stored"] is True
-        assert len(d["bootstrap_cis_per_pair"]) == 3
+        assert len(d["pair_results"]) == 3
 
-    def test_pair_distributions_stored_flag(self):
-        """Draws not kept: the flag is False."""
+    def test_not_computed_pair(self):
+        units = _units(PAIRS)
+        units[(1, 2)] = NotComputed("raters 1, 2 share 0 subjects")
         d = PairwisePermutationResult(**_pairwise_kwargs(
-            bootstrap_distributions_per_pair=None,
+            pair_results=units, mean_over_pairs=0.5,
         )).summary()
-        assert d["pair_distributions_stored"] is False
+        assert d["pair_results"]["(1, 2)"] == {
+            "not_computed": "raters 1, 2 share 0 subjects",
+        }
+
+    def test_draws_not_kept(self):
+        d = PairwisePermutationResult(**_pairwise_kwargs(
+            pair_results=_units(PAIRS, keep_draws=False),
+        )).summary()
+        assert d["pair_results"]["(0, 1)"]["bootstrap_se"] == {
+            "not_computed": "draws not kept: keep_draws false",
+        }
 
 
 # ============================================================================ #
@@ -1801,7 +1803,10 @@ class TestSubsetPermutationResultConstruction:
         assert r.mean_over_subsets == SUBSET_K2_MEAN
         assert r.bootstrap_mean_method is None
         # The per-subset bootstrap always runs
-        assert len(r.bootstrap_cis_per_subset) == r.n_subsets
+        assert all(
+            unit.confidence_interval is not None
+            for unit in r.subset_results.values()
+        )
 
     def test_with_bootstrap(self):
         r = SubsetPermutationResult(**_subset_with_bootstrap())
@@ -1822,16 +1827,16 @@ class TestSubsetPermutationResultConstruction:
 
     def test_k3_single_subset(self):
         """k=3 with 3 raters gives 1 subset."""
-        r = SubsetPermutationResult(**_subset_kwargs(
-            subset_values=dict(SUBSETS_K3),
-            subjects_per_subset=dict(SUBJECTS_K3),
-            n_subsets=1,
-            subset_k=3,
-            mean_over_subsets=SUBSET_K3_MEAN,
-        ))
+        r = SubsetPermutationResult(**_subset_k3_kwargs())
         assert r.subset_k == 3
         assert r.n_subsets == 1
         assert r.mean_over_subsets == SUBSET_K3_MEAN
+
+    def test_each_subset_is_its_coefficient_result(self):
+        r = SubsetPermutationResult(**_subset_k3_kwargs())
+        subset = r.subset_results[(0, 1, 2)]
+        assert isinstance(subset, FleissKappaResult)
+        assert subset.point == 0.55
 
 
 class TestSubsetPermutationResultValidation:
@@ -1845,17 +1850,19 @@ class TestSubsetPermutationResultValidation:
         with pytest.raises(ValueError, match="subset_k must be >= 2"):
             SubsetPermutationResult(**_subset_kwargs(subset_k=1))
 
-    def test_subset_values_not_dict(self):
-        with pytest.raises(TypeError, match="subset_values must be dict"):
+    def test_subset_results_not_dict(self):
+        with pytest.raises(TypeError, match="subset_results must be a dict"):
             SubsetPermutationResult(**_subset_kwargs(
-                subset_values=[(0, 1, 0.6)],
+                subset_results=[(0, 1, 0.6)],
             ))
 
-    def test_subset_values_bad_keys(self):
+    def test_subset_results_bad_keys(self):
         """Keys must be k-tuples matching subset_k."""
-        with pytest.raises(ValueError, match="subset_values keys must be"):
-            SubsetPermutationResult(**_subset_kwargs(
-                subset_values={0: 0.6, 1: 0.5, 2: 0.4},
+        with pytest.raises(
+            ValueError, match="subset_results keys must be sorted tuples of 3",
+        ):
+            SubsetPermutationResult(**_subset_k3_kwargs(
+                subset_results={(0, 1): _unit(0.55, "fleiss_kappa")},
             ))
 
     def test_n_subsets_not_int(self):
@@ -1868,17 +1875,43 @@ class TestSubsetPermutationResultValidation:
 
     def test_n_subsets_mismatch(self):
         with pytest.raises(
-            ValueError, match="subset_values has .* entries but n_subsets"
+            ValueError,
+            match="subset_results has 3 entries but there are 5 subsets",
         ):
             SubsetPermutationResult(**_subset_kwargs(n_subsets=5))
 
-    def test_subjects_per_subset_keys_mismatch(self):
+    def test_subset_must_be_its_coefficients_class(self):
+        units = _units(SUBSETS_K2, "fleiss_kappa")
+        units[(0, 2)] = _unit(0.4, "gwet_ac1")
         with pytest.raises(
-            ValueError, match="subjects_per_subset must have the same keys"
+            TypeError,
+            match=r"subset \(0, 2\) is a GwetsAC1Result, but fleiss_kappa subsets are FleissKappaResult",
         ):
-            SubsetPermutationResult(**_subset_kwargs(
-                subjects_per_subset={(0, 1): 100, (0, 2): 80, (2, 3): 90},
-            ))
+            SubsetPermutationResult(**_subset_kwargs(subset_results=units))
+
+    def test_subset_must_have_an_interval(self):
+        units = _units(SUBSETS_K2, "fleiss_kappa")
+        units[(0, 2)] = FleissKappaResult(
+            0.4, None, None, _bp(), ci_method="percentile",
+            weights_type="identity", **_pooled(0.4),
+        )
+        with pytest.raises(
+            TypeError,
+            match=r"subset \(0, 2\) has no bootstrap interval; the per-subset bootstrap always runs",
+        ):
+            SubsetPermutationResult(**_subset_kwargs(subset_results=units))
+
+    def test_mean_must_be_the_subsets_mean(self):
+        with pytest.raises(ValueError, match="the subsets' defined points average 0.5"):
+            SubsetPermutationResult(**_subset_kwargs(mean_over_subsets=0.6))
+
+    def test_not_computed_subset_left_out_of_the_mean(self):
+        units = _units(SUBSETS_K2, "fleiss_kappa")
+        units[(1, 2)] = NotComputed("raters 1, 2: 1 subjects rated by at least two of them")
+        r = SubsetPermutationResult(**_subset_kwargs(
+            subset_results=units, mean_over_subsets=0.5,  # (0.6 + 0.4) / 2
+        ))
+        assert isinstance(r.subset_results[(1, 2)], NotComputed)
 
     def test_mean_not_numeric(self):
         with pytest.raises(TypeError, match="mean_over_subsets must be float"):
@@ -1911,31 +1944,23 @@ class TestSubsetPermutationResultValidation:
                 bootstrap_ci_of_mean=(0.7, 0.3),
             ))
 
-    def test_per_subset_ci_must_be_an_interval(self):
-        with pytest.raises(TypeError, match="bootstrap CI for subset"):
-            SubsetPermutationResult(**_subset_with_bootstrap(
-                bootstrap_cis_per_subset={
-                    (0, 1): (0.50, 0.70),
-                    (0, 2): _ci(0.30, 0.50),
-                    (1, 2): _ci(0.40, 0.60),
-                },
-            ))
-
     def test_subsets_may_fail_independently(self):
         """Routine here rather than exceptional.
 
-        A subset with fewer than two measurable subjects has nothing to
-        resample and gets an interval that ran no method, while its
-        siblings on the same data come back normally.
+        A subset with few measurable subjects can lose draws, or all of
+        them, while its siblings on the same data come back normally.
         """
         r = SubsetPermutationResult(**_subset_with_bootstrap(
-            bootstrap_cis_per_subset={
-                (0, 1): _ci(0.50, 0.70),
-                (0, 2): _ci(0.30, 0.50, n_failed=137),
-                (1, 2): _undefined_ci(),
+            subset_results={
+                (0, 1): _unit(0.6, "fleiss_kappa", ci=_ci(0.50, 0.70)),
+                (0, 2): _unit(0.4, "fleiss_kappa", ci=_ci(0.30, 0.50, n_failed=137)),
+                (1, 2): _unit(
+                    0.5, "fleiss_kappa",
+                    ci=_undefined_ci(method_intended="percentile"),
+                ),
             },
         ))
-        cis = r.bootstrap_cis_per_subset
+        cis = {key: unit.confidence_interval for key, unit in r.subset_results.items()}
         assert cis[(0, 1)].n_failed == 0
         assert cis[(0, 2)].n_failed == 137
         assert cis[(1, 2)].method_used is None
@@ -1953,51 +1978,42 @@ class TestSubsetPermutationResultValidation:
                 bootstrap_distribution_of_mean=np.array([]),
             ))
 
-    def test_per_subset_cis_required(self):
-        """The per-subset bootstrap always runs, so None is refused."""
-        with pytest.raises(TypeError, match="always runs"):
-            SubsetPermutationResult(**_subset_kwargs(bootstrap_cis_per_subset=None))
-
     def test_draws_may_be_left_out(self):
-        """None is what keep_draws: false leaves; the intervals stay."""
-        r = SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=None))
-        assert len(r.bootstrap_cis_per_subset) == 3
+        """NotComputed is what keep_draws: false leaves; the intervals stay."""
+        r = SubsetPermutationResult(**_subset_kwargs(
+            subset_results=_units(SUBSETS_K2, "fleiss_kappa", keep_draws=False),
+        ))
+        for unit in r.subset_results.values():
+            assert isinstance(unit.bootstrap_distribution, NotComputed)
+            assert unit.confidence_interval.is_defined
+
+    def test_draws_kept_for_every_subset_or_none(self):
+        units = _units(SUBSETS_K2, "fleiss_kappa")
+        units[(0, 2)] = _unit(0.4, "fleiss_kappa", keep_draws=False)
+        with pytest.raises(
+            ValueError,
+            match="some subsets kept their draws and others did not; keep_draws applies to every subset",
+        ):
+            SubsetPermutationResult(**_subset_kwargs(subset_results=units))
 
     def test_draws_kept_past_the_old_limit(self):
         """2.0.0 refused draws above 120 subsets; there is no limit now."""
         values = _many_units(17, 2)
         r = SubsetPermutationResult(**_subset_kwargs(
-            subset_values=values,
-            subjects_per_subset={key: 10 for key in values},
+            subset_results=_units(values, "fleiss_kappa"),
             n_subsets=len(values),
         ))
-        assert len(r.bootstrap_distributions_per_subset) == 136
-
-    def test_draws_for_every_subset_or_none(self):
-        dists = _dists_for(SUBSETS_K2)
-        del dists[(1, 2)]
-        with pytest.raises(ValueError, match="same keys as subset_values"):
-            SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=dists))
-
-    def test_bootstrap_cis_per_subset_keys_mismatch(self):
-        with pytest.raises(
-            ValueError,
-            match="bootstrap_cis_per_subset must have the same keys",
-        ):
-            SubsetPermutationResult(**_subset_with_bootstrap(
-                bootstrap_cis_per_subset={
-                    (0, 1): (0.5, 0.7),
-                    (0, 2): (0.3, 0.5),
-                    # Missing (1, 2)
-                },
-            ))
+        assert sum(
+            isinstance(unit.bootstrap_distribution, np.ndarray)
+            for unit in r.subset_results.values()
+        ) == 136
 
     def test_error_prefix(self):
         with pytest.raises(
             TypeError, match=r"\[SubsetPermutationResult\] Error"
         ):
             SubsetPermutationResult(
-                **_subset_kwargs(subset_values="not a dict")
+                **_subset_kwargs(subset_results="not a dict")
             )
 
     def test_parent_validation_propagated(self):
@@ -2008,32 +2024,6 @@ class TestSubsetPermutationResultValidation:
             SubsetPermutationResult(**_subset_kwargs(
                 balance_profile={"not": "a profile"},
             ))
-
-
-class TestSubsetPermutationResultAccessor:
-    """get_bootstrap_distributions_per_subset() accessor method."""
-
-    def test_returns_distributions_when_stored(self):
-        """When distributions are stored, accessor returns them."""
-        dists = _dists_for(SUBSETS_K2)
-        r = SubsetPermutationResult(**_subset_with_bootstrap(
-            bootstrap_distributions_per_subset=dists,
-        ))
-        result = r.get_bootstrap_distributions_per_subset()
-        assert result is dists
-
-    def test_raises_when_draws_not_kept(self):
-        """The one reason draws can be missing: keep_draws was false.
-
-        It must not claim the bootstrap was not performed -- it always is.
-        """
-        r = SubsetPermutationResult(**_subset_kwargs(bootstrap_distributions_per_subset=None))
-        with pytest.raises(RuntimeError) as exc:
-            r.get_bootstrap_distributions_per_subset()
-        message = str(exc.value)
-        assert "keep_draws false" in message
-        assert "bootstrap_cis_per_subset" in message
-        assert "not performed" not in message
 
 
 class TestSubsetPermutationResultStr:
@@ -2059,8 +2049,8 @@ class TestSubsetPermutationResultSummary:
         assert d["n_subsets"] == 3
         assert d["mean_over_subsets"] == SUBSET_K2_MEAN
         assert d["coefficient_name"] == "fleiss_kappa"
-        # Tuple keys stringified for JSON
-        assert "(0, 1)" in d["subset_values"]
+        # Tuple keys stringified for JSON; each subset is its own summary
+        assert d["subset_results"]["(0, 1)"]["point"] == 0.6
 
     def test_with_bootstrap(self):
         d = SubsetPermutationResult(**_subset_with_bootstrap()).summary()
@@ -2071,38 +2061,34 @@ class TestSubsetPermutationResultSummary:
         assert d["bootstrap_draws_mean"] == pytest.approx(0.50)
         assert d["bootstrap_se"] == pytest.approx(0.02)
         assert "bootstrap_n" not in d
-        assert d["subset_distributions_stored"] is True
-        assert len(d["bootstrap_cis_per_subset"]) == 3
+        assert len(d["subset_results"]) == 3
 
-    def test_subset_distributions_stored_flag(self):
-        """Draws not kept: the flag is False."""
+    def test_not_computed_subset(self):
+        units = _units(SUBSETS_K2, "fleiss_kappa")
+        units[(1, 2)] = NotComputed("raters 1, 2 share 0 subjects")
         d = SubsetPermutationResult(**_subset_kwargs(
-            bootstrap_distributions_per_subset=None,
+            subset_results=units, mean_over_subsets=0.5,
         )).summary()
-        assert d["subset_distributions_stored"] is False
+        assert d["subset_results"]["(1, 2)"] == {
+            "not_computed": "raters 1, 2 share 0 subjects",
+        }
 
 
-# -- Draws agree with intervals: pairwise and subset alike ------------------ #
+# -- Draws of the mean agree with its interval: pairwise and subset alike --- #
 
 _PERMUTATION_KINDS = [
-    pytest.param(
-        (PairwisePermutationResult, _pairwise_kwargs, "pair", PAIRS),
-        id="pairwise",
-    ),
-    pytest.param(
-        (SubsetPermutationResult, _subset_kwargs, "subset", SUBSETS_K2),
-        id="subset",
-    ),
+    pytest.param((PairwisePermutationResult, _pairwise_kwargs), id="pairwise"),
+    pytest.param((SubsetPermutationResult, _subset_kwargs), id="subset"),
 ]
 
 
 @pytest.mark.parametrize("kind", _PERMUTATION_KINDS)
 class TestPermutationDrawsMatchIntervals:
-    """The mean's draws agree with the mean's interval; each stored unit's
-    draws agree with that unit's interval."""
+    """The mean's draws agree with the mean's interval. Each unit's draws
+    are checked by the unit's own result when it is built."""
 
     def test_mean_draws_without_interval_refused(self, kind):
-        cls, kwargs, _, _ = kind
+        cls, kwargs = kind
         with pytest.raises(ValueError, match="not a BootstrapCIResult"):
             cls(**kwargs(
                 bootstrap_mean_method="correlated",
@@ -2110,7 +2096,7 @@ class TestPermutationDrawsMatchIntervals:
             ))
 
     def test_mean_interval_without_draws_refused(self, kind):
-        cls, kwargs, _, _ = kind
+        cls, kwargs = kind
         with pytest.raises(ValueError, match="comes with the draws"):
             cls(**kwargs(
                 bootstrap_mean_method="correlated",
@@ -2118,7 +2104,7 @@ class TestPermutationDrawsMatchIntervals:
             ))
 
     def test_mean_draw_count_must_match(self, kind):
-        cls, kwargs, _, _ = kind
+        cls, kwargs = kind
         with pytest.raises(ValueError, match="has 2 draws but .* resampled 1000"):
             cls(**kwargs(
                 bootstrap_mean_method="correlated",
@@ -2127,7 +2113,7 @@ class TestPermutationDrawsMatchIntervals:
             ))
 
     def test_mean_failed_count_must_match(self, kind):
-        cls, kwargs, _, _ = kind
+        cls, kwargs = kind
         with pytest.raises(ValueError, match="1 unusable .* counted 0 failed"):
             cls(**kwargs(
                 bootstrap_mean_method="correlated",
@@ -2136,7 +2122,7 @@ class TestPermutationDrawsMatchIntervals:
             ))
 
     def test_every_mean_draw_failed_is_consistent(self, kind):
-        cls, kwargs, _, _ = kind
+        cls, kwargs = kind
         r = cls(**kwargs(
             bootstrap_mean_method="correlated",
             bootstrap_ci_of_mean=_undefined_ci(),
@@ -2148,7 +2134,7 @@ class TestPermutationDrawsMatchIntervals:
 
     def test_nan_mean_draw_does_not_poison_the_summary(self, kind):
         """One NaN draw of the mean used to make both numbers NaN."""
-        cls, kwargs, _, _ = kind
+        cls, kwargs = kind
         d = cls(**kwargs(
             bootstrap_mean_method="correlated",
             bootstrap_ci_of_mean=_ci(0.45, 0.55, n_resamples=4, n_failed=1),
@@ -2156,36 +2142,6 @@ class TestPermutationDrawsMatchIntervals:
         )).summary()
         assert d["bootstrap_draws_mean"] == pytest.approx(0.5)
         assert d["bootstrap_se"] == pytest.approx(0.1)
-
-    def test_unit_draw_count_must_match(self, kind):
-        cls, kwargs, unit, values = kind
-        draws = _dists_for(values)
-        draws[(0, 2)] = np.array([0.4, 0.5, 0.6])
-        with pytest.raises(
-            ValueError,
-            match=rf"{unit} \(0, 2\) has 3 draws but its interval resampled 1000",
-        ):
-            cls(**kwargs(**{f"bootstrap_distributions_per_{unit}": draws}))
-
-    def test_unit_failed_count_must_match(self, kind):
-        cls, kwargs, unit, values = kind
-        draws = _dists_for(values)
-        draws[(0, 2)] = draws[(0, 2)].copy()
-        draws[(0, 2)][0] = np.nan
-        with pytest.raises(
-            ValueError, match=rf"{unit} \(0, 2\) has 1 unusable"
-        ):
-            cls(**kwargs(**{f"bootstrap_distributions_per_{unit}": draws}))
-
-    def test_one_unit_failing_entirely_is_consistent(self, kind):
-        """A unit with nothing to resample sits beside healthy ones."""
-        cls, kwargs, unit, values = kind
-        cis = _cis_for(values)
-        cis[(1, 2)] = _undefined_ci(n_resamples=1000, n_failed=1000)
-        r = cls(**kwargs(**{f"bootstrap_cis_per_{unit}": cis}))
-        stored = getattr(r, f"bootstrap_distributions_per_{unit}")
-        assert np.isnan(stored[(1, 2)]).all()
-        assert np.isfinite(stored[(0, 1)]).all()
 
 
 # ============================================================================ #
@@ -2210,16 +2166,13 @@ class TestMultiKSubsetResultConstruction:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            subset_values=dict(SUBSETS_K2),
-            subjects_per_subset=dict(SUBJECTS_K2),
+            subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
-            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         r = MultiKSubsetResult(
             coefficient_name="fleiss_kappa",
@@ -2285,19 +2238,16 @@ class TestMultiKSubsetResultValidation:
         """Per-k results must share parent's coefficient_name."""
         bp = _bp()
         wrong_result = SubsetPermutationResult(
-            coefficient_name="scotts_pi",  # Mismatch!
+            coefficient_name="gwet_ac1",  # Mismatch!
             ci_method="percentile",
             balance_profile=bp,
-            subset_values=dict(SUBSETS_K2),
-            subjects_per_subset=dict(SUBJECTS_K2),
+            subset_results=_units(SUBSETS_K2, "gwet_ac1"),
             n_subsets=3,
             subset_k=2,
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
-            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         with pytest.raises(ValueError, match="coefficient_name="):
             MultiKSubsetResult(
@@ -2316,16 +2266,13 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp_child,  # Different object!
-            subset_values=dict(SUBSETS_K2),
-            subjects_per_subset=dict(SUBJECTS_K2),
+            subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
-            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         with pytest.raises(ValueError, match="different balance_profile"):
             MultiKSubsetResult(
@@ -2343,16 +2290,13 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            subset_values=dict(SUBSETS_K2),
-            subjects_per_subset=dict(SUBJECTS_K2),
+            subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,  # subset_k=2 but stored under key 3
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=_cis_for(SUBSETS_K2),
-            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K2),
         )
         with pytest.raises(ValueError, match="subset_k=2, expected 3"):
             MultiKSubsetResult(
@@ -2408,35 +2352,29 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            subset_values=dict(SUBSETS_K2),
-            subjects_per_subset=dict(SUBJECTS_K2),
+            subset_results={
+                (0, 1): _unit(0.6, "fleiss_kappa", ci=_ci(0.50, 0.70)),
+                (0, 2): _unit(0.4, "fleiss_kappa", ci=_ci(0.30, 0.50)),
+                (1, 2): _unit(0.5, "fleiss_kappa", ci=_ci(0.40, 0.60)),
+            },
             n_subsets=3,
             subset_k=2,
             mean_over_subsets=SUBSET_K2_MEAN,
             bootstrap_mean_method="correlated",
             bootstrap_ci_of_mean=_ci(0.45, 0.55, n_resamples=3),
             bootstrap_distribution_of_mean=boot_dist,
-            bootstrap_cis_per_subset=(cis_k2 := {
-                (0, 1): _ci(0.50, 0.70),
-                (0, 2): _ci(0.30, 0.50),
-                (1, 2): _ci(0.40, 0.60),
-            }),
-            bootstrap_distributions_per_subset=_dists_matching(cis_k2),
         )
         result_k3 = SubsetPermutationResult(
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            subset_values=dict(SUBSETS_K3),
-            subjects_per_subset=dict(SUBJECTS_K3),
+            subset_results=_units(SUBSETS_K3, "fleiss_kappa"),
             n_subsets=1,
             subset_k=3,
             mean_over_subsets=SUBSET_K3_MEAN,
             bootstrap_mean_method=None,
             bootstrap_ci_of_mean=None,
             bootstrap_distribution_of_mean=None,
-            bootstrap_cis_per_subset=_cis_for(SUBSETS_K3),
-            bootstrap_distributions_per_subset=_dists_for(SUBSETS_K3),
         )
         r = MultiKSubsetResult(
             coefficient_name="fleiss_kappa",
@@ -3815,7 +3753,9 @@ class TestPermutationPrintedForm:
         frame = r.to_frame()
         assert list(frame["raters"]) == ["0, 1", "0, 2", "1, 2"]
         assert list(frame["estimate"]) == [0.6, 0.4, 0.5]
-        assert list(frame["subjects"]) == [SUBJECTS_PER_PAIR[p] for p in PAIRS]
+        # Each pair's subjects come from its own result
+        assert list(frame["subjects"]) == [4, 4, 4]
+        assert frame["not_computed"].isna().all()
         rows = [line for line in str(r).splitlines() if line.startswith("    ")][1:]
         for line, (_, row) in zip(rows, frame.iterrows()):
             assert line.split()[:3] == [*row["raters"].split(), f"{row['estimate']:.3f}"]
@@ -3825,6 +3765,28 @@ class TestPermutationPrintedForm:
         import pandas as pd
 
         frame = SubsetPermutationResult(**_subset_kwargs()).to_frame()
+        path = tmp_path / "subsets.csv"
+        frame.to_csv(path, index=False)
+        back = pd.read_csv(path)
+        pd.testing.assert_frame_equal(back, frame, check_dtype=False)
+
+    def test_empty_cells_round_trip_through_csv(self, tmp_path):
+        """Empty cells are NaN, not None: CSV cannot tell None from empty,
+        so None came back as NaN and the saved table no longer matched."""
+        import pandas as pd
+
+        units = _units(SUBSETS_K2, "fleiss_kappa")
+        units[(0, 2)] = _unit(
+            float("nan"), "fleiss_kappa",
+            ci=_undefined_ci(method_intended="percentile"),
+        )
+        units[(1, 2)] = NotComputed("raters 1, 2 share 0 subjects")
+        frame = SubsetPermutationResult(**_subset_kwargs(
+            subset_results=units, mean_over_subsets=0.6,
+        )).to_frame()
+        assert frame["method_used"].isna().tolist() == [False, True, True]
+        assert frame["point_outside_interval"].isna().tolist() == [False, False, True]
+        assert frame["not_computed"].isna().tolist() == [True, True, False]
         path = tmp_path / "subsets.csv"
         frame.to_csv(path, index=False)
         back = pd.read_csv(path)
@@ -3862,23 +3824,64 @@ class TestPermutationPrintedForm:
         assert lines[1].startswith("  ! independent bootstrap: ignores the correlation")
 
     def test_fallback_and_failures_noted_on_the_row(self):
-        cis = _cis_for(PAIRS)
-        cis[(0, 2)] = _ci(0.3, 0.5, method_intended="bca", method_used="percentile", n_failed=12, n_resamples=1012)
-        s = str(PairwisePermutationResult(**_pairwise_kwargs(bootstrap_cis_per_pair=cis)))
+        bca = dict(
+            method_intended="bca", method_used="bca",
+            acceleration=0.0, bias_correction=0.0,
+        )
+        units = {p: _unit(v, ci=_ci(0.3, 0.6, **bca)) for p, v in PAIRS.items()}
+        units[(0, 2)] = _unit(0.4, ci=_ci(
+            0.3, 0.5, method_intended="bca", method_used="percentile",
+            n_failed=12, n_resamples=1012,
+        ))
+        s = str(PairwisePermutationResult(**_pairwise_kwargs(
+            ci_method="bca", pair_results=units,
+        )))
         row = next(line for line in s.splitlines() if line.startswith("    0, 2"))
         assert row.endswith("percentile [bca requested]; 12 failed")
 
     def test_short_intervals_said_once_under_the_list(self):
-        cis = {p: _ci(v - 0.1, v + 0.1, n_resamples=100) for p, v in PAIRS.items()}
-        s = str(PairwisePermutationResult(**_pairwise_kwargs(bootstrap_cis_per_pair=cis)))
+        units = {
+            p: _unit(v, ci=_ci(v - 0.1, v + 0.1, n_resamples=100))
+            for p, v in PAIRS.items()
+        }
+        s = str(PairwisePermutationResult(**_pairwise_kwargs(pair_results=units)))
         assert s.splitlines()[-1] == "  3 of 3 intervals rest on fewer usable draws than the 250 recommended"
 
     def test_undefined_pair_says_so(self):
-        values = {**PAIRS, (1, 2): float("nan")}
-        cis = {**_cis_for(PAIRS), (1, 2): _undefined_ci(method_intended="percentile")}
+        units = _units(PAIRS)
+        units[(1, 2)] = _unit(
+            float("nan"), ci=_undefined_ci(method_intended="percentile"),
+        )
         r = PairwisePermutationResult(**_pairwise_kwargs(
-            pairwise_values=values, bootstrap_cis_per_pair=cis, mean_over_pairs=0.5,
+            pair_results=units, mean_over_pairs=0.5,
         ))
         row = next(line for line in str(r).splitlines() if line.startswith("    1, 2"))
         assert row.split()[2:4] == ["undefined", "[undefined]"]
         assert row.endswith("no method ran [percentile requested]; all 200 failed")
+
+    def test_point_outside_interval_on_the_row_and_in_the_frame(self):
+        """A pair's own flag, said where the pair is listed: no warning
+        is raised, so the table is where it shows."""
+        units = _units(PAIRS)
+        units[(0, 2)] = _unit(0.4, ci=_ci(0.45, 0.60))
+        r = PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+        row = next(line for line in str(r).splitlines() if line.startswith("    0, 2"))
+        assert row.endswith("POINT OUTSIDE INTERVAL")
+        other = next(line for line in str(r).splitlines() if line.startswith("    0, 1"))
+        assert "POINT OUTSIDE INTERVAL" not in other
+        assert list(r.to_frame()["point_outside_interval"]) == [False, True, False]
+
+    def test_not_computed_pair_says_why(self):
+        """Not computed is not undefined: there was no result to compute."""
+        units = _units(PAIRS)
+        units[(1, 2)] = NotComputed("raters 1, 2 share 0 subjects")
+        r = PairwisePermutationResult(**_pairwise_kwargs(
+            pair_results=units, mean_over_pairs=0.5,
+        ))
+        row = next(line for line in str(r).splitlines() if line.startswith("    1, 2"))
+        assert row.split()[2:4] == ["not", "computed"]
+        assert row.endswith("raters 1, 2 share 0 subjects")
+        frame = r.to_frame()
+        last = frame.iloc[2]
+        assert np.isnan(last["estimate"]) and np.isnan(last["ci_lower"])
+        assert last["not_computed"] == "raters 1, 2 share 0 subjects"

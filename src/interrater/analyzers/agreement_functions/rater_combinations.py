@@ -46,7 +46,7 @@ from typing import Callable
 import numpy as np
 
 from ...array_utils import n_per_subject
-from ...contracts import EMPTY, GUARD_MAX_SUBSETS, MIN_RATERS
+from ...contracts import EMPTY, GUARD_MAX_SUBSETS, MIN_RATERS, MIN_SUBJECTS
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
 
 _ERROR_PREFIX = "[rater_combinations] Error"
@@ -117,6 +117,74 @@ def subjects_per_subset(
     }
 
 
+# Whether a subset has a coefficient -------------------------------------  #
+
+
+def unit_problem(present: np.ndarray, names: list[str]) -> str | None:
+    """
+    Why one pair or subset has no coefficient, or None if it has one.
+
+    The one rule, used wherever a subset is measured: its values, its
+    bootstrap, the bootstrap of the mean, and its result object. Written
+    once so those cannot disagree about which subsets count.
+
+    A subset is measured on its usable subjects, those at least two of its
+    raters rated (for a pair, both). It has no coefficient when:
+
+    - fewer than MIN_SUBJECTS subjects are usable, or
+    - one of its raters rated none of them. The subset would really be a
+      smaller one, and its number would be that smaller subset's.
+
+    Parameters
+    ----------
+    present : np.ndarray
+        Boolean (n_subjects, k): which of the subset's raters rated each
+        subject.
+    names : list[str]
+        The subset's raters, for the reason.
+
+    Returns
+    -------
+    str | None
+        The reason, e.g. "raters a, b share 1 subject", or None.
+    """
+    usable = present.sum(axis=1) >= 2
+    n_usable = int(usable.sum())
+    if n_usable < MIN_SUBJECTS:
+        word = "subject" if n_usable == 1 else "subjects"
+        if len(names) == 2:
+            return f"raters {', '.join(names)} share {n_usable} {word}"
+        return (
+            f"raters {', '.join(names)}: {n_usable} {word} rated by at least "
+            f"two of them"
+        )
+    rated = present[usable].any(axis=0)
+    if not rated.all():
+        idle = names[int(np.flatnonzero(~rated)[0])]
+        return (
+            f"rater {idle} rated none of the {n_usable} subjects the others "
+            f"share"
+        )
+    return None
+
+
+def estimate_unit(unit_data: EstimatorInput, estimator: Estimator) -> float:
+    """
+    ``estimator`` on one pair's or subset's data, or NaN when it has no
+    coefficient under ``unit_problem``.
+
+    ``unit_data`` holds only the subset's rater columns. Every place that
+    measures a subset -- observed, resampled, or left-one-out -- calls this,
+    so a resample that leaves a rater idle fails like any other draw rather
+    than returning a smaller subset's number.
+    """
+    present = unit_data.category_index != EMPTY
+    names = [str(i) for i in range(present.shape[1])]
+    if unit_problem(present, names) is not None:
+        return float("nan")
+    return estimator(unit_data)
+
+
 # Running an estimator ---------------------------------------------------  #
 
 
@@ -128,9 +196,10 @@ def over_subsets(
 
     Keyed by the subset, so ``(0, 2)`` holds what the estimator returned for
     raters 0 and 2 alone. A subset whose data cannot produce a coefficient --
-    too few shared subjects, every rating in one category -- comes back as NaN
-    rather than being omitted, because a missing key is easy to overlook and a
-    subset that could not be computed is a fact about the design.
+    fewer than two usable subjects or an idle rater (``unit_problem``), or
+    every rating in one category -- comes back as NaN rather than being
+    omitted, because a missing key is easy to overlook and a subset that
+    could not be computed is a fact about the design.
 
     The subset is taken with ``select_raters``, which carries K and the weights
     along. K in particular must not be re-derived: a subset that happens to
@@ -139,7 +208,7 @@ def over_subsets(
     categories would move for no reason but the subsetting.
     """
     return {
-        subset: estimator(data.select_raters(np.array(subset)))
+        subset: estimate_unit(data.select_raters(np.array(subset)), estimator)
         for subset in rater_subsets(data.n_raters, size)
     }
 

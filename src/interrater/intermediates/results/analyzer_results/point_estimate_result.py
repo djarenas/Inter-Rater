@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -20,7 +19,6 @@ if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
 
 _ERROR_PREFIX = "[PointEstimateResult] Error"
-_WARNING_PREFIX = "[PointEstimateResult] Warning"
 _TOL = 1e-9
 
 @dataclass(frozen=True)
@@ -138,19 +136,10 @@ class PointEstimateResult(AnalysisResult):
             # The point estimate falling outside the interval is permitted --
             # strong bias correction does that legitimately -- but it is also
             # what a degenerate bootstrap looks like, so it is never silent.
-            # The interval describes itself here rather than being inspected,
-            # so this message stays right whatever kind of interval it is.
-            if self.point_outside_interval:
-                warnings.warn(
-                    f"{_WARNING_PREFIX}: the point estimate {self.point:.4f} "
-                    f"falls outside its own interval "
-                    f"{self.confidence_interval}. This is legitimate when "
-                    f"bias correction is strong, and it is also what a "
-                    f"degenerate bootstrap looks like. Check which before "
-                    f"interpreting the interval.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            # I say so myself rather than warning: point_outside_interval,
+            # summary()["point_outside_interval"], and POINT OUTSIDE INTERVAL
+            # in my printed form (and in a permutation table's row). A
+            # warning per result would flood a run with many pairs.
 
         # If bootstrap_distribution is provided, validate it
         if self.bootstrap_distribution is not None and not isinstance(

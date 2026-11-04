@@ -153,20 +153,21 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             )
 
         n_pairs = len(pairwise_values)
+        pair_results = self._unit_results(
+            pairwise_values, subjects_per_pair, pairwise_cis,
+            pairwise_distributions,
+        )
 
         return PairwisePermutationResult(
             coefficient_name=self.config.coefficient_to_compute,
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
-            pairwise_values=pairwise_values,
-            subjects_per_pair=subjects_per_pair,
+            pair_results=pair_results,
             n_pairs=n_pairs,
             mean_over_pairs=mean_over_pairs,
             bootstrap_mean_method=mean_method,
             bootstrap_ci_of_mean=mean_ci,
             bootstrap_distribution_of_mean=mean_distribution,
-            bootstrap_cis_per_pair=pairwise_cis,
-            bootstrap_distributions_per_pair=pairwise_distributions,
         )
 
     # Private helpers ---------------------------------------------------- #
@@ -249,6 +250,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         ci_method = coc.ci_method
         keep_draws = self.config.keep_draws
 
+        # Every draw and jackknife value obeys the one rule for whether a
+        # pair has a coefficient (unit_problem)
+        from ..agreement_functions.rater_combinations import estimate_unit
+
         # Spawn one child seed per pair for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
         pairs = sorted(pairwise_values.keys())
@@ -293,8 +298,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 resampled = rng.choice(
                     shared, size=shared.size, replace=True
                 )
-                draws[b] = self.estimator(
-                    pair_data.take_subjects(resampled)
+                draws[b] = estimate_unit(
+                    pair_data.take_subjects(resampled), self.estimator
                 )
 
             if independent is not None:
@@ -309,7 +314,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             # would contribute a deviation representing no influence at all.
             def _jackknife(pd=pair_data, sh=shared) -> np.ndarray:
                 return np.array([
-                    self.estimator(pd.take_subjects(np.delete(sh, i)))
+                    estimate_unit(
+                        pd.take_subjects(np.delete(sh, i)),
+                        self.estimator,
+                    )
                     for i in range(sh.size)
                 ], dtype=np.float64)
 

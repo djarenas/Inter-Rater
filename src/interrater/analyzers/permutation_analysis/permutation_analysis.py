@@ -107,6 +107,29 @@ _ESTIMATOR_MAP: dict[str, Estimator] = {
 }
 
 
+def _analyzer_class(coefficient: str) -> type:
+    """The analyzer that makes a coefficient's result, for each pair or subset."""
+    from .. import (
+        BrennanPredigerAnalyzer,
+        CohenKappaAnalyzer,
+        CongerKappaAnalyzer,
+        FleissKappaAnalyzer,
+        GwetAC1Analyzer,
+        KrippendorffAlphaAnalyzer,
+        ScottsAnalyzer,
+    )
+
+    return {
+        "cohen_kappa": CohenKappaAnalyzer,
+        "scotts_pi": ScottsAnalyzer,
+        "conger_kappa": CongerKappaAnalyzer,
+        "gwet_ac1": GwetAC1Analyzer,
+        "fleiss_kappa": FleissKappaAnalyzer,
+        "brennan_prediger": BrennanPredigerAnalyzer,
+        "krippendorff_alpha": KrippendorffAlphaAnalyzer,
+    }[coefficient]
+
+
 class IndependentMeanDraws:
     """
     I am the independent mean's draws, built while the units are bootstrapped.
@@ -393,6 +416,132 @@ class PermutationAnalysis:
             f"number of {unit_word}, or raise max_evaluations in the config "
             f"to run it on purpose."
         )
+
+    def _unit_result(
+        self,
+        unit: tuple[int, ...],
+        point: float,
+        ci: BootstrapCIResult,
+        draws: np.ndarray | None,
+    ):
+        """
+        One pair's or subset's result, built by the coefficient's own analyzer.
+
+        The unit's data is its usable subjects: those at least two of its
+        raters rated (for a pair, both). The analyzer is built on that data
+        with injection off -- the panel's injection already happened -- and
+        given the point, interval and draws this analysis computed, through
+        the same ``_result`` its ``estimate()`` uses. So a pair is exactly
+        the result the analyzer would give on those subjects, built and
+        checked the same way.
+
+        Returns NotComputed, with the reason, when the unit cannot be a
+        result: fewer than 2 usable subjects, or a subset rater who rated
+        none of them (the subset would really be a smaller one).
+
+        Parameters
+        ----------
+        unit : tuple[int, ...]
+            Rater positions, sorted.
+        point, ci : float, BootstrapCIResult
+            What this analysis computed for the unit.
+        draws : np.ndarray | None
+            The unit's draws, or None when keep_draws is false.
+
+        Raises
+        ------
+        ValueError
+            If the analyzer's point on the unit's data differs from the
+            analysis's point: the two computed different things, which is a
+            bug.
+        """
+        import dataclasses
+
+        from ...contracts import EMPTY
+        from ...intermediates.not_computed import NotComputed
+        from ...semantics.ratings_semantics import RatingsSemantics
+        from ..agreement_functions.rater_combinations import unit_problem
+
+        semantics = self.ratings.semantics
+        names = [str(semantics.raters[i]) for i in unit]
+        columns = self.ratings.category_index[:, list(unit)]
+        present = columns != EMPTY
+        rows = np.flatnonzero(present.sum(axis=1) >= 2)
+
+        # The same rule that made this unit's value NaN
+        reason = unit_problem(present, names)
+        if reason is not None:
+            if not np.isnan(point):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: raters {', '.join(names)}: {reason}, "
+                    f"yet this analysis computed {point!r} for them; this is "
+                    f"a bug."
+                )
+            return NotComputed(reason)
+
+        unit_ratings = Ratings(
+            columns[rows],
+            RatingsSemantics(
+                raters=names,
+                categories=semantics.categories,
+                unique_subjects=semantics.unique_subjects,
+            ),
+            self.ratings.subject_ids[rows],
+        )
+        config = dataclasses.replace(
+            self.config.config_of_coefficient, injection=None
+        )
+        analyzer = _analyzer_class(self.config.coefficient_to_compute)(
+            unit_ratings, config
+        )
+
+        # The analyzer and this analysis must agree on the unit's coefficient
+        theirs = analyzer._estimate_from_array(unit_ratings.category_index)
+        if not (
+            (np.isnan(theirs) and np.isnan(point))
+            or np.isclose(theirs, point, rtol=1e-12, atol=1e-12)
+        ):
+            raise ValueError(
+                f"{_ERROR_PREFIX}: raters {', '.join(names)}: the analyzer "
+                f"computes {theirs!r} on their subjects, but this analysis "
+                f"computed {point!r}. They should be the same number; this "
+                f"is a bug."
+            )
+
+        if draws is None:
+            draws = NotComputed("draws not kept: keep_draws false")
+        return analyzer._result(point, ci, draws)
+
+    def _unit_results(
+        self, values: dict, subjects: dict, cis: dict, draws: dict | None,
+    ) -> dict:
+        """
+        Every pair's or subset's result, in unit order.
+
+        ``subjects`` is Computation A's count of each unit's usable subjects;
+        each result's balance profile must agree with it, since both apply
+        the same rule (rated by at least two of the unit's raters).
+        """
+        from ...intermediates.not_computed import NotComputed
+
+        results = {}
+        for unit in sorted(values):
+            result = self._unit_result(
+                unit, values[unit], cis[unit],
+                None if draws is None else draws[unit],
+            )
+            if (
+                not isinstance(result, NotComputed)
+                and result.balance_profile.n_subjects != subjects[unit]
+            ):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: raters {unit}: the result was built on "
+                    f"{result.balance_profile.n_subjects} subjects, but "
+                    f"{subjects[unit]} are rated by at least two of them; "
+                    f"this is a bug."
+                )
+            results[unit] = result
+        return results
 
     def _resolve_weights(self) -> Weights | None:
         """

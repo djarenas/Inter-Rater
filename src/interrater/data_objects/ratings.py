@@ -7,7 +7,7 @@ from collections.abc import Sequence
 import numpy as np
 
 from .. import array_utils as _a
-from ..contracts import INDEX_DTYPE, LABEL_DTYPE
+from ..contracts import EMPTY, INDEX_DTYPE, LABEL_DTYPE
 from ..semantics.ratings_semantics import RatingsSemantics
 from . import _ratings_validation as _v
 
@@ -41,6 +41,10 @@ class Ratings:
     subset of raters. An empty says only that no rating exists there, never
     why: 'unsure' and 'abstain' are categories the rating task offered and a
     rater chose, and they count like any other answer.
+
+    I cannot be changed once built. I copy what I am given, so a later edit to
+    the caller's array does not reach me; my arrays are read-only; and my
+    attributes cannot be reassigned. To change the data, build a new me.
 
     Attributes
     ----------
@@ -98,12 +102,18 @@ class Ratings:
     ) -> None:
         name = type(self).__name__
 
-        self.category_index = np.ascontiguousarray(category_index)
-        self.semantics      = semantics
+        category_index = np.asarray(category_index)
+        self.semantics = semantics
 
-        _v.validate_dtype(self.category_index, name)
-        self.category_index = self.category_index.astype(INDEX_DTYPE, copy=False)
-        _v.validate_shape(self.category_index, name)
+        _v.validate_dtype(category_index, name)
+        _v.validate_shape(category_index, name)
+        # Values are checked before the cast to int8, which wraps: 256 would
+        # become 0, a valid category, and a uint8 255 would become -1, EMPTY.
+        _v.validate_values_in_categories(category_index, semantics, name)
+        # My own copy, so a later edit to the caller's array cannot reach me
+        self.category_index = np.array(
+            category_index, dtype=INDEX_DTYPE, order="C", copy=True
+        )
 
         self.subject_ids = self._as_subject_ids(
             subject_ids, self.category_index.shape[0]
@@ -116,12 +126,12 @@ class Ratings:
     def _as_subject_ids(
         subject_ids: Sequence[object] | None, n_rows: int
     ) -> np.ndarray:
-        """Absent ids become positional ones; given ids are taken as given."""
+        """Absent ids become positional ones; given ids are copied as given."""
         if subject_ids is None:
             return np.array(
                 [f"subject{i}" for i in range(n_rows)], dtype=LABEL_DTYPE
             )
-        return np.asarray(subject_ids, dtype=LABEL_DTYPE)
+        return np.array(subject_ids, dtype=LABEL_DTYPE, copy=True)
 
     def _validate(self) -> None:
         """
@@ -146,6 +156,25 @@ class Ratings:
         self.category_index.flags.writeable = False
         self.subject_ids = self.subject_ids.view()
         self.subject_ids.flags.writeable = False
+        # Last: from here on, no attribute of mine can be set or deleted
+        object.__setattr__(self, "_frozen", True)
+
+    def __setattr__(self, attr: str, value: object) -> None:
+        """Set during construction only; after it, build a new me."""
+        if getattr(self, "_frozen", False):
+            name = type(self).__name__
+            raise AttributeError(
+                f"[{name}] Error: {name} is read-only, so {attr} cannot be "
+                f"set. Build a new {name} to change the data."
+            )
+        object.__setattr__(self, attr, value)
+
+    def __delattr__(self, attr: str) -> None:
+        name = type(self).__name__
+        raise AttributeError(
+            f"[{name}] Error: {name} is read-only, so {attr} cannot be "
+            f"deleted. Build a new {name} to change the data."
+        )
 
     # Public API -------------------------------------------------------------  #
 
@@ -213,17 +242,9 @@ class Ratings:
         """
         from ..intermediates.estimator_parts.nij_matrix import NijMatrix
 
-        K = self.n_categories
-        N = self.n_subjects
-        nij = np.zeros((N, K), dtype=np.int64)
-
-        for i in range(N):
-            row = self.category_index[i]
-            valid = row[row != -1]
-            if len(valid) > 0:
-                nij[i] = np.bincount(valid, minlength=K)
-
-        return NijMatrix(matrix=nij)
+        return NijMatrix(
+            matrix=_a.category_counts(self.category_index, self.n_categories)
+        )
 
     # Comparison and display -------------------------------------------------  #
 
@@ -249,7 +270,7 @@ class Ratings:
     __hash__ = None  # type: ignore[assignment]
 
     def __repr__(self) -> str:
-        filled = int((self.category_index != -1).sum())
+        filled = int((self.category_index != EMPTY).sum())
         total  = self.n_subjects * self.n_raters
         return (
             f"Ratings(\n"

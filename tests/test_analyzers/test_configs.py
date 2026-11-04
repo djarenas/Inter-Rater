@@ -867,6 +867,25 @@ class TestSubsetPermutationConfig:
                 "subset_k": 3,
             })
 
+    def test_scotts_pi_refused(self):
+        """Scott's pi is two-rater only: on a subset of k >= 3 it was
+        Fleiss' kappa printed under Scott's name."""
+        with pytest.raises(ValueError, match="Scott's pi is defined for exactly two raters"):
+            SubsetPermutationConfig(
+                coefficient_to_compute="scotts_pi",
+                config_of_coefficient=ScottsConfig(),
+                subset_k=2,
+            )
+
+    def test_scotts_pi_refused_from_yaml(self):
+        """The same message from a YAML dict, before its keys are read."""
+        with pytest.raises(ValueError, match="Use coefficient_to_compute: fleiss_kappa for subsets"):
+            SubsetPermutationConfig.build_from_dict({
+                "coefficient_to_compute": "scotts_pi",
+                "config_of_coefficient": {},
+                "subset_k": 3,
+            })
+
 
 # ============================================================== #
 #  parametric_null: who warns, who raises, who stays silent      #

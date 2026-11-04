@@ -24,20 +24,23 @@ class SubsetPermutationResult(PermutationResult):
 
     I hold two kinds of statistics, and the field names make them unmistakable:
 
-    **Observed (over subsets, rater heterogeneity):**
-    Fields with no prefix. Computed once on the actual data. They answer
-    "how does agreement scale with panel size, and which subgroups agree
-    more or less?"
+    **Each subset (rater heterogeneity):**
+    subset_results holds, for every subset, the coefficient's own result --
+    a subset of Fleiss' kappa is a FleissKappaResult, with its point,
+    interval, draws, parts and profiles, printed and checked like any single
+    run -- or NotComputed saying why the subset has none. They answer "how
+    does agreement scale with panel size, and which subgroups agree more or
+    less?"
 
-    - subset_values: the coefficient for each subset
-    - subjects_per_subset: how many subjects each subset shared
+    - subset_results: each subset's result, or NotComputed
     - n_subsets: C(n_raters, k)
     - subset_k: the size of each subset
-    - mean_over_subsets: the mean across subsets (NaN-skipping)
+    - mean_over_subsets: the mean of the subsets' defined points
 
-    **Bootstrap (over draws, sampling uncertainty):**
-    Fields prefixed with ``bootstrap_``. Computed across resamples. They
-    answer "how stable are these numbers?"
+    **The mean's bootstrap (over draws, sampling uncertainty):**
+    Fields prefixed with ``bootstrap_``. Each subset's own interval and
+    draws are in its result; these are the mean's. They answer "how stable
+    is the mean?"
 
     Two bootstrap procedures are supported, recorded in
     ``bootstrap_mean_method``:
@@ -59,9 +62,6 @@ class SubsetPermutationResult(PermutationResult):
     - bootstrap_mean_method: "correlated" or "independent"
     - bootstrap_ci_of_mean: CI on the mean
     - bootstrap_distribution_of_mean: raw draws of the mean
-    - bootstrap_cis_per_subset: CI per subset (always computed and stored)
-    - bootstrap_distributions_per_subset: raw draws per subset (None when the
-      analysis ran with keep_draws false)
 
     Observed spread and bootstrap width answer different questions with
     different remedies. High spread across subsets means agreement depends
@@ -81,19 +81,21 @@ class SubsetPermutationResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
-    subset_values : dict[tuple[int, ...], float]
-        Coefficient per subset. NaN for subsets that could not be computed
-        (fewer than 2 shared subjects, all ratings in one category).
-    subjects_per_subset : dict[tuple[int, ...], int]
-        Surviving subjects per subset -- the denominator each coefficient
-        was actually computed on. A subset whose coefficient rests on 756
-        subjects and one resting on 966 are not measuring the same study.
+    subset_results : dict[tuple[int, ...], PointEstimateResult | NotComputed]
+        Each subset's result, computed on the subjects at least two of its
+        raters rated: its balance profile says how many, since a subset
+        resting on 756 subjects and one resting on 966 are not measuring
+        the same study. Its draws are NotComputed when the analysis ran with
+        keep_draws false. A subset with fewer than 2 such subjects, or with
+        a rater who rated none of them, holds NotComputed instead, saying
+        which. A subset whose coefficient is undefined (all ratings in one
+        category) has a result with a NaN point.
     n_subsets : int
         Number of subsets: C(n_raters, k).
     subset_k : int
         The size of each subset. Must be >= 2.
     mean_over_subsets : float
-        Mean across subsets, skipping NaN subsets.
+        Mean of the subsets' defined points. Checked against them.
     bootstrap_mean_method : str | None
         Which procedure produced the mean-level bootstrap:
         "correlated" (same resampled subjects across all subsets in each
@@ -109,21 +111,6 @@ class SubsetPermutationResult(PermutationResult):
     bootstrap_distribution_of_mean : np.ndarray | None
         Raw bootstrap draws of the mean (shape: n_resamples,). None if
         no bootstrap of the mean was requested.
-    bootstrap_cis_per_subset : dict[tuple[int, ...], BootstrapCIResult]
-        Bootstrap CI per subset, one interval object each. Subsets do not
-        fail alike, and here that is routine rather than exceptional: a
-        subset with fewer than two measurable subjects has nothing to
-        resample and gets an interval whose ``method_used`` is None, while
-        its siblings on the same data return ordinary intervals. Each one
-        carries its own counts and its own method, so that difference
-        survives into the result instead of arriving as an indistinguishable
-        pair of NaNs. Always present: the analyzer config requires
-        n_resamples >= 1, so the per-subset bootstrap always runs.
-    bootstrap_distributions_per_subset : dict[tuple[int, ...], np.ndarray] | None
-        Raw bootstrap draws for every subset, or None when the analysis
-        ran with keep_draws false. Use
-        get_bootstrap_distributions_per_subset() for access with a helpful
-        error when they were not kept.
     """
 
     # Attribute declaration
@@ -133,9 +120,8 @@ class SubsetPermutationResult(PermutationResult):
     ci_method: str
     balance_profile: BalanceProfile
 
-    # Observed, over subsets (rater heterogeneity)
-    subset_values: dict
-    subjects_per_subset: dict
+    # Each subset (rater heterogeneity)
+    subset_results: dict   # values are a coefficient's result, or NotComputed
     n_subsets: int
     subset_k: int
     mean_over_subsets: float
@@ -144,15 +130,13 @@ class SubsetPermutationResult(PermutationResult):
     bootstrap_mean_method: str | None
     bootstrap_ci_of_mean: BootstrapCIResult | None
     bootstrap_distribution_of_mean: np.ndarray | None
-    bootstrap_cis_per_subset: dict   # values are BootstrapCIResult
-    bootstrap_distributions_per_subset: dict | None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate subset permutation result attributes."""
 
-        # --- Observed -------------------------------------------------------- #
+        # --- Each subset ----------------------------------------------------- #
 
         # Validate subset_k first (needed by key validation below)
         if not isinstance(self.subset_k, int):
@@ -166,22 +150,7 @@ class SubsetPermutationResult(PermutationResult):
                 f"got {self.subset_k}"
             )
 
-        # Validate subset_values
-        if not isinstance(self.subset_values, dict):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: subset_values must be dict, "
-                f"got {type(self.subset_values).__name__}"
-            )
-
-        # All keys must be k-tuples of ints
-        for key in self.subset_values:
-            if not isinstance(key, tuple) or len(key) != self.subset_k:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: subset_values keys must be "
-                    f"{self.subset_k}-tuples, got {key!r}"
-                )
-
-        # Validate n_subsets matches
+        # Validate n_subsets
         if not isinstance(self.n_subsets, int):
             raise TypeError(
                 f"{_ERROR_PREFIX}: n_subsets must be int, "
@@ -192,26 +161,6 @@ class SubsetPermutationResult(PermutationResult):
                 f"{_ERROR_PREFIX}: n_subsets must be >= 1, "
                 f"got {self.n_subsets}"
             )
-        if len(self.subset_values) != self.n_subsets:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: subset_values has "
-                f"{len(self.subset_values)} entries but "
-                f"n_subsets is {self.n_subsets}"
-            )
-
-        # Validate subjects_per_subset has same keys
-        if not isinstance(self.subjects_per_subset, dict):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: subjects_per_subset must be dict, "
-                f"got {type(self.subjects_per_subset).__name__}"
-            )
-        if set(self.subjects_per_subset.keys()) != set(
-            self.subset_values.keys()
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: subjects_per_subset must have the same "
-                f"keys as subset_values"
-            )
 
         # Validate mean_over_subsets
         if not isinstance(self.mean_over_subsets, (int, float)):
@@ -219,6 +168,16 @@ class SubsetPermutationResult(PermutationResult):
                 f"{_ERROR_PREFIX}: mean_over_subsets must be float, "
                 f"got {type(self.mean_over_subsets).__name__}"
             )
+
+        # Each subset is its coefficient's result or NotComputed, and the
+        # mean is the mean of their defined points
+        try:
+            self._check_unit_results(
+                self.subset_results, self.subset_k, self.n_subsets,
+                self.mean_over_subsets, "subset",
+            )
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
         # --- Bootstrap ------------------------------------------------------- #
 
@@ -267,28 +226,6 @@ class SubsetPermutationResult(PermutationResult):
                     f"{type(self.bootstrap_ci_of_mean).__name__}"
                 )
 
-        # Validate bootstrap_cis_per_subset. Always present: the per-subset
-        # bootstrap cannot be turned off (n_resamples >= 1).
-        if not isinstance(self.bootstrap_cis_per_subset, dict):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: bootstrap_cis_per_subset must be "
-                f"a dict (the per-subset bootstrap always runs), got "
-                f"{type(self.bootstrap_cis_per_subset).__name__}"
-            )
-        if set(self.bootstrap_cis_per_subset.keys()) != set(
-            self.subset_values.keys()
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bootstrap_cis_per_subset must have "
-                f"the same keys as subset_values"
-            )
-        for key, ci in self.bootstrap_cis_per_subset.items():
-            if not isinstance(ci, BootstrapCIResult):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap CI for subset {key} "
-                    f"must be BootstrapCIResult, got {type(ci).__name__}"
-                )
-
         # Validate bootstrap_distribution_of_mean
         if self.bootstrap_distribution_of_mean is not None:
             if not isinstance(
@@ -311,34 +248,8 @@ class SubsetPermutationResult(PermutationResult):
                     f"must have at least 1 value"
                 )
 
-        # Validate bootstrap_distributions_per_subset
-        if self.bootstrap_distributions_per_subset is not None:
-            if not isinstance(
-                self.bootstrap_distributions_per_subset, dict
-            ):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_distributions_per_subset "
-                    f"must be dict, got "
-                    f"{type(self.bootstrap_distributions_per_subset).__name__}"
-                )
-            if set(
-                self.bootstrap_distributions_per_subset.keys()
-            ) != set(self.subset_values.keys()):
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_distributions_per_subset "
-                    f"must have the same keys as subset_values"
-                )
-            for key, dist in (
-                self.bootstrap_distributions_per_subset.items()
-            ):
-                if not isinstance(dist, np.ndarray) or dist.ndim != 1:
-                    raise ValueError(
-                        f"{_ERROR_PREFIX}: bootstrap distribution for "
-                        f"subset {key} must be a 1-D np.ndarray"
-                    )
-
-        # The mean's draws and interval describe one bootstrap, and so do
-        # each subset's, when its draws are stored.
+        # The mean's draws and interval describe one bootstrap. Each subset's
+        # result checked its own when it was built.
         try:
             check_draws_match_interval(
                 self.bootstrap_distribution_of_mean,
@@ -346,14 +257,6 @@ class SubsetPermutationResult(PermutationResult):
                 draws_name="bootstrap_distribution_of_mean",
                 interval_name="bootstrap_ci_of_mean",
             )
-            if self.bootstrap_distributions_per_subset is not None:
-                for key, draws in self.bootstrap_distributions_per_subset.items():
-                    check_draws_match_interval(
-                        draws,
-                        self.bootstrap_cis_per_subset[key],
-                        draws_name=f"subset {key}",
-                        interval_name="its interval",
-                    )
         except ValueError as exc:
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
@@ -391,38 +294,8 @@ class SubsetPermutationResult(PermutationResult):
             pool="the subjects at least two of its raters rated",
         )
 
-    def _units(self) -> list[tuple]:
-        return [
-            (subset, value, self.bootstrap_cis_per_subset[subset], self.subjects_per_subset[subset])
-            for subset, value in self.subset_values.items()
-        ]
-
-    def get_bootstrap_distributions_per_subset(self) -> dict:
-        """
-        Return per-subset bootstrap distributions, or raise if not kept.
-
-        The per-subset bootstrap always runs; its raw draws are kept unless
-        the analysis ran with keep_draws false. This method says so rather
-        than returning None.
-
-        Returns
-        -------
-        dict[tuple[int, ...], np.ndarray]
-            Raw bootstrap draws per subset.
-
-        Raises
-        ------
-        RuntimeError
-            If the analysis ran with keep_draws false.
-        """
-        if self.bootstrap_distributions_per_subset is not None:
-            return self.bootstrap_distributions_per_subset
-        raise RuntimeError(
-            f"{_ERROR_PREFIX}: per-subset bootstrap distributions were not "
-            f"kept: the analysis ran with keep_draws false. Rerun with "
-            f"keep_draws: true to keep them. Per-subset CIs are in "
-            f"bootstrap_cis_per_subset."
-        )
+    def _unit_results(self) -> dict:
+        return self.subset_results
 
     def summary(self) -> dict:
         """
@@ -431,10 +304,10 @@ class SubsetPermutationResult(PermutationResult):
         Returns
         -------
         dict
-            Parent keys (coefficient_name, ci_method, balance); the
-            observed statistics (subset_values, subjects_per_subset,
-            n_subsets, subset_k, mean_over_subsets); bootstrap_cis_per_subset;
-            and, when the mean was bootstrapped, bootstrap_mean_method,
+            Parent keys (coefficient_name, ci_method, balance); subset_k,
+            n_subsets, mean_over_subsets; subset_results (each subset's own
+            summary, or ``{"not_computed": reason}``); and, when the mean
+            was bootstrapped, bootstrap_mean_method,
             mean_ci (with its draw counts), mean_ci_lower, mean_ci_upper,
             bootstrap_draws_mean and bootstrap_se (the mean and standard
             error of the usable draws of the mean, None when too few are
@@ -447,11 +320,8 @@ class SubsetPermutationResult(PermutationResult):
         result["subset_k"] = self.subset_k
         result["n_subsets"] = self.n_subsets
         result["mean_over_subsets"] = self.mean_over_subsets
-        result["subset_values"] = {
-            str(k): v for k, v in self.subset_values.items()
-        }
-        result["subjects_per_subset"] = {
-            str(k): v for k, v in self.subjects_per_subset.items()
+        result["subset_results"] = {
+            str(k): v.summary() for k, v in self.subset_results.items()
         }
 
         # Bootstrap
@@ -463,20 +333,9 @@ class SubsetPermutationResult(PermutationResult):
             result["mean_ci_lower"] = self.bootstrap_ci_of_mean.lower
             result["mean_ci_upper"] = self.bootstrap_ci_of_mean.upper
 
-        result["bootstrap_cis_per_subset"] = {
-            str(k): v.summary()
-            for k, v in self.bootstrap_cis_per_subset.items()
-        }
-
         if self.bootstrap_distribution_of_mean is not None:
             mean, se = draw_moments(self.bootstrap_distribution_of_mean)
             result["bootstrap_draws_mean"] = mean
             result["bootstrap_se"] = se
-
-        # Per-subset distributions are NOT included in summary (too large).
-        # Access them directly via the field.
-        result["subset_distributions_stored"] = (
-            self.bootstrap_distributions_per_subset is not None
-        )
 
         return result

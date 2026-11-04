@@ -32,8 +32,8 @@ class MultiKSubsetResult(PermutationResult):
     path.
 
     Each per-k result is a complete SubsetPermutationResult with its own
-    subset_values, mean_over_subsets, and (optionally) its own bootstrap
-    CIs and distributions. "Average agreement among pairs" and "average
+    subset_results, mean_over_subsets, and (optionally) its own bootstrap
+    of the mean. "Average agreement among pairs" and "average
     agreement among triples" are different quantities, so each k gets
     its own mean bootstrap.
 
