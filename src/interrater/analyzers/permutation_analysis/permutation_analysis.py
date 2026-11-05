@@ -17,6 +17,7 @@ import numpy as np
 
 from ...data_objects.ratings import Ratings
 from ...intermediates.data_profiles.balance_profile import BalanceProfile
+from ...intermediates.data_profiles.rater_profile import RaterProfile
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
 from ...intermediates.results.ci_results import BootstrapCIResult
 
@@ -218,6 +219,9 @@ class PermutationAnalysis:
         mean bootstrap config.
     balance_profile : BalanceProfile
         Structural metadata about the dataset.
+    rater_profile : RaterProfile
+        The panel's raters, injected ones included: names, how much each
+        rated, and how much each pair overlapped. Shared by every result.
     estimator_input : EstimatorInput
         Built from ratings, carrying category_index, n_categories, and
         resolved weights.
@@ -299,8 +303,9 @@ class PermutationAnalysis:
             except ValueError as exc:
                 raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # Build BalanceProfile
+        # Build BalanceProfile and RaterProfile
         self.balance_profile = BalanceProfile.from_ratings(self.ratings)
+        self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
 
         # The panel must be balanced only if the config says so
         if config.balanced_data_only and not self.balance_profile.is_balanced:
@@ -511,10 +516,6 @@ class PermutationAnalysis:
         if draws is None:
             draws = NotComputed("draws not kept: keep_draws false")
         return analyzer._result(point, ci, draws)
-
-    def _rater_names(self) -> tuple[str, ...]:
-        """The panel's raters in position order, injected raters included."""
-        return tuple(str(name) for name in self.ratings.semantics.raters)
 
     def _unit_results(
         self, values: dict, subjects: dict, cis: dict, draws: dict | None,

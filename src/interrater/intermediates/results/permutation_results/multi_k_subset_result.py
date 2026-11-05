@@ -16,6 +16,7 @@ from .subset_permutation_result import SubsetPermutationResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
 
 _ERROR_PREFIX = "[MultiKSubsetResult] Error"
 
@@ -49,8 +50,8 @@ class MultiKSubsetResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
-    rater_names : tuple[str, ...]
-        Inherited. The panel's raters in position order; keys index into it.
+    rater_profile : RaterProfile
+        Inherited. The panel's raters, shared by every k.
     per_k_results : dict[int, SubsetPermutationResult]
         One result per subset size. Keys are k values (each >= 2),
         values are complete SubsetPermutationResult objects.
@@ -65,7 +66,7 @@ class MultiKSubsetResult(PermutationResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
-    rater_names: tuple[str, ...]
+    rater_profile: RaterProfile
 
     # Multi-k container
     per_k_results: dict  # dict[int, SubsetPermutationResult]
@@ -150,10 +151,10 @@ class MultiKSubsetResult(PermutationResult):
                     f"{_ERROR_PREFIX}: per_k_results[{k}] has a "
                     f"different balance_profile than the parent"
                 )
-            if result.rater_names != self.rater_names:
+            if result.rater_profile is not self.rater_profile:
                 raise ValueError(
-                    f"{_ERROR_PREFIX}: per_k_results[{k}] has rater_names "
-                    f"{result.rater_names}, expected {self.rater_names}"
+                    f"{_ERROR_PREFIX}: per_k_results[{k}] has a "
+                    f"different rater_profile than the parent"
                 )
             if result.subset_k != k:
                 raise ValueError(
@@ -222,7 +223,7 @@ class MultiKSubsetResult(PermutationResult):
         """
         name = result_class_for(self.coefficient_name).NAME
         bp = self.balance_profile
-        lines = [f"Subsets, {name}: {bp.n_subjects:,} subjects, {raters_phrase(bp)}"]
+        lines = [f"Subsets, {name}: {bp.n_subjects:,} subjects, {raters_phrase(self.rater_profile)}"]
 
         first_ci, method = None, None
         rows = []

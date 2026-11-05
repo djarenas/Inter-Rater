@@ -68,6 +68,8 @@ from interrater.intermediates.results.ci_results import (
 from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.data_profiles.agreement_profile import AgreementProfile
+from interrater.intermediates.data_profiles.rater_profile import RaterProfile
+from interrater.intermediates.data_profiles.rater_shared_matrix import RaterSharedMatrix
 from interrater.intermediates.not_computed import NotComputed
 from interrater.intermediates.results import AgreementParts
 from interrater.data_objects.ratings import Ratings
@@ -82,14 +84,35 @@ from .conftest import BALANCED_NIJ, UNBALANCED_NIJ
 
 _PROFILE = AgreementProfile.from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
 
-# The three fields every point estimate carries that most tests here are not
-# about. The parts and kappa_max say they were left out; the profile is a
-# small real one. Tests about these fields build their own.
+# The fields every point estimate carries that most tests here are not
+# about. The parts, kappa_max and rater profile say they were left out; the
+# agreement profile is a small real one. Tests about these fields build
+# their own.
 _NOT_UNDER_TEST = dict(
     parts=NotComputed("not under test"),
     kappa_max=NotComputed("not under test"),
     agreement_profile=_PROFILE,
+    rater_profile=NotComputed("not under test"),
 )
+
+
+def _raters(
+    n_raters: int = 3, n_per_rater=None, n_subjects: int = 4, names=None,
+) -> RaterProfile:
+    """
+    The raters of a small panel: rater0, rater1, ... (or ``names``), on
+    n_subjects subjects.
+
+    Each rated every subject unless ``n_per_rater`` says otherwise. A pair's
+    overlap is the smaller of its two counts, which is always possible.
+    """
+    per = np.array([n_subjects] * n_raters if n_per_rater is None else n_per_rater)
+    return RaterProfile(
+        rater_names=tuple(names) if names else tuple(f"rater{i}" for i in range(n_raters)),
+        n_subjects=n_subjects,
+        n_per_rater=per,
+        rater_overlap=RaterSharedMatrix(np.minimum.outer(per, per)),
+    )
 
 
 def _fields(point: float, pe: float, weighted: bool = False) -> dict:
@@ -106,6 +129,7 @@ def _fields(point: float, pe: float, weighted: bool = False) -> dict:
         ),
         kappa_max=NotComputed("no limit below 1"),
         agreement_profile=_PROFILE,
+        rater_profile=NotComputed("built from counts: no rater identity"),
     )
 
 
@@ -141,8 +165,8 @@ _PAIR = _rater_profile([[0, 0], [1, 1], [2, 1], [1, 2]])
 _PANEL = _rater_profile([[0, 0, 1], [1, 1, 1], [2, 1, 2], [0, 0, 0]])
 
 # As _NOT_UNDER_TEST, for the individual-marginal results, which need each
-# rater's marginals: three raters, as _bp_with_n_raters(3) says
-_PANEL_NOT_UNDER_TEST = dict(_NOT_UNDER_TEST, agreement_profile=_PANEL)
+# rater's marginals and the raters themselves: three raters
+_PANEL_NOT_UNDER_TEST = dict(_NOT_UNDER_TEST, agreement_profile=_PANEL, rater_profile=_raters(3))
 
 
 def _marginals(profile: AgreementProfile) -> np.ndarray:
@@ -153,14 +177,14 @@ def _cohen(point: float, weighted: bool = False) -> dict:
     """Cohen's kappa for _PAIR: Pe = Sum p_a p_b, and kappa_max = 1."""
     p_a, p_b = _marginals(_PAIR)
     fields = _fields(point, float((p_a * p_b).sum()), weighted)
-    return dict(fields, kappa_max=1.0, agreement_profile=_PAIR)
+    return dict(fields, kappa_max=1.0, agreement_profile=_PAIR, rater_profile=_raters(2))
 
 
 def _conger(point: float) -> dict:
     """Conger's kappa for _PANEL: Conger's Pe on its marginals, no kappa_max."""
     m = _marginals(_PANEL)
     pe = (m.mean(axis=0) ** 2).sum() - m.var(axis=0, ddof=1).sum() / 3
-    return dict(_fields(point, float(pe)), agreement_profile=_PANEL)
+    return dict(_fields(point, float(pe)), agreement_profile=_PANEL, rater_profile=_raters(3))
 
 
 def _light(point: float) -> dict:
@@ -171,6 +195,7 @@ def _light(point: float) -> dict:
         parts=NotComputed("a mean of pairs"),
         kappa_max=NotComputed("an upper bound only"),
         agreement_profile=_PANEL,
+        rater_profile=_raters(3),
         pair_parts={p: pair for p in pairs},
         pair_kappa_max={p: 1.0 for p in pairs},
     )
@@ -185,6 +210,7 @@ def _alpha(point: float, weighted: bool = False) -> dict:
         ),
         kappa_max=NotComputed("no limit below 1"),
         agreement_profile=_PROFILE,
+        rater_profile=NotComputed("built from counts: no rater identity"),
     )
 
 
@@ -250,32 +276,6 @@ def _unbalanced_bp() -> BalanceProfile:
     return BalanceProfile.from_nij_matrix(NijMatrix(UNBALANCED_NIJ.copy()))
 
 
-def _complete_bp(n_raters: int = 3) -> BalanceProfile:
-    """As _bp_with_n_raters, with every rater rating every subject (Conger's kappa)."""
-    return dataclasses.replace(_bp_with_n_raters(n_raters), fill_rate=1.0)
-
-
-def _bp_with_n_raters(n_raters: int = 3) -> BalanceProfile:
-    """Balanced profile with n_raters set (needed for Light's kappa).
-
-    BalanceProfile.from_nij_matrix sets n_raters=None because rater identity
-    is lost. Light's kappa requires rater identity, so its BalanceProfile
-    always comes from Ratings (which sets n_raters). This helper simulates
-    that by constructing a BalanceProfile directly with n_raters set.
-    """
-    base = _bp()
-    return BalanceProfile(
-        is_balanced=base.is_balanced,
-        n_raters=n_raters,
-        n_raters_exact=True,
-        n_per_subject=base.n_per_subject,
-        n_per_rater=None,
-        subject_counts=base.subject_counts,
-        fill_rate=None,
-        raters_per_subject=base.raters_per_subject,
-    )
-
-
 # -- Pairs and subsets: each one is its coefficient's own result ----------- #
 # The per-unit bootstrap always runs (n_resamples >= 2), so every unit that
 # was computed has an interval, and its draws unless keep_draws was false.
@@ -302,7 +302,7 @@ def _unit(
     shared = dict(ci_method=ci.method_intended)
     if coefficient == "cohen_kappa":
         return CohenKappaResult(
-            point, ci, draws, _bp_with_n_raters(2), weights_type="identity",
+            point, ci, draws, _bp(), weights_type="identity",
             **shared, **_cohen(point),
         )
     if coefficient == "fleiss_kappa":
@@ -331,6 +331,7 @@ def _many_units(n_raters: int, k: int) -> dict:
 # The panel's raters, in position order: pairs and subsets are keyed by
 # position, and everything printed names them
 RATER_NAMES = ("ann", "bob", "cat")
+_RATERS = _raters(names=RATER_NAMES)
 
 
 # -- Pairwise test data: 3 raters → C(3,2) = 3 pairs ----------------------- #
@@ -345,7 +346,7 @@ def _pairwise_kwargs(**overrides):
         coefficient_name="cohen_kappa",
         ci_method="percentile",
         balance_profile=_bp(),
-        rater_names=RATER_NAMES,
+        rater_profile=_RATERS,
         pair_results=_units(PAIRS),
         n_pairs=3,
         mean_over_pairs=PAIRWISE_MEAN,
@@ -382,7 +383,7 @@ def _subset_kwargs(**overrides):
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
         balance_profile=_bp(),
-        rater_names=RATER_NAMES,
+        rater_profile=_RATERS,
         subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
         n_subsets=3,
         subset_k=2,
@@ -427,7 +428,7 @@ def _multi_k_kwargs(**overrides):
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
         balance_profile=bp,
-        rater_names=RATER_NAMES,
+        rater_profile=_RATERS,
         per_k_results={
             2: SubsetPermutationResult(**_subset_kwargs(balance_profile=bp)),
             3: SubsetPermutationResult(**_subset_k3_kwargs(balance_profile=bp)),
@@ -688,13 +689,35 @@ class TestPointEstimateResultStr:
         assert "no method ran" in s
 
 
+class TestPointEstimateResultRaterProfile:
+    """The raters, or NotComputed; and the two profiles must agree."""
+
+    def test_not_computed_accepted(self):
+        r = PointEstimateResult(0.5, None, None, _bp(), **_NOT_UNDER_TEST)
+        assert isinstance(r.rater_profile, NotComputed)
+
+    def test_wrong_type_refused(self):
+        with pytest.raises(TypeError, match="rater_profile must be RaterProfile or NotComputed"):
+            PointEstimateResult(0.5, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=None))
+
+    def test_both_profiles_describe_the_same_subjects(self):
+        with pytest.raises(ValueError, match="rater_profile has 5 subjects but balance_profile has 4"):
+            PointEstimateResult(
+                0.5, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=_raters(3, n_subjects=5)),
+            )
+
+    def test_summary_names_the_raters(self):
+        r = PointEstimateResult(0.5, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=_raters(2)))
+        assert r.summary()["raters"]["rater_names"] == ["rater0", "rater1"]
+
+
 class TestPointEstimateResultSummary:
     """The plain-types dict under different field combinations."""
 
     def test_point_only(self):
         """Minimal summary: the point and the three required fields."""
         d = PointEstimateResult(0.75, None, None, None, **_NOT_UNDER_TEST).summary()
-        assert set(d) == {"point", "parts", "kappa_max", "agreement_profile"}
+        assert set(d) == {"point", "raters", "parts", "kappa_max", "agreement_profile"}
         assert d["point"] == 0.75
 
     def test_with_ci(self):
@@ -737,7 +760,7 @@ class TestPointEstimateResultSummary:
         expected_keys = {
             "point", "ci", "ci_lower", "ci_upper", "point_outside_interval",
             "bootstrap_draws_mean", "bootstrap_se",
-            "balance", "parts", "kappa_max", "agreement_profile",
+            "balance", "raters", "parts", "kappa_max", "agreement_profile",
         }
         assert set(d.keys()) == expected_keys
 
@@ -1489,53 +1512,53 @@ class TestPermutationResult:
     """Base class: coefficient_name, ci_method, balance_profile."""
 
     def test_valid_construction(self):
-        r = PermutationResult("cohen_kappa", "percentile", _bp(), RATER_NAMES)
+        r = PermutationResult("cohen_kappa", "percentile", _bp(), _RATERS)
         assert r.coefficient_name == "cohen_kappa"
         assert r.ci_method == "percentile"
 
     def test_is_analysis_result(self):
-        r = PermutationResult("cohen_kappa", "bca", _bp(), RATER_NAMES)
+        r = PermutationResult("cohen_kappa", "bca", _bp(), _RATERS)
         assert isinstance(r, AnalysisResult)
 
     def test_coefficient_name_not_str(self):
         """Non-str coefficient_name raises TypeError (not ValueError)."""
         with pytest.raises(TypeError, match="coefficient_name must be str"):
-            PermutationResult(42, "percentile", _bp(), RATER_NAMES)
+            PermutationResult(42, "percentile", _bp(), _RATERS)
 
     def test_coefficient_name_empty(self):
         with pytest.raises(ValueError, match="coefficient_name must be non-empty"):
-            PermutationResult("", "percentile", _bp(), RATER_NAMES)
+            PermutationResult("", "percentile", _bp(), _RATERS)
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
-            PermutationResult("cohen_kappa", 42, _bp(), RATER_NAMES)
+            PermutationResult("cohen_kappa", 42, _bp(), _RATERS)
 
     def test_ci_method_parametric_null(self):
         """parametric_null is not available for permutation results."""
         with pytest.raises(ValueError, match="ci_method must be"):
-            PermutationResult("cohen_kappa", "parametric_null", _bp(), RATER_NAMES)
+            PermutationResult("cohen_kappa", "parametric_null", _bp(), _RATERS)
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
-            PermutationResult("cohen_kappa", "invalid", _bp(), RATER_NAMES)
+            PermutationResult("cohen_kappa", "invalid", _bp(), _RATERS)
 
     def test_balance_profile_none(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            PermutationResult("cohen_kappa", "percentile", None, RATER_NAMES)
+            PermutationResult("cohen_kappa", "percentile", None, _RATERS)
 
     def test_balance_profile_wrong_type(self):
         with pytest.raises(TypeError, match="balance_profile must be BalanceProfile"):
-            PermutationResult("cohen_kappa", "percentile", {"n_raters": 3}, RATER_NAMES)
+            PermutationResult("cohen_kappa", "percentile", {"n_raters": 3}, _RATERS)
 
     def test_summary_keys(self):
-        d = PermutationResult("fleiss_kappa", "bca", _bp(), RATER_NAMES).summary()
+        d = PermutationResult("fleiss_kappa", "bca", _bp(), _RATERS).summary()
         assert d["coefficient_name"] == "fleiss_kappa"
         assert d["ci_method"] == "bca"
         assert isinstance(d["balance"], dict)
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[PermutationResult\] Error"):
-            PermutationResult("", "percentile", _bp(), RATER_NAMES)
+            PermutationResult("", "percentile", _bp(), _RATERS)
 
 
 # ============================================================================ #
@@ -1644,7 +1667,7 @@ class TestPairwisePermutationResultValidation:
         computed pair without an interval can only be a bug."""
         units = _units(PAIRS)
         units[(0, 2)] = CohenKappaResult(
-            0.4, None, None, _bp_with_n_raters(2), ci_method="percentile",
+            0.4, None, None, _bp(), ci_method="percentile",
             weights_type="identity", **_cohen(0.4),
         )
         with pytest.raises(
@@ -1778,7 +1801,7 @@ class TestPairwisePermutationResultValidation:
         """2.0.0 refused draws above 20 pairs; there is no limit now."""
         values = _many_units(7, 2)
         r = PairwisePermutationResult(**_pairwise_kwargs(
-            rater_names=tuple(f"r{i}" for i in range(7)),
+            rater_profile=_raters(7),
             pair_results=_units(values),
             n_pairs=len(values),
         ))
@@ -1828,7 +1851,7 @@ class TestPairwisePermutationResultSummary:
         assert d["mean_over_pairs"] == PAIRWISE_MEAN
         assert d["coefficient_name"] == "cohen_kappa"
         # Tuple keys stringified for JSON; each pair is its own summary
-        assert d["rater_names"] == ["ann", "bob", "cat"]
+        assert d["raters"]["rater_names"] == ["ann", "bob", "cat"]
         first = d["pair_results"][0]
         assert (first["raters"], first["positions"]) == (["ann", "bob"], [0, 1])
         assert first["result"]["point"] == 0.6
@@ -2076,7 +2099,7 @@ class TestSubsetPermutationResultValidation:
         """2.0.0 refused draws above 120 subsets; there is no limit now."""
         values = _many_units(17, 2)
         r = SubsetPermutationResult(**_subset_kwargs(
-            rater_names=tuple(f"r{i}" for i in range(17)),
+            rater_profile=_raters(17),
             subset_results=_units(values, "fleiss_kappa"),
             n_subsets=len(values),
         ))
@@ -2245,7 +2268,7 @@ class TestMultiKSubsetResultConstruction:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
@@ -2258,7 +2281,7 @@ class TestMultiKSubsetResultConstruction:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -2322,7 +2345,7 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="gwet_ac1",  # Mismatch!
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             subset_results=_units(SUBSETS_K2, "gwet_ac1"),
             n_subsets=3,
             subset_k=2,
@@ -2336,7 +2359,7 @@ class TestMultiKSubsetResultValidation:
                 coefficient_name="fleiss_kappa",
                 ci_method="percentile",
                 balance_profile=bp,
-                rater_names=RATER_NAMES,
+                rater_profile=_RATERS,
                 per_k_results={2: wrong_result},
                 ks=[2],
             )
@@ -2349,7 +2372,7 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp_child,  # Different object!
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
@@ -2363,7 +2386,7 @@ class TestMultiKSubsetResultValidation:
                 coefficient_name="fleiss_kappa",
                 ci_method="percentile",
                 balance_profile=bp_parent,
-                rater_names=RATER_NAMES,
+                rater_profile=_RATERS,
                 per_k_results={2: result_k2},
                 ks=[2],
             )
@@ -2375,7 +2398,7 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,  # subset_k=2 but stored under key 3
@@ -2389,7 +2412,7 @@ class TestMultiKSubsetResultValidation:
                 coefficient_name="fleiss_kappa",
                 ci_method="percentile",
                 balance_profile=bp,
-                rater_names=RATER_NAMES,
+                rater_profile=_RATERS,
                 per_k_results={3: result_wrong_k},
                 ks=[3],
             )
@@ -2439,7 +2462,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             subset_results={
                 (0, 1): _unit(0.6, "fleiss_kappa", ci=_ci(0.50, 0.70)),
                 (0, 2): _unit(0.4, "fleiss_kappa", ci=_ci(0.30, 0.50)),
@@ -2456,7 +2479,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             subset_results=_units(SUBSETS_K3, "fleiss_kappa"),
             n_subsets=1,
             subset_k=3,
@@ -2469,7 +2492,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             per_k_results={2: result_k2, 3: result_k3},
             ks=[2, 3],
         )
@@ -2493,7 +2516,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -2514,7 +2537,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
-            rater_names=RATER_NAMES,
+            rater_profile=_RATERS,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -3224,23 +3247,26 @@ class TestIndividualMarginalResult:
     """Base for Cohen and Conger: balance_profile and n_raters must not be None."""
 
     def test_valid_construction(self):
-        bp = _bp_with_n_raters(3)
+        bp = _bp()
         r = IndividualMarginalResult(0.6, None, None, bp, **_PANEL_NOT_UNDER_TEST)
         assert r.point == 0.6
         assert r.balance_profile is bp
 
     def test_is_point_estimate_result(self):
-        r = IndividualMarginalResult(0.6, None, None, _bp_with_n_raters(3), **_PANEL_NOT_UNDER_TEST)
+        r = IndividualMarginalResult(0.6, None, None, _bp(), **_PANEL_NOT_UNDER_TEST)
         assert isinstance(r, PointEstimateResult)
 
     def test_balance_profile_none_rejected(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             IndividualMarginalResult(0.6, None, None, None, **_PANEL_NOT_UNDER_TEST)
 
-    def test_n_raters_none_rejected(self):
-        """BalanceProfile from NijMatrix has n_raters=None -- rejected."""
-        with pytest.raises(ValueError, match="n_raters must not be None"):
-            IndividualMarginalResult(0.6, None, None, _bp(), **_PANEL_NOT_UNDER_TEST)
+    def test_counts_without_raters_rejected(self):
+        """Built from counts there is no RaterProfile -- rejected."""
+        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
+            IndividualMarginalResult(
+                0.6, None, None, _bp(),
+                **dict(_PANEL_NOT_UNDER_TEST, rater_profile=NotComputed("built from counts: no rater identity")),
+            )
 
     def test_error_prefix(self):
         with pytest.raises(
@@ -3253,7 +3279,7 @@ class TestIndividualMarginalResult:
         with pytest.raises(
             TypeError, match=r"\[IndividualMarginalResult\] Error"
         ):
-            IndividualMarginalResult("bad", None, None, _bp_with_n_raters(3), **_PANEL_NOT_UNDER_TEST)
+            IndividualMarginalResult("bad", None, None, _bp(), **_PANEL_NOT_UNDER_TEST)
 
 
 class TestIndividualMarginalResultProfile:
@@ -3261,12 +3287,14 @@ class TestIndividualMarginalResultProfile:
 
     def test_profile_from_counts_refused(self):
         with pytest.raises(TypeError, match="rater_marginals must be computed"):
-            IndividualMarginalResult(0.6, None, None, _bp_with_n_raters(3), **_NOT_UNDER_TEST)
+            IndividualMarginalResult(
+                0.6, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=_raters(3)),
+            )
 
     def test_rater_count_must_match(self):
-        fields = dict(_NOT_UNDER_TEST, agreement_profile=_PAIR)
-        with pytest.raises(ValueError, match="marginals for 2 raters but balance_profile has 3"):
-            IndividualMarginalResult(0.6, None, None, _bp_with_n_raters(3), **fields)
+        fields = dict(_NOT_UNDER_TEST, agreement_profile=_PAIR, rater_profile=_raters(3))
+        with pytest.raises(ValueError, match="marginals for 2 raters but rater_profile has 3"):
+            IndividualMarginalResult(0.6, None, None, _bp(), **fields)
 
 
 # ============================================================================ #
@@ -3278,7 +3306,7 @@ class TestCohenKappaResult:
     """Cohen's kappa: inherits IndividualMarginalResult, has weights_type."""
 
     def test_valid_construction(self):
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         r = CohenKappaResult(
             0.7, None, None, bp,
             ci_method="percentile", weights_type="identity",
@@ -3289,7 +3317,7 @@ class TestCohenKappaResult:
 
     def test_is_individual_marginal_result(self):
         """Cohen inherits from IndividualMarginalResult (not PointEstimateResult directly)."""
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         r = CohenKappaResult(
             0.7, None, None, bp,
             ci_method="bca", weights_type="identity",
@@ -3307,17 +3335,17 @@ class TestCohenKappaResult:
                 **_cohen(0.7),
             )
 
-    def test_n_raters_none_rejected(self):
-        """Inherited from IndividualMarginalResult: n_raters=None rejected."""
-        with pytest.raises(ValueError, match="n_raters must not be None"):
+    def test_counts_without_raters_rejected(self):
+        """Inherited from IndividualMarginalResult: no RaterProfile, rejected."""
+        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
             CohenKappaResult(
                 0.7, None, None, _bp(),
                 ci_method="bca", weights_type="identity",
-                **_cohen(0.7),
+                **dict(_cohen(0.7), rater_profile=NotComputed("built from counts: no rater identity")),
             )
 
     def test_parametric_null_allowed(self):
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         r = CohenKappaResult(
             0.7, None, None, bp,
             ci_method="parametric_null", weights_type="identity",
@@ -3328,7 +3356,7 @@ class TestCohenKappaResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             CohenKappaResult(
-                0.7, None, None, _bp_with_n_raters(2),
+                0.7, None, None, _bp(),
                 ci_method=42, weights_type="identity",
                 **_cohen(0.7),
             )
@@ -3336,14 +3364,14 @@ class TestCohenKappaResult:
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             CohenKappaResult(
-                0.7, None, None, _bp_with_n_raters(2),
+                0.7, None, None, _bp(),
                 ci_method="invalid", weights_type="identity",
                 **_cohen(0.7),
             )
 
     @pytest.mark.parametrize("wt", ["identity", "linear", "quadratic", "custom"])
     def test_valid_weights_types(self, wt):
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         r = CohenKappaResult(
             0.7, None, None, bp, ci_method="bca", weights_type=wt,
             **_cohen(0.7, weighted=wt != "identity"),
@@ -3353,7 +3381,7 @@ class TestCohenKappaResult:
     def test_weights_type_not_str(self):
         with pytest.raises(TypeError, match="weights_type must be str"):
             CohenKappaResult(
-                0.7, None, None, _bp_with_n_raters(2),
+                0.7, None, None, _bp(),
                 ci_method="bca", weights_type=42,
                 **_cohen(0.7),
             )
@@ -3361,13 +3389,13 @@ class TestCohenKappaResult:
     def test_weights_type_invalid(self):
         with pytest.raises(ValueError, match="weights_type must be"):
             CohenKappaResult(
-                0.7, None, None, _bp_with_n_raters(2),
+                0.7, None, None, _bp(),
                 ci_method="bca", weights_type="ordinal",
                 **_cohen(0.7),
             )
 
     def test_str_unweighted(self):
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         s = str(CohenKappaResult(
             0.723, None, None, bp,
             ci_method="percentile", weights_type="identity",
@@ -3377,7 +3405,7 @@ class TestCohenKappaResult:
         assert "unweighted" in s
 
     def test_str_weighted(self):
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         s = str(CohenKappaResult(
             0.723, None, None, bp,
             ci_method="bca", weights_type="quadratic",
@@ -3386,7 +3414,7 @@ class TestCohenKappaResult:
         assert "quadratic weights" in s
 
     def test_summary_keys(self):
-        bp = _bp_with_n_raters(2)
+        bp = _bp()
         d = CohenKappaResult(
             0.7, None, None, bp,
             ci_method="bca", weights_type="linear",
@@ -3413,7 +3441,7 @@ class TestCohenKappaResultParts:
     def _result(self, point=0.7, weights_type="identity", weight_matrix=None, **fields):
         kwargs = dict(_cohen(point, weighted=weights_type != "identity"), **fields)
         return CohenKappaResult(
-            point, None, None, _bp_with_n_raters(2), ci_method="bca",
+            point, None, None, _bp(), ci_method="bca",
             weights_type=weights_type, weight_matrix=weight_matrix, **kwargs,
         )
 
@@ -3425,8 +3453,9 @@ class TestCohenKappaResultParts:
     def test_three_raters_refused(self):
         with pytest.raises(ValueError, match="one pair of raters, got 3"):
             CohenKappaResult(
-                0.7, None, None, _bp_with_n_raters(3), ci_method="bca",
-                weights_type="identity", **dict(_cohen(0.7), agreement_profile=_PANEL),
+                0.7, None, None, _bp(), ci_method="bca",
+                weights_type="identity",
+                **dict(_cohen(0.7), agreement_profile=_PANEL, rater_profile=_raters(3)),
             )
 
     def test_kappa_max_not_computed_refused(self):
@@ -3479,13 +3508,13 @@ class TestCongerKappaResult:
     """Conger's kappa: inherits IndividualMarginalResult, always unweighted."""
 
     def test_valid_construction(self):
-        bp = _complete_bp(3)
+        bp = _bp()
         r = CongerKappaResult(0.6, None, None, bp, ci_method="percentile", **_conger(0.6))
         assert r.point == 0.6
 
     def test_is_individual_marginal_result(self):
         """Conger inherits from IndividualMarginalResult."""
-        bp = _complete_bp(3)
+        bp = _bp()
         r = CongerKappaResult(0.6, None, None, bp, ci_method="bca", **_conger(0.6))
         assert isinstance(r, IndividualMarginalResult)
 
@@ -3493,38 +3522,41 @@ class TestCongerKappaResult:
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             CongerKappaResult(0.6, None, None, None, ci_method="bca", **_conger(0.6))
 
-    def test_n_raters_none_rejected(self):
-        """Inherited from IndividualMarginalResult: n_raters=None rejected."""
-        with pytest.raises(ValueError, match="n_raters must not be None"):
-            CongerKappaResult(0.6, None, None, _bp(), ci_method="bca", **_conger(0.6))
+    def test_counts_without_raters_rejected(self):
+        """Inherited from IndividualMarginalResult: no RaterProfile, rejected."""
+        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
+            CongerKappaResult(
+                0.6, None, None, _bp(), ci_method="bca",
+                **dict(_conger(0.6), rater_profile=NotComputed("built from counts: no rater identity")),
+            )
 
     def test_parametric_null_not_allowed(self):
-        bp = _complete_bp(3)
+        bp = _bp()
         with pytest.raises(ValueError, match="ci_method must be"):
             CongerKappaResult(0.6, None, None, bp, ci_method="parametric_null", **_conger(0.6))
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             CongerKappaResult(
-                0.6, None, None, _complete_bp(3), ci_method=42,
+                0.6, None, None, _bp(), ci_method=42,
                 **_conger(0.6),
             )
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             CongerKappaResult(
-                0.6, None, None, _complete_bp(3), ci_method="invalid",
+                0.6, None, None, _bp(), ci_method="invalid",
                 **_conger(0.6),
             )
 
     def test_str_shows_n_raters(self):
-        bp = _complete_bp(3)
+        bp = _bp()
         s = str(CongerKappaResult(0.612, None, None, bp, ci_method="percentile", **_conger(0.612)))
         assert "Conger's κ" in s
         assert "3 raters, every rater rated every subject" in s
 
     def test_summary_keys(self):
-        bp = _complete_bp(3)
+        bp = _bp()
         d = CongerKappaResult(0.6, None, None, bp, ci_method="bca", **_conger(0.6)).summary()
         assert d["ci_method"] == "bca"
         # No weights_type or is_exact
@@ -3539,32 +3571,35 @@ class TestCongerKappaResult:
 class TestCongerKappaResultParts:
     """Pe from the raters' marginals; kappa_max for a pair only."""
 
-    @pytest.mark.parametrize("fill_rate", [0.9, None])
-    def test_incomplete_data_refused(self, fill_rate):
-        bp = dataclasses.replace(_bp_with_n_raters(3), fill_rate=fill_rate)
+    def test_incomplete_data_refused(self):
+        """One rater missed a subject: fill rate 11/12, not 1."""
+        incomplete = _raters(3, n_per_rater=[4, 4, 3])
         with pytest.raises(ValueError, match="Conger's kappa is for complete data"):
-            CongerKappaResult(0.6, None, None, bp, ci_method="bca", **_conger(0.6))
+            CongerKappaResult(
+                0.6, None, None, _bp(), ci_method="bca",
+                **dict(_conger(0.6), rater_profile=incomplete),
+            )
 
     def test_valid_panel(self):
-        r = CongerKappaResult(0.6, None, None, _complete_bp(3), ci_method="bca", **_conger(0.6))
+        r = CongerKappaResult(0.6, None, None, _bp(), ci_method="bca", **_conger(0.6))
         assert isinstance(r.kappa_max, NotComputed)
 
     def test_panel_kappa_max_refused(self):
         with pytest.raises(TypeError, match="kappa_max must be NotComputed with 3 raters"):
             CongerKappaResult(
-                0.6, None, None, _complete_bp(3), ci_method="bca",
+                0.6, None, None, _bp(), ci_method="bca",
                 **dict(_conger(0.6), kappa_max=1.0),
             )
 
     def test_pair_gets_cohens_ceiling(self):
         """Two raters: Conger's Pe is Cohen's, and so is the ceiling."""
-        r = CongerKappaResult(0.7, None, None, _complete_bp(2), ci_method="bca", **_cohen(0.7))
+        r = CongerKappaResult(0.7, None, None, _bp(), ci_method="bca", **_cohen(0.7))
         assert r.kappa_max == 1.0
 
     def test_pair_without_kappa_max_refused(self):
         with pytest.raises(TypeError, match="kappa_max must be computed with 2 raters"):
             CongerKappaResult(
-                0.7, None, None, _complete_bp(2), ci_method="bca",
+                0.7, None, None, _bp(), ci_method="bca",
                 **dict(_cohen(0.7), kappa_max=NotComputed("no reason")),
             )
 
@@ -3574,14 +3609,14 @@ class TestCongerKappaResultParts:
         pooled = float((m.mean(axis=0) ** 2).sum())
         with pytest.raises(ValueError, match="Conger's chance term"):
             CongerKappaResult(
-                0.6, None, None, _complete_bp(3), ci_method="bca",
+                0.6, None, None, _bp(), ci_method="bca",
                 **dict(_conger(0.6), parts=_fields(0.6, pooled)["parts"]),
             )
 
     def test_weighted_parts_refused(self):
         with pytest.raises(ValueError, match="weighted Conger's kappa is not implemented"):
             CongerKappaResult(
-                0.6, None, None, _complete_bp(3), ci_method="bca",
+                0.6, None, None, _bp(), ci_method="bca",
                 **dict(_conger(0.6), parts=_fields(0.6, 0.3, weighted=True)["parts"]),
             )
 
@@ -3595,8 +3630,8 @@ class TestLightKappaResult:
     """Light's kappa: adds n_pairs, no parametric_null."""
 
     def test_valid_construction(self):
-        bp = _complete_bp(3)
-        expected_pairs = bp.n_raters * (bp.n_raters - 1) // 2
+        bp = _bp()
+        expected_pairs = 3 * (3 - 1) // 2  # three raters
         r = LightKappaResult(
             0.55, None, None, bp,
             n_pairs=expected_pairs, ci_method="percentile",
@@ -3612,17 +3647,17 @@ class TestLightKappaResult:
                 **_light(0.55),
             )
 
-    def test_n_raters_none_rejected(self):
-        """Light's kappa requires n_raters (rater identity needed)."""
-        with pytest.raises(ValueError, match="n_raters must not be None"):
+    def test_counts_without_raters_rejected(self):
+        """Light's kappa requires a RaterProfile (rater identity needed)."""
+        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
             LightKappaResult(
                 0.55, None, None, _bp(), n_pairs=3, ci_method="bca",
-                **_light(0.55),
+                **dict(_light(0.55), rater_profile=NotComputed("built from counts: no rater identity")),
             )
 
     def test_n_pairs_must_match(self):
         """n_pairs must equal C(n_raters, 2)."""
-        bp = _complete_bp(3)
+        bp = _bp()
         with pytest.raises(ValueError, match="n_pairs must be"):
             LightKappaResult(
                 0.55, None, None, bp, n_pairs=999, ci_method="bca",
@@ -3632,7 +3667,7 @@ class TestLightKappaResult:
     def test_n_pairs_not_int(self):
         with pytest.raises(TypeError, match="n_pairs must be int"):
             LightKappaResult(
-                0.55, None, None, _complete_bp(3),
+                0.55, None, None, _bp(),
                 n_pairs=3.0, ci_method="bca",
                 **_light(0.55),
             )
@@ -3640,14 +3675,14 @@ class TestLightKappaResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             LightKappaResult(
-                0.55, None, None, _complete_bp(3),
+                0.55, None, None, _bp(),
                 n_pairs=3, ci_method=42,
                 **_light(0.55),
             )
 
     def test_parametric_null_not_allowed(self):
-        bp = _complete_bp(3)
-        n = bp.n_raters * (bp.n_raters - 1) // 2
+        bp = _bp()
+        n = 3 * (3 - 1) // 2  # three raters
         with pytest.raises(ValueError, match="ci_method must be"):
             LightKappaResult(
                 0.55, None, None, bp,
@@ -3656,8 +3691,8 @@ class TestLightKappaResult:
             )
 
     def test_str_shows_n_pairs(self):
-        bp = _complete_bp(3)
-        n = bp.n_raters * (bp.n_raters - 1) // 2
+        bp = _bp()
+        n = 3 * (3 - 1) // 2  # three raters
         s = str(LightKappaResult(
             0.587, None, None, bp, n_pairs=n, ci_method="percentile",
             **_light(0.587),
@@ -3667,8 +3702,8 @@ class TestLightKappaResult:
         assert "3 raters, every rater rated every subject" in s
 
     def test_summary_keys(self):
-        bp = _complete_bp(3)
-        n = bp.n_raters * (bp.n_raters - 1) // 2
+        bp = _bp()
+        n = 3 * (3 - 1) // 2  # three raters
         d = LightKappaResult(
             0.55, None, None, bp, n_pairs=n, ci_method="bca",
             **_light(0.55),
@@ -3687,18 +3722,21 @@ class TestLightKappaResult:
 class TestLightKappaResultPairs:
     """Each pair's parts and ceiling, and the mean of the pair kappas is the point."""
 
-    @pytest.mark.parametrize("fill_rate", [0.9, None])
-    def test_incomplete_data_refused(self, fill_rate):
-        bp = dataclasses.replace(_bp_with_n_raters(3), fill_rate=fill_rate)
+    def test_incomplete_data_refused(self):
+        """One rater missed a subject: fill rate 11/12, not 1."""
+        incomplete = _raters(3, n_per_rater=[4, 4, 3])
         with pytest.raises(ValueError, match="Light's kappa is for complete data"):
-            LightKappaResult(0.55, None, None, bp, n_pairs=3, ci_method="bca", **_light(0.55))
+            LightKappaResult(
+                0.55, None, None, _bp(), n_pairs=3, ci_method="bca",
+                **dict(_light(0.55), rater_profile=incomplete),
+            )
 
     PAIRS = list(itertools.combinations(_PANEL.rater_marginals, 2))
 
     def _result(self, point=0.55, **fields):
         kwargs = dict(_light(point), **fields)
         return LightKappaResult(
-            point, None, None, _complete_bp(3), n_pairs=3, ci_method="bca", **kwargs,
+            point, None, None, _bp(), n_pairs=3, ci_method="bca", **kwargs,
         )
 
     def _pairs_at(self, *kappas):
@@ -3782,12 +3820,12 @@ class TestPrintedForm:
         r = FleissKappaResult(
             0.6, None, None, _bp(), ci_method="bca", weights_type="identity", **_pooled(0.6),
         )
-        assert _bp().n_raters is None
+        assert isinstance(r.rater_profile, NotComputed)
         assert "at least 3 raters" in str(r)
 
     def test_cohen_ceiling_and_both_raters(self):
         r = CohenKappaResult(
-            0.7, None, None, _bp_with_n_raters(2), ci_method="bca",
+            0.7, None, None, _bp(), ci_method="bca",
             weights_type="identity", **_cohen(0.7),
         )
         assert "κ_max = 1.000 (these raters' marginals)" in str(r)
@@ -3805,7 +3843,7 @@ class TestPrintedForm:
             )
 
     def test_conger_panel_has_no_ceiling(self):
-        r = CongerKappaResult(0.6, None, None, _complete_bp(3), ci_method="bca", **_conger(0.6))
+        r = CongerKappaResult(0.6, None, None, _bp(), ci_method="bca", **_conger(0.6))
         assert "κ_max not computed (3 or more raters)" in str(r)
 
     def test_light_spread_and_undefined_pairs(self):
@@ -3817,14 +3855,14 @@ class TestPrintedForm:
             pairs[2]: AgreementParts(nan, nan, "agreement", False),
         }
         r = LightKappaResult(
-            0.5, None, None, _complete_bp(3), n_pairs=3, ci_method="bca",
+            0.5, None, None, _bp(), n_pairs=3, ci_method="bca",
             **dict(_light(0.5), pair_parts=parts),
         )
         assert "mean of 2 of 3 pair kappas (the rest undefined), 0.40 to 0.60" in str(r)
 
     def test_light_equal_pairs_print_one_value(self):
         r = LightKappaResult(
-            0.5, None, None, _complete_bp(3), n_pairs=3, ci_method="bca", **_light(0.5),
+            0.5, None, None, _bp(), n_pairs=3, ci_method="bca", **_light(0.5),
         )
         assert "mean of 3 pair kappas, all 0.50" in str(r)
 
@@ -3839,26 +3877,27 @@ class TestPrintedForm:
 
 class TestPermutationRaterNames:
     """
-    A permutation result keeps the panel's rater names, in position order.
-    Pairs and subsets stay keyed by position; the table, the frame, the
-    summary and the plots name the raters.
+    A permutation result keeps the panel's RaterProfile, whose names are in
+    position order. Pairs and subsets stay keyed by position; the table, the
+    frame, the summary and the plots name the raters.
     """
 
-    def test_names_must_be_a_tuple_of_text(self):
-        with pytest.raises(TypeError, match="rater_names must be a tuple of str"):
-            PairwisePermutationResult(**_pairwise_kwargs(rater_names=["ann", "bob", "cat"]))
-        with pytest.raises(TypeError, match="rater_names must be a tuple of str"):
-            PairwisePermutationResult(**_pairwise_kwargs(rater_names=("ann", 1, "cat")))
+    def test_rater_profile_required(self):
+        """Names alone are not enough: the container holds a RaterProfile,
+        which checks its own names and counts (see test_data_profiles)."""
+        with pytest.raises(TypeError, match="rater_profile must be RaterProfile, got tuple"):
+            PairwisePermutationResult(**_pairwise_kwargs(rater_profile=("ann", "bob", "cat")))
 
-    def test_names_must_not_repeat(self):
-        with pytest.raises(ValueError, match="rater_names must not repeat"):
-            PairwisePermutationResult(**_pairwise_kwargs(rater_names=("ann", "ann", "cat")))
-
-    def test_one_name_per_rater(self):
-        with pytest.raises(ValueError, match="rater_names has 2 names but the panel has 3 raters"):
+    def test_both_profiles_describe_the_same_subjects(self):
+        with pytest.raises(ValueError, match="rater_profile has 5 subjects but balance_profile has 4"):
             PairwisePermutationResult(**_pairwise_kwargs(
-                balance_profile=_bp_with_n_raters(3), rater_names=("ann", "bob"),
+                rater_profile=_raters(names=RATER_NAMES, n_subjects=5),
             ))
+
+    def test_rater_names_read_the_profile(self):
+        """A shortcut, not a second copy."""
+        r = PairwisePermutationResult(**_pairwise_kwargs())
+        assert r.rater_names is r.rater_profile.rater_names == RATER_NAMES
 
     def test_key_position_must_exist(self):
         units = _units(PAIRS)
@@ -3870,12 +3909,12 @@ class TestPermutationRaterNames:
         r = PairwisePermutationResult(**_pairwise_kwargs())
         assert set(r.pair_results) == set(PAIRS)
 
-    def test_every_k_shares_the_names(self):
+    def test_every_k_shares_the_profile(self):
         kw = _multi_k_kwargs()
         kw["per_k_results"][3] = SubsetPermutationResult(**_subset_k3_kwargs(
-            balance_profile=kw["balance_profile"], rater_names=("ann", "bob", "dan"),
+            balance_profile=kw["balance_profile"], rater_profile=_raters(names=("ann", "bob", "dan")),
         ))
-        with pytest.raises(ValueError, match=r"per_k_results\[3\] has rater_names"):
+        with pytest.raises(ValueError, match=r"per_k_results\[3\] has a different rater_profile"):
             MultiKSubsetResult(**kw)
 
     def test_not_computed_row_named_too(self):

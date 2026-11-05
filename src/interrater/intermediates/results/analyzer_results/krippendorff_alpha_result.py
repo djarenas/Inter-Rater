@@ -14,6 +14,7 @@ from .point_estimate_result import PointEstimateResult
 if TYPE_CHECKING:
     from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[KrippendorffAlphaResult] Error"
@@ -73,6 +74,8 @@ class KrippendorffAlphaResult(PointEstimateResult):
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Informational only --
         alpha handles both balanced and unbalanced data exactly.
+    rater_profile : RaterProfile | NotComputed
+        The raters (inherited). NotComputed when built from counts.
     parts : AgreementParts
         Do and De, kind "disagreement" (inherited). Always computed for
         alpha.
@@ -105,6 +108,7 @@ class KrippendorffAlphaResult(PointEstimateResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile | NotComputed
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

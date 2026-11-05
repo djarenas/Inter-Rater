@@ -19,6 +19,7 @@ from .individual_marginal_result import (
 if TYPE_CHECKING:
     from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[CohenKappaResult] Error"
@@ -42,9 +43,8 @@ class CohenKappaResult(IndividualMarginalResult):
     populated and always balanced. n_subjects is available via
     balance_profile.n_subjects.
 
-    I carry no rater names. Who the raters are is input metadata, available
-    on the Ratings object the caller passed in. I describe what the data said,
-    not who said it.
+    My rater_profile holds the two raters: their names, how many subjects
+    each rated, and how many they share.
 
     My parts are Po and Pe, weighted exactly when I am, and kappa_max is
     always computed: two raters' marginals cap their agreement (Cohen 1960).
@@ -73,6 +73,9 @@ class CohenKappaResult(IndividualMarginalResult):
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Always populated for
         Cohen's kappa. n_subjects available via balance_profile.n_subjects.
+    rater_profile : RaterProfile
+        The raters (inherited). Always a RaterProfile: Cohen's kappa needs
+        rater identity.
     parts : AgreementParts
         Po and Pe (inherited). Always computed for Cohen's kappa.
     kappa_max : float
@@ -101,11 +104,12 @@ class CohenKappaResult(IndividualMarginalResult):
     SYMBOL:      ClassVar[str] = "κ"
 
     # Inherited from IndividualMarginalResult (which validates
-    # balance_profile is not None and n_raters is not None)
+    # balance_profile is not None and rater_profile is a RaterProfile)
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: float
     agreement_profile: AgreementProfile
@@ -159,7 +163,7 @@ class CohenKappaResult(IndividualMarginalResult):
                 )
 
         # Call parent validation (IndividualMarginalResult validates
-        # balance_profile and n_raters; PointEstimateResult validates
+        # balance_profile and rater_profile; PointEstimateResult validates
         # point, confidence_interval, bootstrap_distribution)
         try:
             super().__post_init__()
@@ -170,10 +174,10 @@ class CohenKappaResult(IndividualMarginalResult):
 
     def _check_parts_fit_cohen(self) -> None:
         """Po, Pe and kappa_max fit the two raters' marginals."""
-        if self.balance_profile.n_raters != 2:
+        if self.rater_profile.n_raters != 2:
             raise ValueError(
                 f"{_ERROR_PREFIX}: Cohen's kappa is for one pair of raters, "
-                f"got {self.balance_profile.n_raters}"
+                f"got {self.rater_profile.n_raters}"
             )
         if not isinstance(self.parts, AgreementParts) or self.parts.kind != "agreement":
             raise TypeError(

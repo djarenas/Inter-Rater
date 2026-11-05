@@ -13,7 +13,7 @@ from .analyzer import Analyzer
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates.results import HypothesisTestResult
-    from ..intermediates.data_profiles import BalanceProfile
+    from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from ..intermediates.estimator_parts.estimator_input import EstimatorInput
     from .configs import IndividualMarginalConfig
 
@@ -92,6 +92,10 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         CohenKappaConfig, CongerKappaConfig, LightKappaConfig).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
+    rater_profile : RaterProfile
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. Always present here:
+        this coefficient needs rater identity.
     estimator_input : EstimatorInput
         Built from ratings, carrying category_index, n_categories, and weights.
         Weights are None at this level; subclasses may rebuild with resolved
@@ -103,6 +107,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
     # Populated at parent class Analyzer
     ratings: Ratings
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile
     # Checked at this level
     config: IndividualMarginalConfig
     # Populated at this level

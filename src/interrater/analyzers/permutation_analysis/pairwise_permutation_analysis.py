@@ -162,7 +162,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             coefficient_name=self.config.coefficient_to_compute,
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
-            rater_names=self._rater_names(),
+            rater_profile=self.rater_profile,
             pair_results=pair_results,
             n_pairs=n_pairs,
             mean_over_pairs=mean_over_pairs,

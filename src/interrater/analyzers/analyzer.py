@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates import AnalysisResult
     from ..intermediates.results import HypothesisTestResult
-    from ..intermediates.data_profiles import BalanceProfile
+    from ..intermediates.data_profiles import BalanceProfile, RaterProfile
+    from ..intermediates.not_computed import NotComputed
     from .configs.analyzer_config import AnalyzerConfig
 
 _ERROR_PREFIX = "[Analyzer] Error"
@@ -51,8 +52,12 @@ class Analyzer(ABC):
         Defines bootstrap resamples, confidence level, CI method, weights, etc.
     balance_profile : BalanceProfile
         Computed from ratings or nij_matrix. Describes how subjects were rated 
-        (constant n per subject, distribution of subjects by rater count, fill rate, etc.). 
+        (constant n per subject, distribution of subjects by rater count, etc.). 
         Stored here for access by all analyzers and included in results.
+    rater_profile : RaterProfile | NotComputed
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. NotComputed when built
+        from an nij_matrix, which carries no rater identity.
     """
 
     # Attribute declaration
@@ -61,6 +66,7 @@ class Analyzer(ABC):
     ratings: Ratings | None
     config: AnalyzerConfig
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile | NotComputed
 
     def __init__(
         self, ratings: Ratings | None, config: AnalyzerConfig
@@ -112,13 +118,17 @@ class Analyzer(ABC):
         self.apply_injection()
 
         # Compute BalanceProfile from ratings if available
-        from ..intermediates.data_profiles import BalanceProfile
+        from ..intermediates.data_profiles import BalanceProfile, RaterProfile
+        from ..intermediates.not_computed import NotComputed
 
         if self.ratings is not None:
             self.balance_profile = BalanceProfile.from_ratings(self.ratings)
+            self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
         else:
             # BalanceProfile will be computed by subclass from nij_matrix
             self.balance_profile = None  # type: ignore
+            # Counts carry no rater identity, so there is no rater profile
+            self.rater_profile = NotComputed("built from counts: no rater identity")
 
     # Public API ------------------------------------------------------------- #
 

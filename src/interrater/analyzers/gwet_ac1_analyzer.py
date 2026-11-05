@@ -18,7 +18,7 @@ from ..intermediates.results.analyzer_results.gwets_ac1_result import (
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates.results import HypothesisTestResult, GwetsAC1Result
-    from ..intermediates.data_profiles import BalanceProfile
+    from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from .configs import GwetAC1Config
 
 _ERROR_PREFIX = "[GwetAC1Analyzer] Error"
@@ -64,6 +64,10 @@ class GwetAC1Analyzer(GroupAnalyzer):
         The analysis configuration for Gwet's AC1.
     balance_profile : BalanceProfile
         Describes the balance structure of the data (inherited from Analyzer).
+    rater_profile : RaterProfile | NotComputed
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. NotComputed when built
+        from an nij_matrix, which carries no rater identity.
     """
 
     # Attribute declaration
@@ -71,6 +75,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
     # Populated at parent class Analyzer
     ratings: Ratings | None
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile | NotComputed
     # Checked at this level
     config: GwetAC1Config
 
@@ -324,6 +329,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            rater_profile=self.rater_profile,
             parts=self._agreement_parts(nij_array),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),

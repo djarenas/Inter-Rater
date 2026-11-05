@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from ..intermediates.results import ScottsPiResult, HypothesisTestResult
     from .configs import ScottsConfig
     from ..intermediates.data_profiles.balance_profile import BalanceProfile
+    from ..intermediates.data_profiles.rater_profile import RaterProfile
 
 from ..intermediates.estimator_parts import NijMatrix
 from ..intermediates.not_computed import NotComputed
@@ -61,6 +62,10 @@ class ScottsAnalyzer(GroupAnalyzer):
         The validated ratings data (from Analyzer, can be None if from nij_matrix).
     balance_profile : BalanceProfile
         Describes the balance structure of the data (from Analyzer).
+    rater_profile : RaterProfile | NotComputed
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. NotComputed when built
+        from an nij_matrix, which carries no rater identity.
     config : ScottsConfig
         The analysis configuration for Scott's pi.
     nij_matrix : NijMatrix | None
@@ -72,6 +77,7 @@ class ScottsAnalyzer(GroupAnalyzer):
     # Populated at parent class Analyzer
     ratings: Ratings | None
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile | NotComputed
     # Populated at parent class GroupAnalyzer
     nij_matrix: NijMatrix | None
     # Checked at this level
@@ -403,6 +409,7 @@ class ScottsAnalyzer(GroupAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            rater_profile=self.rater_profile,
             parts=self._agreement_parts(nij_array),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 
 from ...data_profiles.agreement_profile import AgreementProfile
+from ...data_profiles.rater_profile import RaterProfile
 from ...not_computed import NotComputed
 from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..agreement_parts import AgreementParts
@@ -88,8 +89,12 @@ class PointEstimateResult(AnalysisResult):
         bootstrap ran but its draws were not kept (a permutation analysis
         with keep_draws false), saying so.
     balance_profile : BalanceProfile | None
-        Structural metadata about the data: n_subjects, n_raters, balance
-        structure. None if not available at construction time.
+        Structural metadata about the subjects: n_subjects and how many
+        ratings each got. None if not available at construction time.
+    rater_profile : RaterProfile | NotComputed
+        The raters: names, how much each rated, and how much each pair
+        overlapped. NotComputed when the result was built from counts,
+        which carry no rater identity.
     parts : AgreementParts | NotComputed
         The observed and chance terms (Po and Pe, or Do and De) the point
         estimate is built from. NotComputed when the coefficient is not one
@@ -114,6 +119,7 @@ class PointEstimateResult(AnalysisResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile | NotComputed
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile
@@ -188,6 +194,20 @@ class PointEstimateResult(AnalysisResult):
                 raise TypeError(
                     f"{_ERROR_PREFIX}: balance_profile must be BalanceProfile or None, "
                     f"got {type(self.balance_profile).__name__}"
+                )
+
+        if not isinstance(self.rater_profile, (RaterProfile, NotComputed)):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: rater_profile must be RaterProfile or "
+                f"NotComputed, got {type(self.rater_profile).__name__}"
+            )
+        # Both profiles describe the same data
+        if isinstance(self.rater_profile, RaterProfile) and self.balance_profile is not None:
+            if self.rater_profile.n_subjects != self.balance_profile.n_subjects:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: rater_profile has "
+                    f"{self.rater_profile.n_subjects} subjects but "
+                    f"balance_profile has {self.balance_profile.n_subjects}"
                 )
 
         self._check_parts()
@@ -348,10 +368,9 @@ class PointEstimateResult(AnalysisResult):
 
     def _raters_phrase(self) -> str:
         """'4 raters', or 'at least 3 raters' when only counts were given."""
-        bp = self.balance_profile
-        if bp.n_raters is not None and bp.n_raters_exact:
-            return f"{bp.n_raters} raters"
-        return f"at least {bp.n_raters_lower_bound} raters"
+        if isinstance(self.rater_profile, RaterProfile):
+            return f"{self.rater_profile.n_raters} raters"
+        return f"at least {self.balance_profile.n_raters_lower_bound} raters"
 
     @staticmethod
     def _weights_phrase(weights_type: str) -> str:
@@ -374,8 +393,9 @@ class PointEstimateResult(AnalysisResult):
             error of the usable draws, None when too few are usable -- the
             draw counts are in 'ci'; ``{"not_computed": reason}`` when the
             draws were not kept); 'balance' if balance_profile is
-            not None; and 'parts', 'kappa_max' and 'agreement_profile', each
-            a plain value or ``{"not_computed": reason}``.
+            not None; and 'raters', 'parts', 'kappa_max' and
+            'agreement_profile', each a plain value or
+            ``{"not_computed": reason}``.
         """
         result = {"point": self.point}
         if self.confidence_interval is not None:
@@ -392,6 +412,7 @@ class PointEstimateResult(AnalysisResult):
             result["bootstrap_se"] = se
         if self.balance_profile is not None:
             result["balance"] = self.balance_profile.summary()
+        result["raters"] = self.rater_profile.summary()
         result["parts"] = self.parts.summary()
         result["kappa_max"] = (
             self.kappa_max.summary() if isinstance(self.kappa_max, NotComputed)

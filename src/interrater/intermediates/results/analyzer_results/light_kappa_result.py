@@ -16,6 +16,7 @@ from .point_estimate_result import PointEstimateResult
 if TYPE_CHECKING:
     from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[LightKappaResult] Error"
@@ -47,7 +48,7 @@ class LightKappaResult(PointEstimateResult):
     when you want a single number.
 
     I exist only for complete data, where every rater rated every subject
-    (Light 1971), so my balance profile must have a fill rate of 1.
+    (Light 1971), so my rater profile must have a fill rate of 1.
 
     I am not one Po and Pe, so my parts and kappa_max are NotComputed.
     Instead I carry each pair's: pair_parts holds every pair's Po and Pe,
@@ -79,6 +80,9 @@ class LightKappaResult(PointEstimateResult):
         not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited).
+    rater_profile : RaterProfile
+        The raters (inherited). Always a RaterProfile: Light's kappa needs
+        rater identity.
     parts : NotComputed
         Always NotComputed, with PARTS_NOT_COMPUTED as the reason (inherited).
     kappa_max : NotComputed
@@ -110,6 +114,7 @@ class LightKappaResult(PointEstimateResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile
     parts: NotComputed
     kappa_max: NotComputed
     agreement_profile: AgreementProfile
@@ -138,13 +143,15 @@ class LightKappaResult(PointEstimateResult):
                 f"{_ERROR_PREFIX}: n_pairs must be int, "
                 f"got {type(self.n_pairs).__name__}"
             )
-        if self.balance_profile.n_raters is None:
+        from ...data_profiles.rater_profile import RaterProfile
+
+        if not isinstance(self.rater_profile, RaterProfile):
             raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile.n_raters must not be "
-                f"None for Light's kappa (rater identity is needed to "
-                f"compute pairwise kappas)"
+                f"{_ERROR_PREFIX}: rater_profile must be a RaterProfile for "
+                f"Light's kappa (rater identity is needed to compute "
+                f"pairwise kappas), got {self.rater_profile}"
             )
-        expected_pairs = self.balance_profile.n_raters * (self.balance_profile.n_raters - 1) // 2
+        expected_pairs = self.rater_profile.n_raters * (self.rater_profile.n_raters - 1) // 2
         if self.n_pairs != expected_pairs:
             raise ValueError(
                 f"{_ERROR_PREFIX}: n_pairs must be C(n_raters, 2) = "
@@ -176,11 +183,11 @@ class LightKappaResult(PointEstimateResult):
 
     def _check_pairs(self) -> None:
         """Complete data; every pair's parts and ceiling; their mean is my point."""
-        if self.balance_profile.fill_rate != 1.0:
+        if self.rater_profile.fill_rate != 1.0:
             raise ValueError(
                 f"{_ERROR_PREFIX}: Light's kappa is for complete data, where "
-                f"every rater rated every subject; balance_profile has a fill "
-                f"rate of {self.balance_profile.fill_rate}"
+                f"every rater rated every subject; rater_profile has a fill "
+                f"rate of {self.rater_profile.fill_rate}"
             )
         for name in ("parts", "kappa_max"):
             if not isinstance(getattr(self, name), NotComputed):

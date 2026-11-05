@@ -13,7 +13,8 @@ from .analyzer import Analyzer
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates import AnalysisResult
-    from ..intermediates.data_profiles import BalanceProfile
+    from ..intermediates.data_profiles import BalanceProfile, RaterProfile
+    from ..intermediates.not_computed import NotComputed
     from ..intermediates.estimator_parts import NijMatrix
     from .configs import GroupCoefficientConfig
 
@@ -41,6 +42,10 @@ class GroupAnalyzer(Analyzer, ABC):
         The ratings data (from Analyzer, can be None if initialized from nij_matrix).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
+    rater_profile : RaterProfile | NotComputed
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. NotComputed when built
+        from an nij_matrix, which carries no rater identity.
     config : GroupCoefficientConfig
         Must be an instance of GroupCoefficientConfig or a subclass
         (NoWeightGroupConfig, WeightableGroupConfig, FleissKappaConfig, etc.)
@@ -53,6 +58,7 @@ class GroupAnalyzer(Analyzer, ABC):
     # Populated at parent class Analyzer
     ratings: Ratings | None
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile | NotComputed
     # Checked at this level
     config: GroupCoefficientConfig
     # Populated at this level

@@ -14,6 +14,7 @@ from .permutation_result import PermutationResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
 
 _ERROR_PREFIX = "[SubsetPermutationResult] Error"
 
@@ -70,9 +71,8 @@ class SubsetPermutationResult(PermutationResult):
     Wide bootstrap CIs means not enough subjects to pin the numbers down --
     maybe collect more data.
 
-    I carry no rater names. Subsets are tuples of rater indices (0-based,
-    sorted). Whoever renders the result has the semantics and can supply
-    names from the Ratings object.
+    Subsets are tuples of rater indices (0-based, sorted). The raters' names
+    are in rater_profile.rater_names.
 
     Attributes
     ----------
@@ -82,8 +82,9 @@ class SubsetPermutationResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
-    rater_names : tuple[str, ...]
-        Inherited. The panel's raters in position order; keys index into it.
+    rater_profile : RaterProfile
+        Inherited. The panel's raters; keys are positions into its
+        rater_names.
     subset_results : dict[tuple[int, ...], PointEstimateResult | NotComputed]
         Each subset's result, computed on the subjects at least two of its
         raters rated: its balance profile says how many, since a subset
@@ -122,7 +123,7 @@ class SubsetPermutationResult(PermutationResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
-    rater_names: tuple[str, ...]
+    rater_profile: RaterProfile
 
     # Each subset (rater heterogeneity)
     subset_results: dict   # values are a coefficient's result, or NotComputed
@@ -308,7 +309,7 @@ class SubsetPermutationResult(PermutationResult):
         Returns
         -------
         dict
-            Parent keys (coefficient_name, ci_method, balance); rater_names;
+            Parent keys (coefficient_name, ci_method, balance, raters);
             subset_k, n_subsets, mean_over_subsets; subset_results, a list
             with one entry per subset:
             ``{"raters": [names], "positions": [i, j], "result": its own
@@ -325,7 +326,6 @@ class SubsetPermutationResult(PermutationResult):
         result["subset_k"] = self.subset_k
         result["n_subsets"] = self.n_subsets
         result["mean_over_subsets"] = self.mean_over_subsets
-        result["rater_names"] = list(self.rater_names)
         result["subset_results"] = self._unit_summaries(self.subset_results)
 
         # Bootstrap

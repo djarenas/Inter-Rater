@@ -19,7 +19,7 @@ from .agreement_functions.group_agreement import (
 from ..array_utils import category_counts
 
 from ..intermediates.estimator_parts import NijMatrix, Weights
-from ..intermediates.data_profiles import BalanceProfile
+from ..intermediates.data_profiles import BalanceProfile, RaterProfile
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.fleiss_kappa_result import (
@@ -54,6 +54,10 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         The ratings data (from Analyzer, can be None if initialized from nij_matrix).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
+    rater_profile : RaterProfile | NotComputed
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. NotComputed when built
+        from an nij_matrix, which carries no rater identity.
     config : FleissKappaConfig
         The analysis configuration for Fleiss' kappa.
     nij_matrix : NijMatrix | None
@@ -70,6 +74,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
     # Populated at parent class Analyzer
     ratings: Ratings | None
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile | NotComputed
     # Populated at parent class GroupAnalyzer
     nij_matrix: NijMatrix | None
     # Populated at parent class WeightableGroupAnalyzer
@@ -457,6 +462,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             point=point,
             confidence_interval=ci,
             balance_profile=self.balance_profile,
+            rater_profile=self.rater_profile,
             bootstrap_distribution=bootstrap_distribution,
             parts=self._agreement_parts(nij_array),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),

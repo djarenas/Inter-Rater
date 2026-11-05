@@ -325,7 +325,7 @@ def main() -> int:
                         "review":      review,
                         "balanced":    result.balance_profile.is_balanced,
                         "n_subjects":  result.balance_profile.n_subjects,
-                        "n_raters":    result.balance_profile.n_raters,
+                        "n_raters":    result.rater_profile.n_raters,
                         "ci_method":   method,
                         "B":           B,
                         "seed":        seed,

@@ -1689,7 +1689,7 @@ class TestCongerNeedsCompleteData:
         from interrater.analyzers import CongerKappaAnalyzer
 
         result = CongerKappaAnalyzer(_three_cat_ratings(3), self._config()).estimate()
-        assert result.balance_profile.fill_rate == 1.0
+        assert result.rater_profile.fill_rate == 1.0
 
 
 class TestLightNeedsCompleteData:
@@ -1727,7 +1727,7 @@ class TestLightNeedsCompleteData:
         from interrater.analyzers import LightKappaAnalyzer
 
         result = LightKappaAnalyzer(_three_cat_ratings(3), self._config()).estimate()
-        assert result.balance_profile.fill_rate == 1.0
+        assert result.rater_profile.fill_rate == 1.0
 
 
 class TestCountsNeedTwoRatings:
@@ -1784,6 +1784,38 @@ class TestHypothesisTestSignature:
         analyzer_cls, _ = _analyzer_and_config(name)
         for cls in (Analyzer, analyzer_cls):
             assert list(inspect.signature(cls.hypothesis_test).parameters) == ["self"], cls
+
+
+class TestResultsCarryTheRaters:
+    """
+    Every result built from ratings holds a RaterProfile naming its raters;
+    one built from counts holds NotComputed, since counts carry no rater
+    identity, and says only "at least N raters".
+    """
+
+    @pytest.mark.parametrize("name, n_raters", _ALL_ANALYZERS)
+    def test_from_ratings(self, name, n_raters):
+        from interrater.intermediates.data_profiles import RaterProfile
+
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        result = analyzer_cls(
+            _three_cat_ratings(n_raters), config_cls(n_resamples=20, random_state=42),
+        ).estimate()
+        assert isinstance(result.rater_profile, RaterProfile)
+        assert result.rater_profile.n_raters == n_raters
+        assert result.rater_profile.n_subjects == result.balance_profile.n_subjects
+
+    @pytest.mark.parametrize("name", ["FleissKappa", "GwetAC1", "BrennanPrediger", "KrippendorffAlpha"])
+    def test_from_counts(self, name):
+        from interrater.intermediates.not_computed import NotComputed
+
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        result = analyzer_cls.build_from_nij_matrix(
+            _three_cat_ratings(3).to_nij_matrix(), config_cls(n_resamples=20, random_state=42),
+        ).estimate_from_nij_matrix()
+        assert isinstance(result.rater_profile, NotComputed)
+        assert result.rater_profile.reason == "built from counts: no rater identity"
+        assert "at least 3 raters" in str(result)
 
 
 class TestOneEstimate:

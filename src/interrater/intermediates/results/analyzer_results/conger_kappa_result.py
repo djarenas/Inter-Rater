@@ -19,6 +19,7 @@ from .individual_marginal_result import (
 if TYPE_CHECKING:
     from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[CongerKappaResult] Error"
@@ -45,7 +46,7 @@ class CongerKappaResult(IndividualMarginalResult):
     nominal data only -- so I carry no weights_type field.
 
     I exist only for complete data, where every rater rated every subject
-    (Conger 1980), so my balance profile must have a fill rate of 1.
+    (Conger 1980), so my rater profile must have a fill rate of 1.
 
     My parts are Po and Pe, unweighted, and Pe must be Conger's chance term
     on the raters' marginals in my agreement profile:
@@ -69,6 +70,9 @@ class CongerKappaResult(IndividualMarginalResult):
         not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited).
+    rater_profile : RaterProfile
+        The raters (inherited). Always a RaterProfile: Conger's kappa needs
+        rater identity.
     parts : AgreementParts
         Po and Pe, unweighted (inherited). Always computed.
     kappa_max : float | NotComputed
@@ -89,11 +93,12 @@ class CongerKappaResult(IndividualMarginalResult):
     SYMBOL:      ClassVar[str] = "κ"
 
     # Inherited from IndividualMarginalResult (which validates
-    # balance_profile is not None and n_raters is not None)
+    # balance_profile is not None and rater_profile is a RaterProfile)
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile
@@ -120,7 +125,7 @@ class CongerKappaResult(IndividualMarginalResult):
             )
 
         # Call parent validation (IndividualMarginalResult validates
-        # balance_profile and n_raters; PointEstimateResult validates
+        # balance_profile and rater_profile; PointEstimateResult validates
         # point, confidence_interval, bootstrap_distribution)
         try:
             super().__post_init__()
@@ -131,11 +136,11 @@ class CongerKappaResult(IndividualMarginalResult):
 
     def _check_parts_fit_conger(self) -> None:
         """Complete data; Po and Pe fit the raters' marginals; kappa_max only for a pair."""
-        if self.balance_profile.fill_rate != 1.0:
+        if self.rater_profile.fill_rate != 1.0:
             raise ValueError(
                 f"{_ERROR_PREFIX}: Conger's kappa is for complete data, where "
-                f"every rater rated every subject; balance_profile has a fill "
-                f"rate of {self.balance_profile.fill_rate}"
+                f"every rater rated every subject; rater_profile has a fill "
+                f"rate of {self.rater_profile.fill_rate}"
             )
         if not isinstance(self.parts, AgreementParts) or self.parts.kind != "agreement":
             raise TypeError(
@@ -147,7 +152,7 @@ class CongerKappaResult(IndividualMarginalResult):
                 f"{_ERROR_PREFIX}: parts must be unweighted; weighted Conger's "
                 f"kappa is not implemented"
             )
-        pair = self.balance_profile.n_raters == 2
+        pair = self.rater_profile.n_raters == 2
         if pair and isinstance(self.kappa_max, NotComputed):
             raise TypeError(
                 f"{_ERROR_PREFIX}: kappa_max must be computed with 2 raters, "
@@ -156,7 +161,7 @@ class CongerKappaResult(IndividualMarginalResult):
         if not pair and not isinstance(self.kappa_max, NotComputed):
             raise TypeError(
                 f"{_ERROR_PREFIX}: kappa_max must be NotComputed with "
-                f"{self.balance_profile.n_raters} raters "
+                f"{self.rater_profile.n_raters} raters "
                 f"({KAPPA_MAX_NOT_COMPUTED}), got {self.kappa_max!r}"
             )
 

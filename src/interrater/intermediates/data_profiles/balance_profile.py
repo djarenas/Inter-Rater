@@ -10,7 +10,6 @@ import numpy as np
 from ...array_utils import (
     is_balanced as check_balanced,
     n_per_subject as get_n_per_subject,
-    n_per_rater as get_n_per_rater,
     subject_count_distribution,
 )
 
@@ -34,75 +33,35 @@ class BalanceProfile:
     If is_balanced is True, the data is uniform and I report it simply. If
     False, I hold the granular distribution for diagnostics and visualization.
 
-    Some of my fields can be None. When constructed from a Ratings object,
-    everything is known exactly -- Ratings knows every rater by name. When
-    constructed from an nij matrix, rater identity is gone: I cannot know
-    how many raters there were (only a lower bound), which rater gave which
-    rating, or what fraction of the grid was filled. Those fields are None
-    rather than estimates, because honest absence is better than fabricated
-    data.
+    I describe subjects only: how many ratings each one got. That much is in
+    a counts matrix as well as in Ratings, so I am always built, from
+    either. Who the raters are, how much each one rated and who overlapped
+    with whom need rater identity, which a counts matrix does not have;
+    that is RaterProfile, built only from Ratings.
 
     Attributes
     ----------
     is_balanced : bool
         Every subject was rated the same number of times.
-    n_raters : int | None
-        Number of raters. Exact when built from Ratings, None when built
-        from an nij matrix (use n_raters_lower_bound for what is known).
-    n_raters_exact : bool
-        True if n_raters is known exactly (from Ratings). False if n_raters
-        is None or a lower bound.
     n_per_subject : ndarray
         (n_subjects,) -- how many raters rated each subject.
-    n_per_rater : ndarray | None
-        (n_raters,) -- how many subjects each rater rated. None when built
-        from an nij matrix, because rater identity is not in the counts.
     subject_counts : dict[int, int]
         Distribution: {n_raters: count}. Example: {2: 1614, 3: 3} means 1614
         subjects had 2 raters, 3 subjects had 3 raters.
-    fill_rate : float | None
-        Fraction of cells filled in the (n_subjects, n_raters) grid. None
-        when n_raters is unknown.
     raters_per_subject : int | None
         If is_balanced, the constant number of raters per subject. None if
         unbalanced.
     """
 
     is_balanced: bool
-    n_raters: int | None
-    n_raters_exact: bool
     n_per_subject: np.ndarray
-    n_per_rater: np.ndarray | None
     subject_counts: dict[int, int]
-    fill_rate: float | None
     raters_per_subject: int | None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate my attributes after construction."""
-
-        # n_raters must be a positive integer or None
-        if self.n_raters is not None:
-            if not isinstance(self.n_raters, int) or self.n_raters <= 0:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: n_raters must be positive int or None, "
-                    f"got {self.n_raters}"
-                )
-
-        # n_raters_exact must be bool
-        if not isinstance(self.n_raters_exact, bool):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: n_raters_exact must be bool, "
-                f"got {type(self.n_raters_exact).__name__}"
-            )
-
-        # n_raters_exact=True requires n_raters to be set
-        if self.n_raters_exact and self.n_raters is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: n_raters_exact=True but n_raters is None. "
-                f"Cannot claim exact knowledge without a value."
-            )
 
         # n_per_subject must be a numpy array of positive integers
         if not isinstance(self.n_per_subject, np.ndarray):
@@ -118,21 +77,6 @@ class BalanceProfile:
                 f"got min {self.n_per_subject.min()}"
             )
 
-        # n_per_rater: numpy array of non-negative integers, or None
-        if self.n_per_rater is not None:
-            if not isinstance(self.n_per_rater, np.ndarray):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: n_per_rater must be numpy array or None, "
-                    f"got {type(self.n_per_rater).__name__}"
-                )
-            if self.n_per_rater.size == 0:
-                raise ValueError(f"{_ERROR_PREFIX}: n_per_rater is empty")
-            if np.any(self.n_per_rater < 0):
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: all values in n_per_rater must be >= 0, "
-                    f"got min {self.n_per_rater.min()}"
-                )
-
         # subject_counts must be a dict with positive int keys and values
         if not isinstance(self.subject_counts, dict):
             raise TypeError(
@@ -147,18 +91,6 @@ class BalanceProfile:
             if not isinstance(v, int) or v <= 0:
                 raise ValueError(
                     f"{_ERROR_PREFIX}: subject_counts values must be positive ints, got {v}"
-                )
-
-        # fill_rate: float in [0, 1], or None
-        if self.fill_rate is not None:
-            if not isinstance(self.fill_rate, (int, float)):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: fill_rate must be float or None, "
-                    f"got {type(self.fill_rate).__name__}"
-                )
-            if not (0.0 <= self.fill_rate <= 1.0):
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: fill_rate must be in [0, 1], got {self.fill_rate}"
                 )
 
         # is_balanced consistency: if balanced, raters_per_subject should match
@@ -206,21 +138,12 @@ class BalanceProfile:
         """
         At least this many raters -- max of n_per_subject.
 
-        Always available, even when n_raters is None. From an nij matrix this
-        is the best we can do: a rater who rated zero subjects is invisible in
-        the counts, so the true number is at least this but may be higher.
-        When n_raters is known exactly, this equals n_raters or is less (if
-        some raters rated nothing, but Ratings forbids that so in practice
-        they are equal).
+        All a counts matrix can say about the raters: a rater who rated zero
+        subjects is invisible in the counts, so the true number is at least
+        this but may be higher. The exact number is RaterProfile.n_raters,
+        when there is rater identity.
         """
         return int(self.n_per_subject.max())
-
-    @property
-    def n_raters_display(self) -> str:
-        """Return 'n_raters=X' if exact, 'n_raters>=X' if lower bound."""
-        if self.n_raters is not None and self.n_raters_exact:
-            return f"n_raters={self.n_raters}"
-        return f"n_raters≥{self.n_raters_lower_bound}"
 
     # Public API ------------------------------------------------------------- #
 
@@ -237,30 +160,20 @@ class BalanceProfile:
         Returns
         -------
         BalanceProfile
-            A profile describing the balance structure. All fields are exact.
+            A profile describing the balance structure.
         """
         index = ratings.category_index
-        n_subjects = ratings.n_subjects
-        n_raters = ratings.n_raters
 
         is_balanced_flag = check_balanced(index)
         n_per_subject_arr = get_n_per_subject(index)
-        n_per_rater_arr = get_n_per_rater(index)
         subject_counts_dict = subject_count_distribution(index)
-
-        total_ratings = n_per_rater_arr.sum()
-        fill_rate = float(total_ratings) / (n_subjects * n_raters)
 
         raters_per_subject = int(n_per_subject_arr[0]) if is_balanced_flag else None
 
         return BalanceProfile(
             is_balanced=is_balanced_flag,
-            n_raters=n_raters,
-            n_raters_exact=True,
             n_per_subject=n_per_subject_arr,
-            n_per_rater=n_per_rater_arr,
             subject_counts=subject_counts_dict,
-            fill_rate=fill_rate,
             raters_per_subject=raters_per_subject,
         )
 
@@ -269,10 +182,7 @@ class BalanceProfile:
         """
         Construct a BalanceProfile from an NijMatrix (counts matrix).
 
-        Rater identity is gone in an nij matrix, so three fields are None:
-        n_raters (use n_raters_lower_bound for what is known), n_per_rater
-        (unknowable), and fill_rate (meaningless without n_raters). Everything
-        subject-level is exact.
+        Everything I hold is subject-level, so it is all in the counts.
 
         Parameters
         ----------
@@ -282,8 +192,7 @@ class BalanceProfile:
         Returns
         -------
         BalanceProfile
-            A profile with subject-level fields exact and rater-level fields
-            set to None.
+            A profile describing the balance structure.
         """
         n_per_subject_arr = nij.n_per_subject
 
@@ -302,12 +211,8 @@ class BalanceProfile:
 
         return BalanceProfile(
             is_balanced=is_balanced_flag,
-            n_raters=None,
-            n_raters_exact=False,
             n_per_subject=n_per_subject_arr,
-            n_per_rater=None,
             subject_counts=subject_counts_dict,
-            fill_rate=None,
             raters_per_subject=raters_per_subject,
         )
 
@@ -318,22 +223,15 @@ class BalanceProfile:
         Returns
         -------
         dict
-            Keys always include 'is_balanced', 'n_subjects', 'n_raters_exact',
-            'n_raters_lower_bound'. Adds 'n_raters' and 'fill_rate' when known.
-            If balanced, adds 'raters_per_subject'. If unbalanced, adds
-            'subject_counts'.
+            Keys always include 'is_balanced', 'n_subjects',
+            'n_raters_lower_bound'. If balanced, adds 'raters_per_subject'.
+            If unbalanced, adds 'subject_counts'.
         """
         result: dict = {
             "is_balanced": self.is_balanced,
             "n_subjects": self.n_subjects,
-            "n_raters_exact": self.n_raters_exact,
             "n_raters_lower_bound": self.n_raters_lower_bound,
         }
-
-        if self.n_raters is not None:
-            result["n_raters"] = self.n_raters
-        if self.fill_rate is not None:
-            result["fill_rate"] = round(self.fill_rate, 4)
 
         if self.is_balanced:
             result["raters_per_subject"] = self.raters_per_subject

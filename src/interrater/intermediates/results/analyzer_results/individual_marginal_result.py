@@ -13,6 +13,7 @@ from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[IndividualMarginalResult] Error"
@@ -52,10 +53,10 @@ class IndividualMarginalResult(PointEstimateResult):
     per-rater marginals. This means they can only be built from Ratings,
     never from an NijMatrix (which discards rater identity). I enforce
     that constraint here: balance_profile must not be None, and
-    balance_profile.n_raters must not be None.
+    rater_profile must be a RaterProfile, not NotComputed.
 
     For the same reason my agreement profile must carry each rater's
-    marginals, one row per rater in my balance profile: they are what my
+    marginals, one row per rater in my rater profile: they are what my
     children's chance terms are built from, and they check their parts
     against them.
 
@@ -75,8 +76,10 @@ class IndividualMarginalResult(PointEstimateResult):
         not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Must not be None for
-        individual marginal coefficients. Its n_raters must also not be
-        None (rater identity is always known).
+        individual marginal coefficients.
+    rater_profile : RaterProfile
+        The raters (inherited). Must be a RaterProfile, not NotComputed:
+        rater identity is always known for these coefficients.
     """
 
     # Attribute declaration
@@ -86,14 +89,15 @@ class IndividualMarginalResult(PointEstimateResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate individual marginal result constraints.
 
-        Enforces that balance_profile and balance_profile.n_raters are
-        not None -- individual marginal coefficients always require
+        Enforces that balance_profile is not None and rater_profile is a
+        RaterProfile -- individual marginal coefficients always require
         rater identity.
         """
 
@@ -104,11 +108,12 @@ class IndividualMarginalResult(PointEstimateResult):
                 f"individual marginal coefficients (rater identity required)."
             )
 
-        # Individual marginal coefficients always require known rater count
-        if self.balance_profile.n_raters is None:
+        # Individual marginal coefficients always require the raters
+        if isinstance(self.rater_profile, NotComputed):
             raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile.n_raters must not be None "
-                f"for individual marginal coefficients (rater identity required)"
+                f"{_ERROR_PREFIX}: rater_profile must be a RaterProfile "
+                f"for individual marginal coefficients (rater identity "
+                f"required), got {self.rater_profile}"
             )
 
         # Call parent validation (validates point, confidence_interval,
@@ -126,11 +131,11 @@ class IndividualMarginalResult(PointEstimateResult):
                 f"computed for individual marginal coefficients (rater "
                 f"identity required), got {marginals}"
             )
-        if len(marginals) != self.balance_profile.n_raters:
+        if len(marginals) != self.rater_profile.n_raters:
             raise ValueError(
                 f"{_ERROR_PREFIX}: agreement_profile has marginals for "
-                f"{len(marginals)} raters but balance_profile has "
-                f"{self.balance_profile.n_raters}"
+                f"{len(marginals)} raters but rater_profile has "
+                f"{self.rater_profile.n_raters}"
             )
 
     def _marginal_rows(self) -> np.ndarray:

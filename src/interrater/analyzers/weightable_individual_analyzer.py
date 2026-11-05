@@ -9,7 +9,7 @@ from .individual_marginal_analyzer import IndividualMarginalAnalyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.data_profiles import BalanceProfile
+    from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from ..intermediates.estimator_parts import Weights
     from ..intermediates.estimator_parts.estimator_input import EstimatorInput
     from .configs import WeightableIndividualConfig
@@ -36,6 +36,10 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
         The ratings data (from Analyzer, always required).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
+    rater_profile : RaterProfile
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. Always present here:
+        this coefficient needs rater identity.
     config : WeightableIndividualConfig
         Must be an instance of WeightableIndividualConfig or a subclass
         (CohenKappaConfig).
@@ -51,6 +55,7 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
     # Populated at parent class Analyzer
     ratings: Ratings
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile
     # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
     # Checked at this level

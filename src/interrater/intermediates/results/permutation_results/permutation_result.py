@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.bootstrap_ci_result import BootstrapCIResult
 
 _ERROR_PREFIX = "[PermutationResult] Error"
@@ -28,11 +29,9 @@ INDEPENDENT_MEAN_CAVEAT = (
 # result class (analyzer_results.result_class_for), so nothing here spells them.
 
 
-def raters_phrase(balance_profile: BalanceProfile) -> str:
-    """'4 raters', or 'at least 3 raters' when only counts were given."""
-    if balance_profile.n_raters is not None and balance_profile.n_raters_exact:
-        return f"{balance_profile.n_raters} raters"
-    return f"at least {balance_profile.n_raters_lower_bound} raters"
+def raters_phrase(rater_profile: RaterProfile) -> str:
+    """'4 raters'. A permutation result always knows its raters exactly."""
+    return f"{rater_profile.n_raters} raters"
 
 
 def interval_notes(ci: BootstrapCIResult) -> list[str]:
@@ -97,12 +96,14 @@ class PermutationResult(AnalysisResult):
         available.
     balance_profile : BalanceProfile
         Structural metadata about the full dataset (before subsetting):
-        n_subjects, n_raters, balance structure.
-    rater_names : tuple[str, ...]
-        The panel's raters, in position order, as the semantics name them
-        (injected raters included). Pairs and subsets are keyed by
-        position, e.g. (0, 2); everything shown to people -- the printed
-        table, to_frame, summary, plots -- reads these names instead.
+        n_subjects and how many ratings each got.
+    rater_profile : RaterProfile
+        The panel's raters: names in position order as the semantics name
+        them (injected raters included), how much each rated, and how much
+        each pair overlapped. Always present: permutation needs rater
+        identity. Pairs and subsets are keyed by position, e.g. (0, 2);
+        everything shown to people -- the printed table, to_frame,
+        summary, plots -- names them through rater_names.
     """
 
     # Attribute declaration
@@ -110,7 +111,7 @@ class PermutationResult(AnalysisResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
-    rater_names: tuple[str, ...]
+    rater_profile: RaterProfile
 
     # Constructor ------------------------------------------------------------ #
 
@@ -157,23 +158,31 @@ class PermutationResult(AnalysisResult):
             )
 
         try:
-            self._check_rater_names()
+            self._check_rater_profile()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-    def _check_rater_names(self) -> None:
-        """One name per rater, all text, none repeated."""
-        names = self.rater_names
-        if not isinstance(names, tuple) or not all(isinstance(n, str) for n in names):
-            raise TypeError(f"rater_names must be a tuple of str, got {names!r}")
-        if len(set(names)) != len(names):
-            raise ValueError(f"rater_names must not repeat, got {names!r}")
-        n_raters = getattr(self.balance_profile, "n_raters", None)
-        if n_raters is not None and len(names) != n_raters:
-            raise ValueError(
-                f"rater_names has {len(names)} names but the panel has "
-                f"{n_raters} raters"
+    def _check_rater_profile(self) -> None:
+        """A RaterProfile, which checks its own names and counts."""
+        from ...data_profiles.rater_profile import RaterProfile
+
+        if not isinstance(self.rater_profile, RaterProfile):
+            raise TypeError(
+                f"rater_profile must be RaterProfile, got "
+                f"{type(self.rater_profile).__name__}"
             )
+        # Both profiles describe the same panel
+        n_subjects = getattr(self.balance_profile, "n_subjects", None)
+        if n_subjects is not None and self.rater_profile.n_subjects != n_subjects:
+            raise ValueError(
+                f"rater_profile has {self.rater_profile.n_subjects} subjects "
+                f"but balance_profile has {n_subjects}"
+            )
+
+    @property
+    def rater_names(self) -> tuple[str, ...]:
+        """The raters in position order: read from rater_profile, not a copy."""
+        return self.rater_profile.rater_names
 
     def _named(self, raters: tuple[int, ...]) -> str:
         """A unit's raters by name, e.g. "ann, cat" for (0, 2)."""
@@ -254,12 +263,13 @@ class PermutationResult(AnalysisResult):
         Returns
         -------
         dict
-            Keys: coefficient_name, ci_method, balance.
+            Keys: coefficient_name, ci_method, balance, raters.
         """
         return {
             "coefficient_name": self.coefficient_name,
             "ci_method": self.ci_method,
             "balance": self.balance_profile.summary(),
+            "raters": self.rater_profile.summary(),
         }
 
     # Printed form, shared by pairs and subsets ------------------------------ #
@@ -316,7 +326,7 @@ class PermutationResult(AnalysisResult):
                 f"{n_units} {word}s"
             )
         # Keys are positions into rater_names, so those must be sound first
-        self._check_rater_names()
+        self._check_rater_profile()
         expected = result_class_for(self.coefficient_name)
         points = []
         kept = set()  # whether each computed unit kept its draws
@@ -414,7 +424,7 @@ class PermutationResult(AnalysisResult):
             lines.append(f"  ! {INDEPENDENT_MEAN_CAVEAT}")
         bp = self.balance_profile
         lines.append(
-            f"  {bp.n_subjects:,} subjects; {raters_phrase(bp)}; "
+            f"  {bp.n_subjects:,} subjects; {raters_phrase(self.rater_profile)}; "
             f"each {unit} on {pool}"
         )
 

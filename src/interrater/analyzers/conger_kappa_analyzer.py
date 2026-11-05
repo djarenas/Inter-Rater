@@ -9,6 +9,7 @@ from .individual_marginal_analyzer import IndividualMarginalAnalyzer, check_comp
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import CongerKappaResult, HypothesisTestResult
 from ..intermediates.data_profiles.balance_profile import BalanceProfile
+from ..intermediates.data_profiles.rater_profile import RaterProfile
 from .configs import CongerKappaConfig
 
 from ..intermediates.estimator_parts.estimator_input import EstimatorInput
@@ -69,6 +70,10 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         The ratings data (from Analyzer, always required).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
+    rater_profile : RaterProfile
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. Always present here:
+        this coefficient needs rater identity.
     config : CongerKappaConfig
         The analysis configuration for Conger's kappa.
     estimator_input : EstimatorInput
@@ -86,6 +91,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     # Populated at parent class Analyzer
     ratings: Ratings
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile
     # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
     # Checked at this level
@@ -290,6 +296,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            rater_profile=self.rater_profile,
             parts=self._agreement_parts(),
             kappa_max=self._kappa_max(),
             agreement_profile=AgreementProfile.from_ratings(self.ratings),

@@ -1,13 +1,16 @@
 """
-Tests for the data_profiles sub-package: BalanceProfile and RaterSharedMatrix.
+Tests for the data_profiles sub-package: BalanceProfile, RaterSharedMatrix
+and RaterProfile.
 
-BalanceProfile describes the balance structure of ratings -- whether every
-subject was rated the same number of times, and how raters and subjects
-are distributed. RaterSharedMatrix counts, for every pair of raters, how
-many subjects both of them rated.
+BalanceProfile describes the subjects -- whether every subject was rated the
+same number of times, and how many subjects got how many ratings. That much
+is in a counts matrix too, so it is built from either. RaterSharedMatrix
+counts, for every pair of raters, how many subjects both of them rated.
+RaterProfile describes the raters -- names, how much each rated, and their
+overlap -- and needs rater identity, so it is built only from Ratings.
 
-Organised bottom-up: BalanceProfile first (it has no dependencies on
-RaterSharedMatrix), then RaterSharedMatrix.
+Organised bottom-up: BalanceProfile first, then RaterSharedMatrix, then
+RaterProfile, which holds one.
 
 Hand-verified datasets from conftest anchor every test. Each is small
 enough that every property can be checked by counting on fingers.
@@ -16,11 +19,32 @@ enough that every property can be checked by counting on fingers.
 import numpy as np
 import pytest
 
+from interrater.contracts import EMPTY
+from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
+from interrater.intermediates.data_profiles.rater_profile import RaterProfile
 from interrater.intermediates.data_profiles.rater_shared_matrix import RaterSharedMatrix
 from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
+from interrater.semantics.categories import UnorderedCategories
+from interrater.semantics.ratings_semantics import RatingsSemantics
 
 from .conftest import SIMPLE_SHARED
+
+
+@pytest.fixture
+def gappy_ratings():
+    """5 subjects, raters ann, bob, cat; bob and cat each missed one subject."""
+    index = np.array([
+        [0, 0, 1],
+        [1, 1, 1],
+        [0, EMPTY, 0],
+        [1, 0, EMPTY],
+        [0, 0, 0],
+    ])
+    semantics = RatingsSemantics(
+        raters=["ann", "bob", "cat"], categories=UnorderedCategories(("x", "y")),
+    )
+    return Ratings(index, semantics)
 
 
 # -- Helpers ----------------------------------------------------------------- #
@@ -29,17 +53,12 @@ from .conftest import SIMPLE_SHARED
 def _balanced_profile(**overrides):
     """Build a valid balanced BalanceProfile, overriding specific fields.
 
-    Default: 4 subjects, 3 raters, every subject rated 3 times.
-    n_per_rater = [4, 4, 4] because 12 total ratings / 3 raters.
+    Default: 4 subjects, every subject rated 3 times.
     """
     defaults = dict(
         is_balanced=True,
-        n_raters=3,
-        n_raters_exact=True,
         n_per_subject=np.array([3, 3, 3, 3]),
-        n_per_rater=np.array([4, 4, 4]),
         subject_counts={3: 4},
-        fill_rate=1.0,
         raters_per_subject=3,
     )
     defaults.update(overrides)
@@ -49,18 +68,13 @@ def _balanced_profile(**overrides):
 def _unbalanced_profile(**overrides):
     """Build a valid unbalanced BalanceProfile, overriding specific fields.
 
-    Default: 4 subjects, 4 raters, n_per_subject = [3, 2, 4, 2].
+    Default: 4 subjects, n_per_subject = [3, 2, 4, 2].
     subject_counts = {2: 2, 3: 1, 4: 1}.
-    fill_rate = 11 / 16.
     """
     defaults = dict(
         is_balanced=False,
-        n_raters=4,
-        n_raters_exact=False,
         n_per_subject=np.array([3, 2, 4, 2]),
-        n_per_rater=np.array([3, 3, 3, 2]),
         subject_counts={2: 2, 3: 1, 4: 1},
-        fill_rate=11.0 / 16.0,
         raters_per_subject=None,
     )
     defaults.update(overrides)
@@ -79,14 +93,12 @@ class TestBalanceProfileConstruction:
         """A balanced profile with consistent fields is accepted."""
         bp = _balanced_profile()
         assert bp.is_balanced is True
-        assert bp.n_raters == 3
         assert bp.raters_per_subject == 3
 
     def test_unbalanced_valid(self):
         """An unbalanced profile with consistent fields is accepted."""
         bp = _unbalanced_profile()
         assert bp.is_balanced is False
-        assert bp.n_raters == 4
         assert bp.raters_per_subject is None
 
     def test_frozen(self):
@@ -99,20 +111,11 @@ class TestBalanceProfileConstruction:
 class TestBalanceProfileValidationRejects:
     """BalanceProfile rejects invalid field values."""
 
-    def test_n_raters_not_positive(self):
-        """n_raters must be a positive integer."""
-        with pytest.raises(ValueError, match="n_raters must be positive int"):
-            _balanced_profile(n_raters=0)
-
-    def test_n_raters_not_int(self):
-        """n_raters rejects float even if whole number."""
-        with pytest.raises(ValueError, match="n_raters must be positive int"):
-            _balanced_profile(n_raters=3.0)
-
-    def test_n_raters_exact_not_bool(self):
-        """n_raters_exact must be bool, not int."""
-        with pytest.raises(TypeError, match="n_raters_exact must be bool"):
-            _balanced_profile(n_raters_exact=1)
+    def test_no_rater_fields(self):
+        """The rater side is RaterProfile's: these are not mine to hold."""
+        for field in ("n_raters", "n_raters_exact", "n_per_rater", "fill_rate"):
+            with pytest.raises(TypeError, match=f"unexpected keyword argument '{field}'"):
+                _balanced_profile(**{field: None})
 
     def test_n_per_subject_not_array(self):
         """n_per_subject must be a numpy array, not a list."""
@@ -129,30 +132,10 @@ class TestBalanceProfileValidationRejects:
         with pytest.raises(ValueError, match="must be > 0"):
             _balanced_profile(n_per_subject=np.array([3, 0, 3, 3]))
 
-    def test_n_per_rater_not_array(self):
-        """n_per_rater must be a numpy array, not a list."""
-        with pytest.raises(TypeError, match="n_per_rater must be numpy"):
-            _balanced_profile(n_per_rater=[4, 4, 4])
-
-    def test_fill_rate_out_of_range(self):
-        """fill_rate must be in [0, 1]."""
-        with pytest.raises(ValueError, match="fill_rate must be in"):
-            _balanced_profile(fill_rate=1.5)
-
-    def test_fill_rate_not_numeric(self):
-        """fill_rate must be a number, not a string."""
-        with pytest.raises(TypeError, match="fill_rate must be float"):
-            _balanced_profile(fill_rate="high")
-
-    def test_n_raters_exact_without_n_raters(self):
-        """n_raters_exact=True requires n_raters to be set."""
-        with pytest.raises(ValueError, match="n_raters_exact=True but n_raters is None"):
-            _balanced_profile(n_raters=None, n_raters_exact=True)
-
     def test_error_prefix(self):
         """Every error starts with [BalanceProfile] Error."""
         with pytest.raises(ValueError, match=r"\[BalanceProfile\] Error"):
-            _balanced_profile(n_raters=0)
+            _balanced_profile(n_per_subject=np.array([3, 0, 3, 3]))
 
 
 class TestBalanceProfileConsistencyRejects:
@@ -197,58 +180,30 @@ class TestBalanceProfileProperties:
         bp = _balanced_profile()
         assert bp.n_raters_lower_bound == 3
 
-    def test_n_raters_display_exact(self):
-        """Exact n_raters displays as 'n_raters=X'."""
-        bp = _balanced_profile(n_raters_exact=True)
-        assert bp.n_raters_display == "n_raters=3"
-
-    def test_n_raters_display_lower_bound(self):
-        """Approximate n_raters displays as 'n_raters>=X'."""
-        bp = _unbalanced_profile(n_raters_exact=False)
-        # The >= symbol is a unicode ≥
-        assert "≥" in bp.n_raters_display
-        assert "4" in bp.n_raters_display
 
 
 class TestBalanceProfileFromNijMatrix:
     """BalanceProfile.from_nij_matrix factory method."""
 
     def test_from_balanced(self, balanced_nij):
-        """Balanced nij matrix produces balanced profile with None rater fields."""
+        """Balanced nij matrix produces a balanced profile, every field exact."""
         bp = BalanceProfile.from_nij_matrix(balanced_nij)
         assert bp.is_balanced is True
-        assert bp.n_raters is None
-        assert bp.n_raters_exact is False
         assert bp.raters_per_subject == 3
         np.testing.assert_array_equal(bp.n_per_subject, [3, 3, 3, 3])
         assert bp.subject_counts == {3: 4}
-        # Rater-level fields are None -- rater identity is gone in nij
-        assert bp.n_per_rater is None
-        assert bp.fill_rate is None
-        # Lower bound is still available
+        # All counts can say about the raters is a lower bound
         assert bp.n_raters_lower_bound == 3
 
     def test_from_unbalanced(self, unbalanced_nij):
-        """Unbalanced nij matrix produces unbalanced profile with None rater fields."""
+        """Unbalanced nij matrix produces an unbalanced profile, every field exact."""
         bp = BalanceProfile.from_nij_matrix(unbalanced_nij)
         assert bp.is_balanced is False
-        assert bp.n_raters is None
-        assert bp.n_raters_exact is False
         assert bp.raters_per_subject is None
         np.testing.assert_array_equal(bp.n_per_subject, [3, 2, 4, 2])
         assert bp.subject_counts == {2: 2, 3: 1, 4: 1}
-        # Rater-level fields are None
-        assert bp.n_per_rater is None
-        assert bp.fill_rate is None
         # Lower bound = max of n_per_subject
         assert bp.n_raters_lower_bound == 4
-
-    def test_rater_fields_none_from_nij(self, balanced_nij):
-        """n_raters, n_per_rater, and fill_rate are all None from nij."""
-        bp = BalanceProfile.from_nij_matrix(balanced_nij)
-        assert bp.n_raters is None
-        assert bp.n_per_rater is None
-        assert bp.fill_rate is None
 
     def test_all_zeros_raises(self):
         """Nij matrix where every row sums to zero raises."""
@@ -266,8 +221,6 @@ class TestBalanceProfileSummary:
         s = bp.summary()
         assert s["is_balanced"] is True
         assert s["n_subjects"] == 4
-        assert s["n_raters"] == 3
-        assert s["n_raters_exact"] is True
         assert s["n_raters_lower_bound"] == 3
         assert s["raters_per_subject"] == 3
         assert "subject_counts" not in s
@@ -281,14 +234,10 @@ class TestBalanceProfileSummary:
         assert s["subject_counts"] == {2: 2, 3: 1, 4: 1}
         assert "raters_per_subject" not in s
 
-    def test_summary_from_nij_omits_unknown_fields(self, balanced_nij):
-        """Summary from nij omits n_raters and fill_rate (both None)."""
-        bp = BalanceProfile.from_nij_matrix(balanced_nij)
-        s = bp.summary()
-        assert "n_raters" not in s
-        assert "fill_rate" not in s
-        assert s["n_raters_exact"] is False
-        assert s["n_raters_lower_bound"] == 3
+    def test_summary_has_no_rater_fields(self, balanced_nij):
+        """The same keys from ratings or counts: the subject side only."""
+        s = BalanceProfile.from_nij_matrix(balanced_nij).summary()
+        assert set(s) == {"is_balanced", "n_subjects", "n_raters_lower_bound", "raters_per_subject"}
 
 
 # ============================================================================ #
@@ -478,3 +427,105 @@ class TestRaterSharedMatrixEquality:
         """Comparison with a non-RaterSharedMatrix returns NotImplemented."""
         m = RaterSharedMatrix(SIMPLE_SHARED.copy())
         assert m != "not a matrix"
+
+
+class TestRaterSharedMatrixBuildFromRatings:
+    """Built from Ratings, and kept as my own copy."""
+
+    def test_counts_match_hand_counts(self, gappy_ratings):
+        m = RaterSharedMatrix.build_from_ratings(gappy_ratings)
+        present = gappy_ratings.category_index != EMPTY
+        for a in range(m.n_raters):
+            for b in range(m.n_raters):
+                assert m.shared[a, b] == int((present[:, a] & present[:, b]).sum())
+
+    def test_edit_to_callers_array_does_not_reach_it(self):
+        arr = SIMPLE_SHARED.copy()
+        m = RaterSharedMatrix(arr)
+        arr[0, 0] = 99
+        assert m.shared[0, 0] == SIMPLE_SHARED[0, 0]
+
+
+# ============================================================================ #
+#                               RaterProfile                                   #
+# ============================================================================ #
+
+
+def _rater_profile(**overrides):
+    """A valid RaterProfile: 3 raters, 4 subjects, rater c missed one."""
+    per = np.array([4, 4, 3])
+    defaults = dict(
+        rater_names=("a", "b", "c"),
+        n_subjects=4,
+        n_per_rater=per,
+        rater_overlap=RaterSharedMatrix(np.minimum.outer(per, per)),
+    )
+    defaults.update(overrides)
+    return RaterProfile(**defaults)
+
+
+class TestRaterProfile:
+    """The raters: names, counts and overlap, checked against each other."""
+
+    def test_valid(self):
+        p = _rater_profile()
+        assert p.n_raters == 3
+        assert p.fill_rate == pytest.approx(11 / 12)
+
+    def test_fill_rate_is_derived(self):
+        """Computed from the counts, so it cannot disagree with them."""
+        with pytest.raises(TypeError, match="unexpected keyword argument 'fill_rate'"):
+            _rater_profile(fill_rate=0.5)
+
+    def test_names_must_be_a_tuple_of_text(self):
+        with pytest.raises(TypeError, match="rater_names must be a tuple of str"):
+            _rater_profile(rater_names=["a", "b", "c"])
+        with pytest.raises(TypeError, match="rater_names must be a tuple of str"):
+            _rater_profile(rater_names=("a", 1, "c"))
+
+    def test_names_must_not_repeat(self):
+        with pytest.raises(ValueError, match="rater_names must not repeat"):
+            _rater_profile(rater_names=("a", "a", "c"))
+
+    def test_one_count_per_rater(self):
+        with pytest.raises(ValueError, match=r"n_per_rater has shape \(3,\) but there are 2 raters"):
+            _rater_profile(rater_names=("a", "b"))
+
+    def test_counts_within_the_subjects(self):
+        per = np.array([5, 4, 3])
+        with pytest.raises(ValueError, match="between 0 and the 4 subjects"):
+            _rater_profile(n_per_rater=per, rater_overlap=RaterSharedMatrix(np.minimum.outer(per, per)))
+
+    def test_overlap_diagonal_matches_the_counts(self):
+        with pytest.raises(ValueError, match="rater_overlap says the raters rated"):
+            _rater_profile(rater_overlap=RaterSharedMatrix(np.full((3, 3), 3)))
+
+    def test_error_prefix(self):
+        with pytest.raises(ValueError, match=r"\[RaterProfile\] Error"):
+            _rater_profile(rater_names=("a", "a", "c"))
+
+    def test_edit_to_callers_counts_does_not_reach_it(self):
+        per = np.array([4, 4, 3])
+        p = _rater_profile(n_per_rater=per)
+        per[0] = 0
+        assert p.n_per_rater[0] == 4
+
+    def test_build_from_ratings(self, gappy_ratings):
+        p = RaterProfile.build_from_ratings(gappy_ratings)
+        present = gappy_ratings.category_index != EMPTY
+        assert p.rater_names == tuple(gappy_ratings.semantics.raters)
+        assert p.n_subjects == gappy_ratings.n_subjects
+        np.testing.assert_array_equal(p.n_per_rater, present.sum(axis=0))
+        assert p.fill_rate == pytest.approx(present.mean())
+        np.testing.assert_array_equal(p.rater_overlap.shared, present.T.astype(int) @ present.astype(int))
+
+    def test_summary(self):
+        s = _rater_profile().summary()
+        assert s == {
+            "rater_names": ["a", "b", "c"],
+            "n_raters": 3,
+            "n_subjects": 4,
+            "n_per_rater": [4, 4, 3],
+            "fill_rate": round(11 / 12, 4),
+            "rater_overlap": [[4, 4, 3], [4, 4, 3], [3, 3, 3]],
+        }

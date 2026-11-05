@@ -11,6 +11,7 @@ from .individual_marginal_analyzer import IndividualMarginalAnalyzer, check_comp
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import LightKappaResult, HypothesisTestResult
 from ..intermediates.data_profiles.balance_profile import BalanceProfile
+from ..intermediates.data_profiles.rater_profile import RaterProfile
 from .configs import LightKappaConfig
 
 from ..intermediates.estimator_parts.estimator_input import EstimatorInput
@@ -71,6 +72,10 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         The ratings data (from Analyzer, always required).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
+    rater_profile : RaterProfile
+        Computed from ratings: who the raters are, how much each
+        rated, how much each pair overlapped. Always present here:
+        this coefficient needs rater identity.
     config : LightKappaConfig
         The analysis configuration for Light's kappa.
     estimator_input : EstimatorInput
@@ -89,6 +94,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     # Populated at parent class Analyzer
     ratings: Ratings
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile
     # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
     # Checked at this level
@@ -293,7 +299,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         Only percentile and bca intervals: there is no closed-form null
         variance for Light's kappa.
         """
-        n_pairs = comb(self.balance_profile.n_raters, 2)
+        n_pairs = comb(self.rater_profile.n_raters, 2)
 
         pair_parts, pair_kappa_max = self._pairs()
         return LightKappaResult(
@@ -301,6 +307,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
+            rater_profile=self.rater_profile,
             parts=NotComputed(PARTS_NOT_COMPUTED),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=AgreementProfile.from_ratings(self.ratings),

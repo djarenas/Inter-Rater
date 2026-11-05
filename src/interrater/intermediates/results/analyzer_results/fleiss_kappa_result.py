@@ -15,6 +15,7 @@ from .point_estimate_result import PointEstimateResult
 if TYPE_CHECKING:
     from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[FleissKappaResult] Error"
@@ -64,6 +65,8 @@ class FleissKappaResult(PointEstimateResult):
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
+    rater_profile : RaterProfile | NotComputed
+        The raters (inherited). NotComputed when built from counts.
     parts : AgreementParts
         Po and Pe (inherited). Always computed for Fleiss' kappa.
     kappa_max : NotComputed
@@ -95,6 +98,7 @@ class FleissKappaResult(PointEstimateResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile | None
+    rater_profile: RaterProfile | NotComputed
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

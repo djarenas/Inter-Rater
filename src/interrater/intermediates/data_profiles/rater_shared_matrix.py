@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ...array_utils import pairwise_overlap
 from ...contracts import MIN_OVERLAP_HARD
+
+if TYPE_CHECKING:
+    from ...data_objects.ratings import Ratings
 
 _ERROR_PREFIX = "[RaterSharedMatrix] Error"
 
@@ -64,8 +69,14 @@ class RaterSharedMatrix:
     # Constructor ------------------------------------------------------------  #
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "shared", np.asarray(self.shared))
+        # My own copy, so a later edit to the caller's array cannot reach me
+        object.__setattr__(self, "shared", np.array(self.shared, copy=True))
         self._validate()
+
+    @classmethod
+    def build_from_ratings(cls, ratings: Ratings) -> RaterSharedMatrix:
+        """Count, for every pair of raters in ``ratings``, the subjects both rated."""
+        return cls(pairwise_overlap(ratings.category_index))
 
     def _validate(self) -> None:
         shared = self.shared

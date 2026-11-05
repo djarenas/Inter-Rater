@@ -478,7 +478,7 @@ class TestPairwiseComputationA:
         result = PairwisePermutationAnalysis(ratings, config).run()
         for pair, unit in result.pair_results.items():
             assert isinstance(unit, CohenKappaResult), pair
-            assert unit.balance_profile.n_raters == 2
+            assert unit.rater_profile.n_raters == 2
 
     def test_balanced_data_all_subjects_shared(self):
         """With balanced data every pair should share all subjects."""
@@ -941,7 +941,7 @@ class TestPairwiseBalanceProfile:
         bp = result.balance_profile
         assert isinstance(bp, BalanceProfile)
         assert bp.n_subjects == 20
-        assert bp.n_raters == 3
+        assert result.rater_profile.n_raters == 3
 
 
 # ------------------------------------------------------------------ #
