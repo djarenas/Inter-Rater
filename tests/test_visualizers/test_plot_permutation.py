@@ -108,3 +108,23 @@ def test_independent_mean_carries_the_caveat(ratings, plot):
 def test_correlated_mean_has_no_caveat(ratings, plot):
     legend = _legend(_figures(ratings, "correlated")[plot])
     assert "too narrow" not in legend
+
+
+@pytest.mark.parametrize("plot, title, ylabel", [
+    ("pairwise", "Pairwise Cohen's κ (correlated bootstrap)", "Cohen's κ"),
+    ("sorted", "Subset k=3 Fleiss' κ — sorted by value (correlated bootstrap)", "Fleiss' κ"),
+    ("strip", "Fleiss' κ across subset sizes (correlated bootstrap)", "Fleiss' κ"),
+])
+def test_titles_name_the_coefficient(ratings, plot, title, ylabel):
+    """Named as the coefficient's result class names it, not 'cohen_kappa'."""
+    ax = _figures(ratings, "correlated")[plot].axes[0]
+    assert ax.get_title() == title
+    assert ax.get_ylabel() == ylabel
+
+
+def test_pairwise_labels_name_the_raters(ratings):
+    """Rater columns and partner labels use the result's names, never "Rater 0"."""
+    ax = _figures(ratings, "correlated")["pairwise"].axes[0]
+    ticks = [t.get_text() for t in ax.get_xticklabels()]
+    assert ticks == ["rater0", "rater1", "rater2", "rater3"]
+    assert {t.get_text() for t in ax.texts} <= set(ticks)

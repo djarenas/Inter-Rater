@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -82,6 +82,12 @@ class BrennanPredigerResult(PointEstimateResult):
     """
 
     # Attribute declaration
+
+    # What I am called: the config name, my printed name and my symbol.
+    # Every other place that names this coefficient reads these.
+    COEFFICIENT: ClassVar[str] = "brennan_prediger"
+    NAME:        ClassVar[str] = "Brennan-Prediger"
+    SYMBOL:      ClassVar[str] = "B-P"
 
     # Inherited from parent class PointEstimateResult
     point: float
@@ -199,9 +205,6 @@ class BrennanPredigerResult(PointEstimateResult):
     # Public API -------------------------------------------------------------  #
 
     # Printed form: see PointEstimateResult.__str__ ----------------------- #
-
-    def _name(self) -> str:
-        return "Brennan-Prediger"
 
     def _kappa_max_note(self) -> str:
         return "κ_max not computed (fixed chance term)"

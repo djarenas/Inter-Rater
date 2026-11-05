@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -81,6 +81,12 @@ class CongerKappaResult(IndividualMarginalResult):
     """
 
     # Attribute declaration
+
+    # What I am called: the config name, my printed name and my symbol.
+    # Every other place that names this coefficient reads these.
+    COEFFICIENT: ClassVar[str] = "conger_kappa"
+    NAME:        ClassVar[str] = "Conger's κ"
+    SYMBOL:      ClassVar[str] = "κ"
 
     # Inherited from IndividualMarginalResult (which validates
     # balance_profile is not None and n_raters is not None)
@@ -177,9 +183,6 @@ class CongerKappaResult(IndividualMarginalResult):
     # Public API ------------------------------------------------------------- #
 
     # Printed form: see PointEstimateResult.__str__ ----------------------- #
-
-    def _name(self) -> str:
-        return "Conger's κ"
 
     def _kappa_max_note(self) -> str:
         if isinstance(self.kappa_max, NotComputed):

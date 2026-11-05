@@ -308,6 +308,15 @@ class TestInjectionPipeline:
         """3 real raters + 1 injected: 'all' runs k = 2, 3 and 4."""
         assert self._subset_with_one_injected("all").ks == [2, 3, 4]
 
+    def test_results_carry_the_semantics_names_injected_included(self):
+        """The names come from the ratings after injection, in position order."""
+        result = self._subset_with_one_injected(4).run()
+        names = result.rater_names
+        assert names[:3] == ("r0", "r1", "r2")
+        assert len(names) == 4 and names[3] not in names[:3]
+        assert result[4].rater_names == names
+        assert result[4].to_frame()["raters"].iloc[0] == ", ".join(names)
+
     def test_subset_k_may_include_injected_raters(self):
         """k = 4 was refused as 'exceeds n_raters=3' before 2.1.0."""
         assert self._subset_with_one_injected(4).ks == [4]
@@ -592,6 +601,16 @@ class TestPairwiseComputationB:
             r1.pair_results[pair].bootstrap_distribution,
             r2.pair_results[pair].bootstrap_distribution,
         )
+
+
+class TestPairwiseRaterNames:
+    """A pairwise run names its raters as the semantics do."""
+
+    def test_names_from_the_semantics(self):
+        result = PairwisePermutationAnalysis(_make_ratings(20, 3), _pairwise_config()).run()
+        assert result.rater_names == ("r0", "r1", "r2")
+        assert list(result.to_frame()["raters"]) == ["r0, r1", "r0, r2", "r1, r2"]
+        assert list(result.to_frame()["positions"]) == ["0, 1", "0, 2", "1, 2"]
 
 
 class TestPairwiseSparseData:

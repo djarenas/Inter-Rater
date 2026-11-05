@@ -169,6 +169,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             coefficient_name=self.config.coefficient_to_compute,
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
+            rater_names=self._rater_names(),
             per_k_results=per_k_results,
             ks=list(self.ks),
         )
@@ -328,6 +329,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             coefficient_name=self.config.coefficient_to_compute,
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
+            rater_names=self._rater_names(),
             subset_results=subset_results,
             n_subsets=n_subsets,
             subset_k=k,

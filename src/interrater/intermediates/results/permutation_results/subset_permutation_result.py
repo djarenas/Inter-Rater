@@ -9,7 +9,8 @@ import numpy as np
 
 from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..ci_results import BootstrapCIResult
-from .permutation_result import PermutationResult, coefficient_label
+from ..analyzer_results import result_class_for
+from .permutation_result import PermutationResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
@@ -81,6 +82,8 @@ class SubsetPermutationResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
+    rater_names : tuple[str, ...]
+        Inherited. The panel's raters in position order; keys index into it.
     subset_results : dict[tuple[int, ...], PointEstimateResult | NotComputed]
         Each subset's result, computed on the subjects at least two of its
         raters rated: its balance profile says how many, since a subset
@@ -119,6 +122,7 @@ class SubsetPermutationResult(PermutationResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
+    rater_names: tuple[str, ...]
 
     # Each subset (rater heterogeneity)
     subset_results: dict   # values are a coefficient's result, or NotComputed
@@ -282,7 +286,7 @@ class SubsetPermutationResult(PermutationResult):
         MAX_ROWS_PRINTED subsets, a line points to to_frame() instead of
         the list. See PermutationResult._printed.
         """
-        name, _ = coefficient_label(self.coefficient_name)
+        name = result_class_for(self.coefficient_name).NAME
         word = "subset" if self.n_subsets == 1 else "subsets"
         return self._printed(
             title=f"Subsets of {self.subset_k} raters, {name}, {self.n_subsets:,} {word}",
@@ -304,15 +308,16 @@ class SubsetPermutationResult(PermutationResult):
         Returns
         -------
         dict
-            Parent keys (coefficient_name, ci_method, balance); subset_k,
-            n_subsets, mean_over_subsets; subset_results (each subset's own
-            summary, or ``{"not_computed": reason}``); and, when the mean
+            Parent keys (coefficient_name, ci_method, balance); rater_names;
+            subset_k, n_subsets, mean_over_subsets; subset_results, a list
+            with one entry per subset:
+            ``{"raters": [names], "positions": [i, j], "result": its own
+            summary or {"not_computed": reason}}``; and, when the mean
             was bootstrapped, bootstrap_mean_method,
             mean_ci (with its draw counts), mean_ci_lower, mean_ci_upper,
             bootstrap_draws_mean and bootstrap_se (the mean and standard
             error of the usable draws of the mean, None when too few are
             usable).
-            Tuple keys are converted to strings for JSON compatibility.
         """
         result = super().summary()
 
@@ -320,9 +325,8 @@ class SubsetPermutationResult(PermutationResult):
         result["subset_k"] = self.subset_k
         result["n_subsets"] = self.n_subsets
         result["mean_over_subsets"] = self.mean_over_subsets
-        result["subset_results"] = {
-            str(k): v.summary() for k, v in self.subset_results.items()
-        }
+        result["rater_names"] = list(self.rater_names)
+        result["subset_results"] = self._unit_summaries(self.subset_results)
 
         # Bootstrap
         if self.bootstrap_mean_method is not None:

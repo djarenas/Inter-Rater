@@ -328,6 +328,11 @@ def _many_units(n_raters: int, k: int) -> dict:
     return {s: 0.5 for s in itertools.combinations(range(n_raters), k)}
 
 
+# The panel's raters, in position order: pairs and subsets are keyed by
+# position, and everything printed names them
+RATER_NAMES = ("ann", "bob", "cat")
+
+
 # -- Pairwise test data: 3 raters → C(3,2) = 3 pairs ----------------------- #
 
 PAIRS = {(0, 1): 0.6, (0, 2): 0.4, (1, 2): 0.5}
@@ -340,6 +345,7 @@ def _pairwise_kwargs(**overrides):
         coefficient_name="cohen_kappa",
         ci_method="percentile",
         balance_profile=_bp(),
+        rater_names=RATER_NAMES,
         pair_results=_units(PAIRS),
         n_pairs=3,
         mean_over_pairs=PAIRWISE_MEAN,
@@ -376,6 +382,7 @@ def _subset_kwargs(**overrides):
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
         balance_profile=_bp(),
+        rater_names=RATER_NAMES,
         subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
         n_subsets=3,
         subset_k=2,
@@ -420,6 +427,7 @@ def _multi_k_kwargs(**overrides):
         coefficient_name="fleiss_kappa",
         ci_method="percentile",
         balance_profile=bp,
+        rater_names=RATER_NAMES,
         per_k_results={
             2: SubsetPermutationResult(**_subset_kwargs(balance_profile=bp)),
             3: SubsetPermutationResult(**_subset_k3_kwargs(balance_profile=bp)),
@@ -1239,7 +1247,7 @@ class TestHypothesisTestResultStr:
         assert "z = 3.42" in s
         assert "reject" in s
         assert "α = 0.05" in s
-        assert "H₀: fleiss_kappa = 0" in s
+        assert "H₀: Fleiss' κ = 0" in s
 
     def test_permutation_format(self):
         """Permutation: shows n_permutations."""
@@ -1255,7 +1263,7 @@ class TestHypothesisTestResultStr:
         s = str(r)
         assert "5000 permutations" in s
         assert "reject" in s
-        assert "H₀: fleiss_kappa = 0" in s
+        assert "H₀: Fleiss' κ = 0" in s
 
     def test_very_small_p_value(self):
         """p < 0.000001 uses 'p < 0.000001' format."""
@@ -1400,7 +1408,7 @@ class TestHypothesisTestResultCounts:
             self._result(coefficient="fleiss")
 
     def test_str_names_coefficient(self):
-        assert str(self._result()).startswith("H₀: fleiss_kappa = 0")
+        assert str(self._result()).startswith("H₀: Fleiss' κ = 0")
 
     def test_summary_has_counts(self):
         d = self._result().summary()
@@ -1413,57 +1421,121 @@ class TestHypothesisTestResultCounts:
 # ============================================================================ #
 
 
+class TestCoefficientNames:
+    """
+    Every coefficient's config name, printed name and symbol are declared
+    once, on its own result class. Everything that shows a coefficient --
+    printed results, permutation tables, hypothesis tests, plots -- reads
+    them there, through result_class_for. There used to be four tables and
+    three spellings.
+    """
+
+    LEAVES = [
+        FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult,
+        KrippendorffAlphaResult, CohenKappaResult, CongerKappaResult, LightKappaResult,
+    ]
+
+    @pytest.mark.parametrize("cls", LEAVES, ids=lambda c: c.__name__)
+    def test_each_class_declares_its_own(self, cls):
+        """Declared on the class itself, not inherited, and not a dataclass field."""
+        for attr in ("COEFFICIENT", "NAME", "SYMBOL"):
+            assert vars(cls).get(attr), (cls.__name__, attr)
+        assert "_name" not in vars(cls)
+        assert {f.name for f in dataclasses.fields(cls)}.isdisjoint({"COEFFICIENT", "NAME", "SYMBOL"})
+
+    def test_one_class_per_coefficient(self):
+        from interrater.intermediates.results.analyzer_results import COEFFICIENT_RESULTS
+
+        assert sorted(COEFFICIENT_RESULTS.values(), key=lambda c: c.__name__) == sorted(
+            self.LEAVES, key=lambda c: c.__name__,
+        )
+        for coefficient, cls in COEFFICIENT_RESULTS.items():
+            assert cls.COEFFICIENT == coefficient
+
+    def test_every_coefficient_the_package_runs_has_a_name(self):
+        from interrater.contracts import (
+            PAIRWISE_PERMUTATION_COEFFICIENTS,
+            SUBSET_PERMUTATION_COEFFICIENTS,
+        )
+        from interrater.intermediates.results.analyzer_results import COEFFICIENT_RESULTS
+        from interrater.intermediates.results.hypothesis_test_result import TESTED_COEFFICIENTS
+
+        known = set(COEFFICIENT_RESULTS)
+        assert TESTED_COEFFICIENTS <= known
+        assert PAIRWISE_PERMUTATION_COEFFICIENTS <= known
+        assert SUBSET_PERMUTATION_COEFFICIENTS <= known
+
+    def test_names_are_greek(self):
+        from interrater.intermediates.results.analyzer_results import result_class_for
+
+        assert result_class_for("fleiss_kappa").NAME == "Fleiss' κ"
+        assert result_class_for("scotts_pi").SYMBOL == "π"
+        assert result_class_for("krippendorff_alpha").NAME == "Krippendorff's α"
+
+    def test_unknown_name_raises(self):
+        from interrater.intermediates.results.analyzer_results import result_class_for
+
+        with pytest.raises(ValueError, match="unknown coefficient 'fleis_kappa'"):
+            result_class_for("fleis_kappa")
+
+    def test_printed_result_uses_the_name(self):
+        r = FleissKappaResult(
+            0.6, None, None, _bp(), ci_method="bca", weights_type="identity", **_pooled(0.6),
+        )
+        assert str(r).startswith("Fleiss' κ = 0.600")
+
+
 class TestPermutationResult:
     """Base class: coefficient_name, ci_method, balance_profile."""
 
     def test_valid_construction(self):
-        r = PermutationResult("cohen_kappa", "percentile", _bp())
+        r = PermutationResult("cohen_kappa", "percentile", _bp(), RATER_NAMES)
         assert r.coefficient_name == "cohen_kappa"
         assert r.ci_method == "percentile"
 
     def test_is_analysis_result(self):
-        r = PermutationResult("cohen_kappa", "bca", _bp())
+        r = PermutationResult("cohen_kappa", "bca", _bp(), RATER_NAMES)
         assert isinstance(r, AnalysisResult)
 
     def test_coefficient_name_not_str(self):
         """Non-str coefficient_name raises TypeError (not ValueError)."""
         with pytest.raises(TypeError, match="coefficient_name must be str"):
-            PermutationResult(42, "percentile", _bp())
+            PermutationResult(42, "percentile", _bp(), RATER_NAMES)
 
     def test_coefficient_name_empty(self):
         with pytest.raises(ValueError, match="coefficient_name must be non-empty"):
-            PermutationResult("", "percentile", _bp())
+            PermutationResult("", "percentile", _bp(), RATER_NAMES)
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
-            PermutationResult("cohen_kappa", 42, _bp())
+            PermutationResult("cohen_kappa", 42, _bp(), RATER_NAMES)
 
     def test_ci_method_parametric_null(self):
         """parametric_null is not available for permutation results."""
         with pytest.raises(ValueError, match="ci_method must be"):
-            PermutationResult("cohen_kappa", "parametric_null", _bp())
+            PermutationResult("cohen_kappa", "parametric_null", _bp(), RATER_NAMES)
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
-            PermutationResult("cohen_kappa", "invalid", _bp())
+            PermutationResult("cohen_kappa", "invalid", _bp(), RATER_NAMES)
 
     def test_balance_profile_none(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            PermutationResult("cohen_kappa", "percentile", None)
+            PermutationResult("cohen_kappa", "percentile", None, RATER_NAMES)
 
     def test_balance_profile_wrong_type(self):
         with pytest.raises(TypeError, match="balance_profile must be BalanceProfile"):
-            PermutationResult("cohen_kappa", "percentile", {"n_raters": 3})
+            PermutationResult("cohen_kappa", "percentile", {"n_raters": 3}, RATER_NAMES)
 
     def test_summary_keys(self):
-        d = PermutationResult("fleiss_kappa", "bca", _bp()).summary()
+        d = PermutationResult("fleiss_kappa", "bca", _bp(), RATER_NAMES).summary()
         assert d["coefficient_name"] == "fleiss_kappa"
         assert d["ci_method"] == "bca"
         assert isinstance(d["balance"], dict)
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[PermutationResult\] Error"):
-            PermutationResult("", "percentile", _bp())
+            PermutationResult("", "percentile", _bp(), RATER_NAMES)
 
 
 # ============================================================================ #
@@ -1706,6 +1778,7 @@ class TestPairwisePermutationResultValidation:
         """2.0.0 refused draws above 20 pairs; there is no limit now."""
         values = _many_units(7, 2)
         r = PairwisePermutationResult(**_pairwise_kwargs(
+            rater_names=tuple(f"r{i}" for i in range(7)),
             pair_results=_units(values),
             n_pairs=len(values),
         ))
@@ -1755,8 +1828,11 @@ class TestPairwisePermutationResultSummary:
         assert d["mean_over_pairs"] == PAIRWISE_MEAN
         assert d["coefficient_name"] == "cohen_kappa"
         # Tuple keys stringified for JSON; each pair is its own summary
-        assert d["pair_results"]["(0, 1)"]["point"] == 0.6
-        assert d["pair_results"]["(0, 1)"]["ci_lower"] == 0.40
+        assert d["rater_names"] == ["ann", "bob", "cat"]
+        first = d["pair_results"][0]
+        assert (first["raters"], first["positions"]) == (["ann", "bob"], [0, 1])
+        assert first["result"]["point"] == 0.6
+        assert first["result"]["ci_lower"] == 0.40
 
     def test_with_bootstrap(self):
         d = PairwisePermutationResult(**_pairwise_with_bootstrap()).summary()
@@ -1775,7 +1851,7 @@ class TestPairwisePermutationResultSummary:
         d = PairwisePermutationResult(**_pairwise_kwargs(
             pair_results=units, mean_over_pairs=0.5,
         )).summary()
-        assert d["pair_results"]["(1, 2)"] == {
+        assert d["pair_results"][2]["result"] == {
             "not_computed": "raters 1, 2 share 0 subjects",
         }
 
@@ -1783,7 +1859,7 @@ class TestPairwisePermutationResultSummary:
         d = PairwisePermutationResult(**_pairwise_kwargs(
             pair_results=_units(PAIRS, keep_draws=False),
         )).summary()
-        assert d["pair_results"]["(0, 1)"]["bootstrap_se"] == {
+        assert d["pair_results"][0]["result"]["bootstrap_se"] == {
             "not_computed": "draws not kept: keep_draws false",
         }
 
@@ -2000,6 +2076,7 @@ class TestSubsetPermutationResultValidation:
         """2.0.0 refused draws above 120 subsets; there is no limit now."""
         values = _many_units(17, 2)
         r = SubsetPermutationResult(**_subset_kwargs(
+            rater_names=tuple(f"r{i}" for i in range(17)),
             subset_results=_units(values, "fleiss_kappa"),
             n_subsets=len(values),
         ))
@@ -2050,7 +2127,9 @@ class TestSubsetPermutationResultSummary:
         assert d["mean_over_subsets"] == SUBSET_K2_MEAN
         assert d["coefficient_name"] == "fleiss_kappa"
         # Tuple keys stringified for JSON; each subset is its own summary
-        assert d["subset_results"]["(0, 1)"]["point"] == 0.6
+        first = d["subset_results"][0]
+        assert (first["raters"], first["positions"]) == (["ann", "bob"], [0, 1])
+        assert first["result"]["point"] == 0.6
 
     def test_with_bootstrap(self):
         d = SubsetPermutationResult(**_subset_with_bootstrap()).summary()
@@ -2069,7 +2148,7 @@ class TestSubsetPermutationResultSummary:
         d = SubsetPermutationResult(**_subset_kwargs(
             subset_results=units, mean_over_subsets=0.5,
         )).summary()
-        assert d["subset_results"]["(1, 2)"] == {
+        assert d["subset_results"][2]["result"] == {
             "not_computed": "raters 1, 2 share 0 subjects",
         }
 
@@ -2166,6 +2245,7 @@ class TestMultiKSubsetResultConstruction:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
@@ -2178,6 +2258,7 @@ class TestMultiKSubsetResultConstruction:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -2241,6 +2322,7 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="gwet_ac1",  # Mismatch!
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             subset_results=_units(SUBSETS_K2, "gwet_ac1"),
             n_subsets=3,
             subset_k=2,
@@ -2254,6 +2336,7 @@ class TestMultiKSubsetResultValidation:
                 coefficient_name="fleiss_kappa",
                 ci_method="percentile",
                 balance_profile=bp,
+                rater_names=RATER_NAMES,
                 per_k_results={2: wrong_result},
                 ks=[2],
             )
@@ -2266,6 +2349,7 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp_child,  # Different object!
+            rater_names=RATER_NAMES,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
@@ -2279,6 +2363,7 @@ class TestMultiKSubsetResultValidation:
                 coefficient_name="fleiss_kappa",
                 ci_method="percentile",
                 balance_profile=bp_parent,
+                rater_names=RATER_NAMES,
                 per_k_results={2: result_k2},
                 ks=[2],
             )
@@ -2290,6 +2375,7 @@ class TestMultiKSubsetResultValidation:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,  # subset_k=2 but stored under key 3
@@ -2303,6 +2389,7 @@ class TestMultiKSubsetResultValidation:
                 coefficient_name="fleiss_kappa",
                 ci_method="percentile",
                 balance_profile=bp,
+                rater_names=RATER_NAMES,
                 per_k_results={3: result_wrong_k},
                 ks=[3],
             )
@@ -2352,6 +2439,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             subset_results={
                 (0, 1): _unit(0.6, "fleiss_kappa", ci=_ci(0.50, 0.70)),
                 (0, 2): _unit(0.4, "fleiss_kappa", ci=_ci(0.30, 0.50)),
@@ -2368,6 +2456,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             subset_results=_units(SUBSETS_K3, "fleiss_kappa"),
             n_subsets=1,
             subset_k=3,
@@ -2380,6 +2469,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             per_k_results={2: result_k2, 3: result_k3},
             ks=[2, 3],
         )
@@ -2403,6 +2493,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -2423,6 +2514,7 @@ class TestMultiKSubsetResultStr:
             coefficient_name="fleiss_kappa",
             ci_method="percentile",
             balance_profile=bp,
+            rater_names=RATER_NAMES,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -3745,13 +3837,63 @@ class TestPrintedForm:
         assert "How often" not in str(r)
 
 
+class TestPermutationRaterNames:
+    """
+    A permutation result keeps the panel's rater names, in position order.
+    Pairs and subsets stay keyed by position; the table, the frame, the
+    summary and the plots name the raters.
+    """
+
+    def test_names_must_be_a_tuple_of_text(self):
+        with pytest.raises(TypeError, match="rater_names must be a tuple of str"):
+            PairwisePermutationResult(**_pairwise_kwargs(rater_names=["ann", "bob", "cat"]))
+        with pytest.raises(TypeError, match="rater_names must be a tuple of str"):
+            PairwisePermutationResult(**_pairwise_kwargs(rater_names=("ann", 1, "cat")))
+
+    def test_names_must_not_repeat(self):
+        with pytest.raises(ValueError, match="rater_names must not repeat"):
+            PairwisePermutationResult(**_pairwise_kwargs(rater_names=("ann", "ann", "cat")))
+
+    def test_one_name_per_rater(self):
+        with pytest.raises(ValueError, match="rater_names has 2 names but the panel has 3 raters"):
+            PairwisePermutationResult(**_pairwise_kwargs(
+                balance_profile=_bp_with_n_raters(3), rater_names=("ann", "bob"),
+            ))
+
+    def test_key_position_must_exist(self):
+        units = _units(PAIRS)
+        units[(1, 3)] = units.pop((1, 2))
+        with pytest.raises(ValueError, match=r"pair \(1, 3\) names a rater position beyond the 3"):
+            PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
+
+    def test_keys_stay_positions(self):
+        r = PairwisePermutationResult(**_pairwise_kwargs())
+        assert set(r.pair_results) == set(PAIRS)
+
+    def test_every_k_shares_the_names(self):
+        kw = _multi_k_kwargs()
+        kw["per_k_results"][3] = SubsetPermutationResult(**_subset_k3_kwargs(
+            balance_profile=kw["balance_profile"], rater_names=("ann", "bob", "dan"),
+        ))
+        with pytest.raises(ValueError, match=r"per_k_results\[3\] has rater_names"):
+            MultiKSubsetResult(**kw)
+
+    def test_not_computed_row_named_too(self):
+        units = _units(PAIRS)
+        units[(1, 2)] = NotComputed("raters bob, cat share 0 subjects")
+        r = PairwisePermutationResult(**_pairwise_kwargs(pair_results=units, mean_over_pairs=0.5))
+        row = next(line for line in str(r).splitlines() if line.startswith("    bob, cat"))
+        assert "not computed" in row
+
+
 class TestPermutationPrintedForm:
     """Every pair or subset listed up to the limit; to_frame() holds them all."""
 
     def test_rows_and_frame_agree(self):
         r = PairwisePermutationResult(**_pairwise_kwargs())
         frame = r.to_frame()
-        assert list(frame["raters"]) == ["0, 1", "0, 2", "1, 2"]
+        assert list(frame["raters"]) == ["ann, bob", "ann, cat", "bob, cat"]
+        assert list(frame["positions"]) == ["0, 1", "0, 2", "1, 2"]
         assert list(frame["estimate"]) == [0.6, 0.4, 0.5]
         # Each pair's subjects come from its own result
         assert list(frame["subjects"]) == [4, 4, 4]
@@ -3798,7 +3940,7 @@ class TestPermutationPrintedForm:
         monkeypatch.setattr(contracts, "MAX_ROWS_PRINTED", 3)
         s = str(PairwisePermutationResult(**_pairwise_kwargs()))
         assert "too many to list" not in s
-        assert all(f"    {p[0]}, {p[1]}" in s for p in PAIRS)
+        assert all(f"    {RATER_NAMES[a]}, {RATER_NAMES[b]}" in s for a, b in PAIRS)
 
     def test_above_the_limit_points_to_to_frame(self, monkeypatch):
         import interrater.contracts as contracts
@@ -3806,7 +3948,7 @@ class TestPermutationPrintedForm:
         monkeypatch.setattr(contracts, "MAX_ROWS_PRINTED", 2)
         s = str(PairwisePermutationResult(**_pairwise_kwargs()))
         assert '3 pairs, too many to list here: result.to_frame() has them all, e.g. result.to_frame().to_csv("pairs.csv")' in s
-        assert "    0, 1" not in s
+        assert "    ann, bob" not in s
 
     def test_limit_lives_in_contracts(self):
         from interrater.contracts import MAX_ROWS_PRINTED
@@ -3836,7 +3978,7 @@ class TestPermutationPrintedForm:
         s = str(PairwisePermutationResult(**_pairwise_kwargs(
             ci_method="bca", pair_results=units,
         )))
-        row = next(line for line in s.splitlines() if line.startswith("    0, 2"))
+        row = next(line for line in s.splitlines() if line.startswith("    ann, cat"))
         assert row.endswith("percentile [bca requested]; 12 failed")
 
     def test_short_intervals_said_once_under_the_list(self):
@@ -3855,7 +3997,7 @@ class TestPermutationPrintedForm:
         r = PairwisePermutationResult(**_pairwise_kwargs(
             pair_results=units, mean_over_pairs=0.5,
         ))
-        row = next(line for line in str(r).splitlines() if line.startswith("    1, 2"))
+        row = next(line for line in str(r).splitlines() if line.startswith("    bob, cat"))
         assert row.split()[2:4] == ["undefined", "[undefined]"]
         assert row.endswith("no method ran [percentile requested]; all 200 failed")
 
@@ -3865,9 +4007,9 @@ class TestPermutationPrintedForm:
         units = _units(PAIRS)
         units[(0, 2)] = _unit(0.4, ci=_ci(0.45, 0.60))
         r = PairwisePermutationResult(**_pairwise_kwargs(pair_results=units))
-        row = next(line for line in str(r).splitlines() if line.startswith("    0, 2"))
+        row = next(line for line in str(r).splitlines() if line.startswith("    ann, cat"))
         assert row.endswith("POINT OUTSIDE INTERVAL")
-        other = next(line for line in str(r).splitlines() if line.startswith("    0, 1"))
+        other = next(line for line in str(r).splitlines() if line.startswith("    ann, bob"))
         assert "POINT OUTSIDE INTERVAL" not in other
         assert list(r.to_frame()["point_outside_interval"]) == [False, True, False]
 
@@ -3878,7 +4020,7 @@ class TestPermutationPrintedForm:
         r = PairwisePermutationResult(**_pairwise_kwargs(
             pair_results=units, mean_over_pairs=0.5,
         ))
-        row = next(line for line in str(r).splitlines() if line.startswith("    1, 2"))
+        row = next(line for line in str(r).splitlines() if line.startswith("    bob, cat"))
         assert row.split()[2:4] == ["not", "computed"]
         assert row.endswith("raters 1, 2 share 0 subjects")
         frame = r.to_frame()

@@ -117,7 +117,7 @@ def test_title_names_the_coefficient():
     result = _test(_ratings(0.0), analyzer=KrippendorffAlphaAnalyzer,
                    config=KrippendorffAlphaConfig)
     assert plot_null_distribution(result).axes[0].get_title() == (
-        "Krippendorff's alpha: permutation test"
+        "Krippendorff's α: permutation test"
     )
 
 

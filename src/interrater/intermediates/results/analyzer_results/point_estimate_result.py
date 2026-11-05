@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -102,6 +102,13 @@ class PointEstimateResult(AnalysisResult):
         Category prevalence, per-rater marginals, specific agreement, and the
         prevalence and bias indices where they apply.
     """
+
+    # What a coefficient is called: its config name, printed name and
+    # symbol. Empty here; each coefficient's result declares its own, and
+    # every name shown anywhere comes from those (see COEFFICIENT_RESULTS).
+    COEFFICIENT: ClassVar[str] = ""
+    NAME:        ClassVar[str] = ""
+    SYMBOL:      ClassVar[str] = ""
 
     point: float
     confidence_interval: CIResult | None
@@ -312,8 +319,8 @@ class PointEstimateResult(AnalysisResult):
         return " ".join(parts)
 
     def _name(self) -> str:
-        """The coefficient's printed name; none at this level."""
-        return ""
+        """The coefficient's printed name: NAME, declared by each coefficient."""
+        return self.NAME
 
     def _kappa_max_note(self) -> str:
         """A few words on kappa_max, to fit on one line."""

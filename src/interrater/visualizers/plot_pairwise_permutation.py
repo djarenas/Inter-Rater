@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..intermediates.not_computed import NotComputed
+from ..intermediates.results.analyzer_results import result_class_for
 from ..intermediates.results.permutation_results.permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
 )
@@ -22,7 +23,6 @@ _ERROR_PREFIX = "[plot_pairwise_permutation] Error"
 
 def plot_pairwise_permutation(
     result: PairwisePermutationResult,
-    rater_names: list[str] | None = None,
     ax: plt.Axes | None = None,
 ) -> plt.Figure:
     """
@@ -47,10 +47,6 @@ def plot_pairwise_permutation(
     ----------
     result : PairwisePermutationResult
         The result object from a pairwise permutation analysis.
-    rater_names : list[str] | None
-        Human-readable names for the raters. If None, raters are labeled
-        by their 0-based index ("Rater 0", "Rater 1", ...). Length must
-        match the number of distinct raters found in the pair keys.
     ax : plt.Axes | None
         Axes to draw on. If None, a new Figure and Axes are created.
 
@@ -63,8 +59,6 @@ def plot_pairwise_permutation(
     ------
     TypeError
         If result is not a PairwisePermutationResult.
-    ValueError
-        If rater_names length does not match the number of raters.
     """
     # Lazy import to avoid circular dependency at module level
     from ..intermediates.results import PairwisePermutationResult
@@ -85,15 +79,8 @@ def plot_pairwise_permutation(
     )
     n_raters = len(all_rater_indices)
 
-    if rater_names is not None:
-        if len(rater_names) != n_raters:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: rater_names has {len(rater_names)} "
-                f"entries but there are {n_raters} raters in the result"
-            )
-        name_map = dict(zip(all_rater_indices, rater_names))
-    else:
-        name_map = {idx: f"Rater {idx}" for idx in all_rater_indices}
+    # Raters by name, as the result's table and frame show them
+    name_map = {idx: result.rater_names[idx] for idx in all_rater_indices}
 
     # ------------------------------------------------------------------ #
     # Group pairs by rater
@@ -255,14 +242,15 @@ def plot_pairwise_permutation(
         fontsize=9,
     )
     ax.set_xlabel("Rater", fontsize=10)
-    ax.set_ylabel(result.coefficient_name, fontsize=10)
+    name = result_class_for(result.coefficient_name).NAME
+    ax.set_ylabel(name, fontsize=10)
 
     # Title
     method_str = ""
     if result.bootstrap_mean_method is not None:
         method_str = f" ({result.bootstrap_mean_method} bootstrap)"
     ax.set_title(
-        f"Pairwise {result.coefficient_name}{method_str}",
+        f"Pairwise {name}{method_str}",
         fontsize=12,
     )
 

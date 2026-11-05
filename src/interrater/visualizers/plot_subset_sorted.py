@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ..intermediates.not_computed import NotComputed
+from ..intermediates.results.analyzer_results import result_class_for
 from ..intermediates.results.permutation_results.permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
 )
@@ -21,7 +22,6 @@ _ERROR_PREFIX = "[plot_subset_sorted] Error"
 
 def plot_subset_sorted(
     result: SubsetPermutationResult,
-    rater_names: list[str] | None = None,
     ax: plt.Axes | None = None,
 ) -> plt.Figure:
     """
@@ -49,10 +49,6 @@ def plot_subset_sorted(
     ----------
     result : SubsetPermutationResult
         The result object from a subset permutation analysis (single k).
-    rater_names : list[str] | None
-        Human-readable names for the raters. If None, raters are labeled
-        by their 0-based index ("0", "1", ...). Length must match the
-        number of distinct raters found in the subset keys.
     ax : plt.Axes | None
         Axes to draw on. If None, a new Figure and Axes are created.
 
@@ -65,8 +61,6 @@ def plot_subset_sorted(
     ------
     TypeError
         If result is not a SubsetPermutationResult.
-    ValueError
-        If rater_names length does not match the number of raters.
     """
     # Lazy import to avoid circular dependency at module level
     from ..intermediates.results import SubsetPermutationResult
@@ -84,17 +78,9 @@ def plot_subset_sorted(
     all_rater_indices = sorted(
         {idx for subset in result.subset_results for idx in subset}
     )
-    n_raters = len(all_rater_indices)
 
-    if rater_names is not None:
-        if len(rater_names) != n_raters:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: rater_names has {len(rater_names)} "
-                f"entries but there are {n_raters} raters in the result"
-            )
-        name_map = dict(zip(all_rater_indices, rater_names))
-    else:
-        name_map = {idx: str(idx) for idx in all_rater_indices}
+    # Raters by name, as the result's table and frame show them
+    name_map = {idx: result.rater_names[idx] for idx in all_rater_indices}
 
     # ------------------------------------------------------------------ #
     # Sort subsets by coefficient value
@@ -262,13 +248,14 @@ def plot_subset_sorted(
     # Y-axis and title
     # ------------------------------------------------------------------ #
 
-    ax.set_ylabel(result.coefficient_name, fontsize=10)
+    name = result_class_for(result.coefficient_name).NAME
+    ax.set_ylabel(name, fontsize=10)
 
     method_str = ""
     if result.bootstrap_mean_method is not None:
         method_str = f" ({result.bootstrap_mean_method} bootstrap)"
     ax.set_title(
-        f"Subset k={result.subset_k} {result.coefficient_name}"
+        f"Subset k={result.subset_k} {name}"
         f" — sorted by value{method_str}",
         fontsize=12,
     )

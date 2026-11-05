@@ -512,6 +512,10 @@ class PermutationAnalysis:
             draws = NotComputed("draws not kept: keep_draws false")
         return analyzer._result(point, ci, draws)
 
+    def _rater_names(self) -> tuple[str, ...]:
+        """The panel's raters in position order, injected raters included."""
+        return tuple(str(name) for name in self.ratings.semantics.raters)
+
     def _unit_results(
         self, values: dict, subjects: dict, cis: dict, draws: dict | None,
     ) -> dict:

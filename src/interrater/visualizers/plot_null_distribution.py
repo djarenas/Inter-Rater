@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..intermediates.results.analyzer_results import result_class_for
 from .plot_bootstrap_distribution import _bins_for, _text_box
 
 if TYPE_CHECKING:
@@ -15,17 +16,6 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[plot_null_distribution] Error"
 
 # Display names, keyed by HypothesisTestResult.coefficient.
-_COEFFICIENT_NAMES = {
-    "fleiss_kappa": "Fleiss' kappa",
-    "scotts_pi": "Scott's pi",
-    "gwet_ac1": "Gwet's AC1",
-    "brennan_prediger": "Brennan-Prediger",
-    "krippendorff_alpha": "Krippendorff's alpha",
-    "cohen_kappa": "Cohen's kappa",
-    "conger_kappa": "Conger's kappa",
-    "light_kappa": "Light's kappa",
-}
-
 
 def plot_null_distribution(
     result: HypothesisTestResult,
@@ -91,7 +81,8 @@ def plot_null_distribution(
             f"alternative), so the plot cannot show them."
         )
 
-    label = _COEFFICIENT_NAMES.get(result.coefficient, result.coefficient)
+    # Named as the coefficient's own result class names it
+    label = result_class_for(result.coefficient).NAME
     draws = np.asarray(result.null_distribution, dtype=float)
     usable = draws[np.isfinite(draws)]
 

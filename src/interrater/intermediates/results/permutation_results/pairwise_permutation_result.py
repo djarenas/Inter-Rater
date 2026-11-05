@@ -10,7 +10,8 @@ import numpy as np
 
 from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..ci_results import BootstrapCIResult
-from .permutation_result import PermutationResult, coefficient_label
+from ..analyzer_results import result_class_for
+from .permutation_result import PermutationResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
@@ -80,6 +81,8 @@ class PairwisePermutationResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
+    rater_names : tuple[str, ...]
+        Inherited. The panel's raters in position order; keys index into it.
     pair_results : dict[tuple[int, int], PointEstimateResult | NotComputed]
         Each pair's result, computed on the subjects both raters rated: its
         balance profile says how many, since a pair resting on 756 subjects
@@ -115,6 +118,7 @@ class PairwisePermutationResult(PermutationResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
+    rater_names: tuple[str, ...]
 
     # Each pair (rater heterogeneity)
     pair_results: dict   # values are a coefficient's result, or NotComputed
@@ -259,7 +263,7 @@ class PairwisePermutationResult(PermutationResult):
         MAX_ROWS_PRINTED pairs, a line points to to_frame() instead of the
         list. See PermutationResult._printed.
         """
-        name, _ = coefficient_label(self.coefficient_name)
+        name = result_class_for(self.coefficient_name).NAME
         return self._printed(
             title=f"Pairwise {name}, {self.n_pairs:,} pairs",
             mean=self.mean_over_pairs,
@@ -280,24 +284,23 @@ class PairwisePermutationResult(PermutationResult):
         Returns
         -------
         dict
-            Parent keys (coefficient_name, ci_method, balance); n_pairs,
-            mean_over_pairs; pair_results (each pair's own summary, or
-            ``{"not_computed": reason}``); and, when the mean was
+            Parent keys (coefficient_name, ci_method, balance); rater_names;
+            n_pairs, mean_over_pairs; pair_results, a list with one entry per pair:
+            ``{"raters": [names], "positions": [i, j], "result": its own
+            summary or {"not_computed": reason}}``; and, when the mean was
             bootstrapped, bootstrap_mean_method,
             mean_ci (with its draw counts), mean_ci_lower, mean_ci_upper,
             bootstrap_draws_mean and bootstrap_se (the mean and standard
             error of the usable draws of the mean, None when too few are
             usable).
-            Tuple keys are converted to strings for JSON compatibility.
         """
         result = super().summary()
 
         # Observed
         result["n_pairs"] = self.n_pairs
         result["mean_over_pairs"] = self.mean_over_pairs
-        result["pair_results"] = {
-            str(k): v.summary() for k, v in self.pair_results.items()
-        }
+        result["rater_names"] = list(self.rater_names)
+        result["pair_results"] = self._unit_summaries(self.pair_results)
 
         # Bootstrap
         if self.bootstrap_mean_method is not None:

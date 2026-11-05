@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -83,6 +83,12 @@ class FleissKappaResult(PointEstimateResult):
     """
 
     # Attribute declaration
+
+    # What I am called: the config name, my printed name and my symbol.
+    # Every other place that names this coefficient reads these.
+    COEFFICIENT: ClassVar[str] = "fleiss_kappa"
+    NAME:        ClassVar[str] = "Fleiss' κ"
+    SYMBOL:      ClassVar[str] = "κ"
 
     # Inherited from parent class PointEstimateResult
     point: float
@@ -187,9 +193,6 @@ class FleissKappaResult(PointEstimateResult):
     # Public API ------------------------------------------------------------- #
 
     # Printed form: see PointEstimateResult.__str__ ----------------------- #
-
-    def _name(self) -> str:
-        return "Fleiss' κ"
 
     def _kappa_max_note(self) -> str:
         return "κ_max not computed (pooled shares)"

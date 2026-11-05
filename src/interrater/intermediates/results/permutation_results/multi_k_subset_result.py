@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ..analyzer_results import result_class_for
 from .permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
     PermutationResult,
-    coefficient_label,
     interval_notes,
     raters_phrase,
 )
@@ -49,6 +49,8 @@ class MultiKSubsetResult(PermutationResult):
         Inherited. How CIs were computed.
     balance_profile : BalanceProfile
         Inherited. Structural metadata of the full dataset.
+    rater_names : tuple[str, ...]
+        Inherited. The panel's raters in position order; keys index into it.
     per_k_results : dict[int, SubsetPermutationResult]
         One result per subset size. Keys are k values (each >= 2),
         values are complete SubsetPermutationResult objects.
@@ -63,6 +65,7 @@ class MultiKSubsetResult(PermutationResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
+    rater_names: tuple[str, ...]
 
     # Multi-k container
     per_k_results: dict  # dict[int, SubsetPermutationResult]
@@ -147,6 +150,11 @@ class MultiKSubsetResult(PermutationResult):
                     f"{_ERROR_PREFIX}: per_k_results[{k}] has a "
                     f"different balance_profile than the parent"
                 )
+            if result.rater_names != self.rater_names:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: per_k_results[{k}] has rater_names "
+                    f"{result.rater_names}, expected {self.rater_names}"
+                )
             if result.subset_k != k:
                 raise ValueError(
                     f"{_ERROR_PREFIX}: per_k_results[{k}] has "
@@ -212,7 +220,7 @@ class MultiKSubsetResult(PermutationResult):
         its draws is not the same claim as one from all of them. An
         independent mean adds the "!" line.
         """
-        name, _ = coefficient_label(self.coefficient_name)
+        name = result_class_for(self.coefficient_name).NAME
         bp = self.balance_profile
         lines = [f"Subsets, {name}: {bp.n_subjects:,} subjects, {raters_phrase(bp)}"]
 

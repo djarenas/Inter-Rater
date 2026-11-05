@@ -14,17 +14,6 @@ _ERROR_PREFIX = "[plot_bootstrap_distribution] Error"
 
 # Display names for the result classes; anything else falls back to the
 # class name, so a new coefficient still plots.
-_COEFFICIENT_NAMES = {
-    "FleissKappaResult": "Fleiss' kappa",
-    "ScottsPiResult": "Scott's pi",
-    "GwetsAC1Result": "Gwet's AC1",
-    "BrennanPredigerResult": "Brennan-Prediger",
-    "KrippendorffAlphaResult": "Krippendorff's alpha",
-    "CohenKappaResult": "Cohen's kappa",
-    "CongerKappaResult": "Conger's kappa",
-    "LightKappaResult": "Light's kappa",
-}
-
 _METHOD_NAMES = {"bca": "BCa", "percentile": "percentile"}
 
 # Up to this many distinct values, the draws get one bar per value.
@@ -115,7 +104,8 @@ def plot_bootstrap_distribution(
             f"was undefined, so there is no distribution to plot."
         )
 
-    name = _COEFFICIENT_NAMES.get(type(result).__name__, type(result).__name__)
+    # The result names itself; a bare PointEstimateResult has no name
+    name = result.NAME or type(result).__name__
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(7, 4.5))

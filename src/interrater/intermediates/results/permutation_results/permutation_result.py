@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..analysis_result import AnalysisResult
+from ..analyzer_results import result_class_for
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -23,33 +24,8 @@ INDEPENDENT_MEAN_CAVEAT = (
     "that share raters, so it tends to be too narrow"
 )
 
-# Printed name and column symbol for each coefficient
-_LABELS = {
-    "cohen_kappa": ("Cohen's κ", "κ"),
-    "conger_kappa": ("Conger's κ", "κ"),
-    "fleiss_kappa": ("Fleiss' κ", "κ"),
-    "scotts_pi": ("Scott's π", "π"),
-    "gwet_ac1": ("Gwet's AC1", "AC1"),
-    "brennan_prediger": ("Brennan-Prediger", "B-P"),
-    "krippendorff_alpha": ("Krippendorff's α", "α"),
-}
-
-
-# The result class every pair or subset of each coefficient holds
-_RESULT_CLASSES = {
-    "cohen_kappa": "CohenKappaResult",
-    "conger_kappa": "CongerKappaResult",
-    "fleiss_kappa": "FleissKappaResult",
-    "scotts_pi": "ScottsPiResult",
-    "gwet_ac1": "GwetsAC1Result",
-    "brennan_prediger": "BrennanPredigerResult",
-    "krippendorff_alpha": "KrippendorffAlphaResult",
-}
-
-
-def coefficient_label(name: str) -> tuple[str, str]:
-    """The printed name and the column symbol, e.g. ("Cohen's κ", "κ")."""
-    return _LABELS.get(name, (name, name))
+# A coefficient's printed name, symbol and result class all come from its
+# result class (analyzer_results.result_class_for), so nothing here spells them.
 
 
 def raters_phrase(balance_profile: BalanceProfile) -> str:
@@ -122,6 +98,11 @@ class PermutationResult(AnalysisResult):
     balance_profile : BalanceProfile
         Structural metadata about the full dataset (before subsetting):
         n_subjects, n_raters, balance structure.
+    rater_names : tuple[str, ...]
+        The panel's raters, in position order, as the semantics name them
+        (injected raters included). Pairs and subsets are keyed by
+        position, e.g. (0, 2); everything shown to people -- the printed
+        table, to_frame, summary, plots -- reads these names instead.
     """
 
     # Attribute declaration
@@ -129,6 +110,7 @@ class PermutationResult(AnalysisResult):
     coefficient_name: str
     ci_method: str
     balance_profile: BalanceProfile
+    rater_names: tuple[str, ...]
 
     # Constructor ------------------------------------------------------------ #
 
@@ -174,6 +156,43 @@ class PermutationResult(AnalysisResult):
                 f"got {type(self.balance_profile).__name__}"
             )
 
+        try:
+            self._check_rater_names()
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
+    def _check_rater_names(self) -> None:
+        """One name per rater, all text, none repeated."""
+        names = self.rater_names
+        if not isinstance(names, tuple) or not all(isinstance(n, str) for n in names):
+            raise TypeError(f"rater_names must be a tuple of str, got {names!r}")
+        if len(set(names)) != len(names):
+            raise ValueError(f"rater_names must not repeat, got {names!r}")
+        n_raters = getattr(self.balance_profile, "n_raters", None)
+        if n_raters is not None and len(names) != n_raters:
+            raise ValueError(
+                f"rater_names has {len(names)} names but the panel has "
+                f"{n_raters} raters"
+            )
+
+    def _named(self, raters: tuple[int, ...]) -> str:
+        """A unit's raters by name, e.g. "ann, cat" for (0, 2)."""
+        return ", ".join(self.rater_names[i] for i in raters)
+
+    def _unit_summaries(self, results: dict) -> list[dict]:
+        """
+        Each pair or subset for summary(): its raters by name, its
+        positions, and its own summary (or {"not_computed": reason}).
+        """
+        return [
+            {
+                "raters": [self.rater_names[i] for i in raters],
+                "positions": list(raters),
+                "result": unit.summary(),
+            }
+            for raters, unit in results.items()
+        ]
+
     # Public API ------------------------------------------------------------- #
 
     def to_frame(self) -> pd.DataFrame:
@@ -186,9 +205,10 @@ class PermutationResult(AnalysisResult):
         Returns
         -------
         pd.DataFrame
-            Columns: raters ("0, 1" -- positions in the ratings), estimate,
-            ci_lower, ci_upper, point_outside_interval, method_used,
-            n_failed, subjects, not_computed.
+            Columns: raters (by name, "ann, cat"), positions (the key in
+            pair_results or subset_results, "0, 2"), estimate, ci_lower,
+            ci_upper, point_outside_interval, method_used, n_failed,
+            subjects, not_computed.
             Undefined or empty values are NaN, in text columns too, so the
             frame reads back from CSV unchanged. A pair or subset that has
             no result leaves the other columns NaN and says why in
@@ -200,7 +220,8 @@ class PermutationResult(AnalysisResult):
         return pd.DataFrame(
             [
                 {
-                    "raters": ", ".join(map(str, raters)),
+                    "raters": self._named(raters),
+                    "positions": ", ".join(map(str, raters)),
                     "estimate": float(value),
                     "ci_lower": float(ci.lower) if ci is not None else nan,
                     "ci_upper": float(ci.upper) if ci is not None else nan,
@@ -218,7 +239,7 @@ class PermutationResult(AnalysisResult):
                 for raters, value, ci, outside, subjects, reason in self._units()
             ],
             columns=[
-                "raters", "estimate", "ci_lower", "ci_upper",
+                "raters", "positions", "estimate", "ci_lower", "ci_upper",
                 "point_outside_interval", "method_used", "n_failed",
                 "subjects", "not_computed",
             ],
@@ -294,7 +315,9 @@ class PermutationResult(AnalysisResult):
                 f"{word}_results has {len(results)} entries but there are "
                 f"{n_units} {word}s"
             )
-        expected = _RESULT_CLASSES.get(self.coefficient_name)
+        # Keys are positions into rater_names, so those must be sound first
+        self._check_rater_names()
+        expected = result_class_for(self.coefficient_name)
         points = []
         kept = set()  # whether each computed unit kept its draws
         for key, unit in results.items():
@@ -307,6 +330,11 @@ class PermutationResult(AnalysisResult):
                     f"{word}_results keys must be sorted tuples of {k} "
                     f"distinct rater indices, got {key!r}"
                 )
+            if not all(0 <= i < len(self.rater_names) for i in key):
+                raise ValueError(
+                    f"{word} {key} names a rater position beyond the "
+                    f"{len(self.rater_names)} in rater_names"
+                )
             if isinstance(unit, NotComputed):
                 continue
             if not isinstance(unit, PointEstimateResult):
@@ -314,10 +342,10 @@ class PermutationResult(AnalysisResult):
                     f"{word} {key} must be a result or NotComputed, got "
                     f"{type(unit).__name__}"
                 )
-            if expected is not None and type(unit).__name__ != expected:
+            if type(unit) is not expected:
                 raise TypeError(
                     f"{word} {key} is a {type(unit).__name__}, but "
-                    f"{self.coefficient_name} {word}s are {expected}"
+                    f"{self.coefficient_name} {word}s are {expected.__name__}"
                 )
             if not isinstance(unit.confidence_interval, BootstrapCIResult):
                 raise TypeError(
@@ -399,14 +427,14 @@ class PermutationResult(AnalysisResult):
             )
             return "\n".join(lines)
 
-        _, symbol = coefficient_label(self.coefficient_name)
+        symbol = result_class_for(self.coefficient_name).SYMBOL
         intervals = [row[2] for row in rows if row[2] is not None]
         level = f"{intervals[0].confidence_level:.0%} CI" if intervals else "CI"
         cells = []
         for raters, value, ci, outside, subjects, reason in rows:
             if ci is None:
                 cells.append((
-                    ", ".join(map(str, raters)), "not computed", "", "", reason,
+                    self._named(raters), "not computed", "", "", reason,
                 ))
                 continue
             estimate = "undefined" if math.isnan(value) else f"{value:.3f}"
@@ -419,7 +447,7 @@ class PermutationResult(AnalysisResult):
                 (["POINT OUTSIDE INTERVAL"] if outside else []) + interval_notes(ci)
             )
             cells.append((
-                ", ".join(map(str, raters)), estimate, bounds,
+                self._named(raters), estimate, bounds,
                 f"{subjects:,}", notes,
             ))
         w_raters = max(len("raters"), *(len(c[0]) for c in cells))

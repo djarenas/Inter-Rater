@@ -176,3 +176,9 @@ def test_all_draws_undefined_refused(ratings):
 def test_not_a_result_refused():
     with pytest.raises(TypeError, match="result must be"):
         plot_bootstrap_distribution(np.zeros(10))
+
+
+def test_title_names_the_coefficient(ratings):
+    """The name comes from the result class, in Greek like every printed result."""
+    fig = plot_bootstrap_distribution(_fleiss(ratings, n_resamples=50))
+    assert fig.axes[0].get_title() == "Fleiss' κ: bootstrap distribution"

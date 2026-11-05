@@ -360,11 +360,16 @@ class HypothesisTestResult:
         Examples
         --------
         Parametric:
-            H₀: fleiss_kappa = 0, z = 3.42, two-sided p = 0.0006, reject at α = 0.05
+            H₀: Fleiss' κ = 0, z = 3.42, two-sided p = 0.0006, reject at α = 0.05
         Permutation:
-            H₀: fleiss_kappa = 0, two-sided p = 0.0030 (5000 permutations),
+            H₀: Fleiss' κ = 0, two-sided p = 0.0030 (5000 permutations),
             reject at α = 0.05
         """
+        from .analyzer_results import result_class_for
+
+        # The coefficient as every other result prints it, e.g. "Fleiss' κ"
+        name = result_class_for(self.coefficient).NAME
+
         # Format p-value: use scientific notation for very small values
         if self.p_value < 0.000001:
             p_str = "p < 0.000001"
@@ -379,7 +384,7 @@ class HypothesisTestResult:
 
         if self.method == "parametric_null" and self.z_statistic is not None:
             return (
-                f"H₀: {self.coefficient} = 0, z = {self.z_statistic:.2f}, "
+                f"H₀: {name} = 0, z = {self.z_statistic:.2f}, "
                 f"{p_str}, {decision} at α = {self.alpha}"
             )
         elif self.method == "permutation" and self.n_permutations is not None:
@@ -391,12 +396,12 @@ class HypothesisTestResult:
             else:
                 draws = f"{self.n_permutations} permutations"
             return (
-                f"H₀: {self.coefficient} = 0, {p_str} ({draws}), "
+                f"H₀: {name} = 0, {p_str} ({draws}), "
                 f"{decision} at α = {self.alpha}"
             )
         else:
             return (
-                f"H₀: {self.coefficient} = 0, {p_str}, method={self.method}, "
+                f"H₀: {name} = 0, {p_str}, method={self.method}, "
                 f"{decision} at α = {self.alpha}"
             )
 
