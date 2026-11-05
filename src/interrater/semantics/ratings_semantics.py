@@ -287,8 +287,6 @@ class RatingsSemantics:
 
         ``isinstance`` takes a tuple of types, never a list.
         """
-        name = "raters"
-
         if isinstance(raters, str):
             raise TypeError(
                 f"{_ERROR_PREFIX}: raters must be a sequence of names or a "

@@ -22,8 +22,6 @@ Key behaviours:
 
 import pytest
 
-from interrater.contracts import MIN_RATERS, MIN_SUBJECTS
-from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
 from .conftest import TWO_CAT_NAMES

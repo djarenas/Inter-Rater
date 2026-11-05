@@ -24,11 +24,11 @@ from interrater import (
     CleanerConfig,
     NijMatrix,
     OrderedCategories,
+    Ratings,
     RatingsCleaner,
     RatingsSemantics,
 )
 from interrater.analyzers.configs import (
-    AnalyzerConfig,
     FleissKappaConfig,
     GwetAC1Config,
     BrennanPredigerConfig,

@@ -27,16 +27,12 @@ import numpy as np
 import pytest
 
 from interrater.contracts import EMPTY, INDEX_DTYPE, MIN_SUBJECTS
-from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.data_objects.ratings import Ratings
 
 from .conftest import (
-    TWO_CAT_NAMES,
     SIMPLE_INDEX,
     SIMPLE_NIJ,
-    GAPPY_INDEX,
-    GAPPY_RATERS,
 )
 
 

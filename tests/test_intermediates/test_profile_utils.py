@@ -10,7 +10,6 @@ fingers.
 """
 
 import numpy as np
-import pytest
 
 from interrater.contracts import EMPTY, INDEX_DTYPE
 from interrater.intermediates._profile_utils import (

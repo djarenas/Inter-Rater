@@ -89,9 +89,39 @@ class TestNijMatrixValidationRejects:
             NijMatrix(np.zeros((2, 3, 4), dtype=np.int32))
 
     def test_float_dtype(self):
-        """Float dtype is rejected -- counts must be integers."""
-        with pytest.raises(ValueError, match=r"\[NijMatrix\] Error.*integers"):
+        """Float dtype is rejected -- counts must be integers. A wrong type is
+        a TypeError, as in Ratings."""
+        with pytest.raises(TypeError, match=r"\[NijMatrix\] Error.*integers"):
             NijMatrix(np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float64))
+
+    def test_bool_dtype(self):
+        with pytest.raises(TypeError, match=r"\[NijMatrix\] Error.*integers"):
+            NijMatrix(np.array([[True, False], [False, True]]))
+
+
+class TestNijMatrixStoresItsOwnInt64Copy:
+    """
+    Any integer type is accepted and kept as my own int64 copy. Unsigned
+    counts used to be refused with a message calling them not integers; kept
+    as unsigned they would wrap on subtraction (0 - 1 is 4,294,967,295 in
+    uint32, not -1).
+    """
+
+    @pytest.mark.parametrize("dtype", [np.uint8, np.uint32, np.int8, np.int32, np.int64])
+    def test_any_integer_type_becomes_int64(self, dtype):
+        nij = NijMatrix(np.array([[2, 0], [1, 1]], dtype=dtype))
+        assert nij.matrix.dtype == np.int64
+        np.testing.assert_array_equal(nij.matrix, [[2, 0], [1, 1]])
+
+    def test_subtraction_does_not_wrap(self):
+        nij = NijMatrix(np.array([[0, 2], [1, 1]], dtype=np.uint32))
+        assert (nij.matrix - 1).min() == -1
+
+    def test_edit_to_callers_array_does_not_reach_it(self):
+        arr = np.array([[2, 0], [1, 1]], dtype=np.int64)
+        nij = NijMatrix(arr)
+        arr[0, 0] = 9
+        assert nij.matrix[0, 0] == 2
 
     def test_negative_counts(self):
         """Negative counts are rejected."""

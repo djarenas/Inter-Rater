@@ -45,7 +45,6 @@ from typing import Callable
 
 import numpy as np
 
-from ...array_utils import n_per_subject
 from ...contracts import EMPTY, GUARD_MAX_SUBSETS, MIN_RATERS, MIN_SUBJECTS
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
 

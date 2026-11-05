@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..array_utils import category_counts, n_per_rater, present_mask
+from ..array_utils import n_per_rater, present_mask
 
 
 def prevalence(category_index: np.ndarray, k: int) -> np.ndarray:

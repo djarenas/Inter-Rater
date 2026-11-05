@@ -172,19 +172,18 @@ class Analyzer(ABC):
         return self._result(point, ci, bootstrap_distribution)
 
     @abstractmethod
-    def hypothesis_test(self, method: str = "permutation") -> HypothesisTestResult:
+    def hypothesis_test(self) -> HypothesisTestResult:
         """
         Test the null hypothesis that the agreement coefficient equals zero.
 
-        Each leaf class implements this with the methods available for that
-        coefficient. Common methods:
-        - "permutation": permute ratings to build null distribution (requires Ratings)
-        - "parametric_null": use analytical null variance formula (coefficient-specific)
-
-        Parameters
-        ----------
-        method : str, default "permutation"
-            The method to use for the hypothesis test.
+        The method, scheme and alternative come from
+        ``config.hypothesis_test_config``, as everything else about a run
+        comes from the config. Each leaf class implements this with the
+        methods available for its coefficient:
+        - "permutation": permute ratings to build the null distribution
+          (requires Ratings)
+        - "parametric_null": use the analytical null variance formula
+          (coefficient-specific)
 
         Returns
         -------
@@ -194,10 +193,10 @@ class Analyzer(ABC):
         Raises
         ------
         NotImplementedError
-            If called on the abstract base class, or if the requested method
-            is not implemented for this coefficient.
+            If called on the abstract base class.
         ValueError
-            If method="permutation" but ratings is None.
+            If config.hypothesis_test_config is None, or if it asks for
+            permutation but ratings is None.
         """
         raise NotImplementedError(
             f"[Analyzer] Error: hypothesis_test() must be implemented by subclass, "
@@ -429,8 +428,8 @@ class Analyzer(ABC):
         """
         if self.ratings is None:
             raise ValueError(
-                f"[Analyzer] Error: method='permutation' requires Ratings data. "
-                f"Use method='parametric_null' when initialized from NijMatrix."
+                "[Analyzer] Error: method='permutation' requires Ratings data. "
+                "Use method='parametric_null' when initialized from NijMatrix."
             )
 
     # Weights ---------------------------------------------------------------- #

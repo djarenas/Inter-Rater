@@ -11,7 +11,7 @@ generate() test seeds the RNG so results are deterministic.
 import numpy as np
 import pytest
 
-from interrater.contracts import INDEX_DTYPE, EMPTY
+from interrater.contracts import INDEX_DTYPE
 from interrater.data_objects.ratings import Ratings
 from interrater.injectors import (
     RaterInjector,

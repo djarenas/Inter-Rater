@@ -249,9 +249,6 @@ def make_scruffy_ratings(
 
     # ---- Cell-level damage, on cells nothing else will touch ---- #
 
-    protected = set(range(n_thin)) | set(range(quit_after, n_subjects)) \
-        if quit_rater else set(range(n_thin))
-
     free = [
         (r, c)
         for r in range(n_subjects)

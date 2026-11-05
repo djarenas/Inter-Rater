@@ -7,8 +7,6 @@ at construction time, with no data dependency.
 """
 
 import pytest
-import tempfile
-import os
 
 from interrater.injectors.configs import (
     InjectorConfig,

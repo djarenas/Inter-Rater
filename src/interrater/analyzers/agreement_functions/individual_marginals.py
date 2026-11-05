@@ -368,8 +368,9 @@ def light_kappa(data: EstimatorInput) -> float:
     subjects. The analysers refuse incomplete data before calling this.
 
     A pair whose kappa is undefined (every rating in one category, or fewer
-    than two subjects) is NaN from ``cohen_kappa``, and ``np.nanmean`` leaves
-    it out of the mean. If every pair is NaN, the mean is NaN.
+    than two subjects) is NaN from ``cohen_kappa`` and left out of the mean.
+    If every pair is NaN, the mean is NaN -- returned, not warned about, since
+    a bootstrap can meet it in many draws.
 
     **Takes no weights**, following Light (1971). There is no weighted form
     of Light's kappa.
@@ -384,7 +385,8 @@ def light_kappa(data: EstimatorInput) -> float:
         agreement_corrected_by_chance(po, pe)
         for po, pe in light_pair_parts(data).values()
     ]
-    return float(np.nanmean(kappas))
+    defined = [k for k in kappas if not np.isnan(k)]
+    return float(np.mean(defined)) if defined else float("nan")
 
 
 def light_pair_parts(data: EstimatorInput) -> dict[tuple[int, int], tuple[float, float]]:

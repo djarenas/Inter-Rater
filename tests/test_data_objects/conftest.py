@@ -24,8 +24,6 @@ from interrater.contracts import EMPTY, INDEX_DTYPE
 from interrater.semantics.categories import UnorderedCategories, OrderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.data_objects.ratings import Ratings
-from interrater.data_objects.balanced_ratings import BalancedRatings
-from interrater.data_objects.paired_ratings import PairedRatings
 
 
 # -- Category names ---------------------------------------------------------- #

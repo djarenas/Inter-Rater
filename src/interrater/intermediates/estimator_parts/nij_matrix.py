@@ -31,27 +31,32 @@ class NijMatrix:
     Attributes
     ----------
     matrix : np.ndarray
-        A numpy array of shape (n_subjects, n_categories), dtype int, non-negative.
+        A numpy array of shape (n_subjects, n_categories), non-negative
+        counts. Any integer type is accepted and stored as my own int64
+        copy: unsigned counts would wrap on subtraction (0 - 1 is not -1),
+        and a later edit to the caller's array must not reach me.
     """
 
     matrix: np.ndarray
 
     def __post_init__(self) -> None:
-        """Validate the counts matrix."""
-        m = self.matrix
+        """Validate the counts matrix, then keep my own int64 copy of it."""
+        m = np.asarray(self.matrix)
         if m.ndim != 2:
             raise ValueError(
                 f"{_NIJ_ERROR}: matrix must be 2-dimensional "
                 f"(subjects × categories), got shape {m.shape}."
             )
 
-        if m.dtype not in (np.int8, np.int16, np.int32, np.int64, int):
-            raise ValueError(
+        if m.dtype.kind not in "iu":
+            raise TypeError(
                 f"{_NIJ_ERROR}: matrix must hold integers (counts), got dtype {m.dtype}."
             )
 
         if (m < 0).any():
             raise ValueError(f"{_NIJ_ERROR}: counts cannot be negative.")
+
+        object.__setattr__(self, "matrix", np.array(m, dtype=np.int64, copy=True))
 
     def to_dataframe(self):
         """

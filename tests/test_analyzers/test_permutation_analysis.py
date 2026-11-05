@@ -21,13 +21,11 @@ import pytest
 # ------------------------------------------------------------------ #
 
 from interrater.analyzers.permutation_analysis import (
-    PermutationAnalysis,
     PairwisePermutationAnalysis,
     SubsetPermutationAnalysis,
 )
 from interrater.analyzers.permutation_analysis.permutation_analysis import (
     _ESTIMATOR_MAP,
-    Estimator,
 )
 from interrater.analyzers.configs.cohen_kappa_config import CohenKappaConfig
 from interrater.analyzers.configs.conger_kappa_config import CongerKappaConfig
@@ -56,7 +54,6 @@ from interrater.intermediates.results.permutation_results.multi_k_subset_result 
 from interrater.intermediates.results.ci_results import BootstrapCIResult
 from interrater.intermediates.not_computed import NotComputed
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
-from interrater.intermediates.estimator_parts.estimator_input import EstimatorInput
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.semantics import OrderedCategories, UnorderedCategories
 
@@ -232,7 +229,6 @@ class TestEstimatorResolution:
 
     def test_unknown_coefficient_raises(self):
         """Unknown coefficient name should raise ValueError."""
-        ratings = _make_ratings(20, 3)
         # Cannot test directly via constructor because config validation
         # catches unknown coefficients first. Test the _resolve_estimator
         # method indirectly through the map.

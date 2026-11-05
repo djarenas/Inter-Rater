@@ -54,11 +54,14 @@ MATCHING_MESSY = MatchingReport(
 
 # -- DropReport -------------------------------------------------------------- #
 
-DROPS_NOTHING = DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2)
+DROPS_NOTHING = DropReport(
+    min_ratings_per_rater=2, min_ratings_per_subject=2,
+    passes=(DropPass(1, 0, 0),),
+)
 
 DROPS_SOME = DropReport(
     min_ratings_per_rater=2, min_ratings_per_subject=2,
-    passes=(DropPass(1, 1, 2),),
+    passes=(DropPass(1, 1, 2), DropPass(2, 0, 0)),
     dropped_raters={"carol": 1},
     dropped_subject_ids=("doc_E", "doc_F"),
     dropped_subject_distribution={1: 2},

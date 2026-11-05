@@ -60,21 +60,76 @@ class TestDropPass:
 
 
 class TestDropReportDefaults:
-    """Default construction means nothing was dropped."""
+    """Nothing dropped: one pass that dropped nothing, and empty records."""
 
     def test_defaults(self, drops_nothing):
         r = drops_nothing
-        assert r.passes == ()
+        assert r.passes == (DropPass(1, 0, 0),)
         assert r.dropped_raters == {}
         assert r.dropped_subject_ids == ()
         assert r.dropped_subject_distribution == {}
+
+
+class TestDropReportChecksItself:
+    """
+    A report must describe a drop loop that could have run: the cleaner
+    sweeps until a pass drops nothing, so there is at least one pass,
+    numbered from 1, each dropping something but the last, and the pass
+    totals add up to what was dropped.
+    """
+
+    def _report(self, **overrides):
+        fields = dict(
+            min_ratings_per_rater=2, min_ratings_per_subject=2,
+            passes=(DropPass(1, 1, 2), DropPass(2, 0, 0)),
+            dropped_raters={"carol": 1},
+            dropped_subject_ids=("doc_E", "doc_F"),
+            dropped_subject_distribution={1: 2},
+        )
+        fields.update(overrides)
+        return DropReport(**fields)
+
+    def test_a_real_report_passes(self):
+        assert self._report().n_passes == 2
+
+    def test_no_passes(self):
+        with pytest.raises(ValueError, match="no passes, but the drop loop always runs at least one"):
+            self._report(passes=())
+
+    def test_passes_numbered_from_one(self):
+        with pytest.raises(ValueError, match=r"numbered \[2, 3\], not 1 to 2"):
+            self._report(passes=(DropPass(2, 1, 2), DropPass(3, 0, 0)))
+
+    def test_last_pass_dropped_nothing(self):
+        with pytest.raises(ValueError, match="the last pass dropped 1 rater and 2 subjects, but sweeps repeat"):
+            self._report(passes=(DropPass(1, 1, 2),))
+
+    def test_earlier_pass_dropped_something(self):
+        with pytest.raises(ValueError, match="pass 1 dropped nothing, so it would have been the last"):
+            self._report(passes=(DropPass(1, 0, 0), DropPass(2, 1, 2), DropPass(3, 0, 0)))
+
+    def test_rater_totals_add_up(self):
+        with pytest.raises(ValueError, match="the passes' raters total 1, but dropped_raters holds 2"):
+            self._report(dropped_raters={"carol": 1, "dan": 1})
+
+    def test_subject_totals_add_up(self):
+        with pytest.raises(ValueError, match="the passes' subjects total 2, but dropped_subject_ids holds 1"):
+            self._report(dropped_subject_ids=("doc_E",), dropped_subject_distribution={1: 1})
+
+    def test_distribution_adds_up(self):
+        with pytest.raises(ValueError, match="dropped_subject_distribution total 3, but dropped_subject_ids holds 2"):
+            self._report(dropped_subject_distribution={1: 3})
+
+    def test_error_names_the_class(self):
+        with pytest.raises(ValueError, match=r"\[DropReport\] Error"):
+            self._report(passes=())
 
 
 class TestDropReportProperties:
     """Derived properties count what the stored data holds."""
 
     def test_n_passes(self, drops_some):
-        assert drops_some.n_passes == 1
+        assert drops_some.n_passes == 2  # one that dropped, one that settled
 
     def test_n_raters_dropped(self, drops_some):
         assert drops_some.n_raters_dropped == 1
@@ -118,7 +173,7 @@ class TestDropReportSummary:
         s = drops_nothing.summary()
         assert s["n_raters_dropped"] == 0
         assert s["n_subjects_dropped"] == 0
-        assert s["passes"] == []
+        assert s["passes"] == [{"pass": 1, "raters": 0, "subjects": 0}]
 
 
 class TestDropReportRender:
@@ -132,7 +187,7 @@ class TestDropReportRender:
 
     def test_rule_shown_when_something_dropped(self, drops_some):
         text = drops_some.render()
-        assert "rule       : at least 2 ratings per rater and 2 per subject (settled after 1 pass)" in text
+        assert "rule       : at least 2 ratings per rater and 2 per subject (settled after 2 passes)" in text
 
     def test_rule_in_summary(self, drops_some):
         s = drops_some.summary()
@@ -166,7 +221,7 @@ class TestDropReportRender:
         """Integer subject IDs render without error (widened type)."""
         r = DropReport(
             min_ratings_per_rater=2, min_ratings_per_subject=2,
-            passes=(DropPass(1, 0, 2),),
+            passes=(DropPass(1, 0, 2), DropPass(2, 0, 0)),
             dropped_subject_ids=(0, 1),
             dropped_subject_distribution={1: 2},
         )
@@ -179,7 +234,7 @@ class TestDropReportRender:
         raters = {f"r{i}": i + 1 for i in range(5)}
         r = DropReport(
             min_ratings_per_rater=2, min_ratings_per_subject=2,
-            passes=(DropPass(1, 5, 0),),
+            passes=(DropPass(1, 5, 0), DropPass(2, 0, 0)),
             dropped_raters=raters,
         )
         text = r.render()
@@ -488,7 +543,10 @@ class TestCleaningReportProperties:
             shape_in=(0, 2),
             shape_out=(0, 2),
             matching=MatchingReport(n_cells=0, n_null=0),
-            drops=DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2),
+            drops=DropReport(
+                min_ratings_per_rater=2, min_ratings_per_subject=2,
+                passes=(DropPass(1, 0, 0),),
+            ),
             categories=CategoryReport(counts={"a": 0, "b": 0}, policy="keep"),
         )
         assert r.survived == 0.0
@@ -523,7 +581,10 @@ class TestCleaningReportProperties:
             shape_in=(4, 2),
             shape_out=(4, 2),
             matching=MatchingReport(n_cells=8, n_null=0),
-            drops=DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2),
+            drops=DropReport(
+                min_ratings_per_rater=2, min_ratings_per_subject=2,
+                passes=(DropPass(1, 0, 0),),
+            ),
             categories=CategoryReport(
                 counts={"a": 4, "b": 4, "c": 0},
                 policy="drop",
@@ -635,7 +696,10 @@ class TestCleaningReportRender:
             shape_in=(4, 2),
             shape_out=(4, 2),
             matching=MatchingReport(n_cells=8, n_null=0),
-            drops=DropReport(min_ratings_per_rater=2, min_ratings_per_subject=2),
+            drops=DropReport(
+                min_ratings_per_rater=2, min_ratings_per_subject=2,
+                passes=(DropPass(1, 0, 0),),
+            ),
             categories=CategoryReport(
                 counts={"a": 4, "b": 4, "c": 0},
                 policy="drop",

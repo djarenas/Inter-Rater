@@ -67,16 +67,6 @@ def describe_folding(*, case_sensitive: bool, strip_whitespace: bool) -> str:
     return f"Matching ignores {' and '.join(ignored)}."
 
 
-def fold_all(
-    values: Sequence[str], *, case_sensitive: bool, strip_whitespace: bool
-) -> list[str]:
-    """``fold`` over an iterable, in order."""
-    return [
-        fold(v, case_sensitive=case_sensitive, strip_whitespace=strip_whitespace)
-        for v in values
-    ]
-
-
 # ------------------------------------------------------- The boundary #
 
 

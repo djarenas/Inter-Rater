@@ -20,7 +20,7 @@ from interrater.contracts import INDEX_DTYPE
 from interrater.data_objects.balanced_ratings import BalancedRatings
 from interrater.data_objects.ratings import Ratings
 
-from .conftest import SIMPLE_INDEX, GAPPY_INDEX, GAPPY_RATERS
+from .conftest import SIMPLE_INDEX, GAPPY_INDEX
 
 
 # -- Extra validation -------------------------------------------------------- #

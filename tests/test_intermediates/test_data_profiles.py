@@ -20,7 +20,7 @@ from interrater.intermediates.data_profiles.balance_profile import BalanceProfil
 from interrater.intermediates.data_profiles.rater_shared_matrix import RaterSharedMatrix
 from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
 
-from .conftest import BALANCED_NIJ, UNBALANCED_NIJ, SIMPLE_SHARED
+from .conftest import SIMPLE_SHARED
 
 
 # -- Helpers ----------------------------------------------------------------- #

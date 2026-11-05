@@ -21,7 +21,6 @@ import numpy as np
 import pytest
 
 from interrater.semantics.categories import (
-    Categories,
     UnorderedCategories,
     OrderedCategories,
     WeightedCategories,

@@ -6,6 +6,8 @@ from ._wording import counted
 
 from dataclasses import dataclass, field
 
+_ERROR_PREFIX = "[DropReport] Error"
+
 
 @dataclass(frozen=True)
 class DropPass:
@@ -42,7 +44,8 @@ class DropReport:
         not only what it removed -- "nothing dropped" means little without
         the rule nothing fell below.
     passes:
-        The sweeps that ran, the last one dropping nothing.
+        The sweeps that ran, the last one dropping nothing. Required: the
+        drop loop always runs at least one.
     dropped_raters:
         Rater name to how many ratings that rater had when removed.
     dropped_subject_ids:
@@ -55,11 +58,60 @@ class DropReport:
 
     min_ratings_per_rater:   int
     min_ratings_per_subject: int
-    passes:    tuple[DropPass, ...] = ()
+    passes:    tuple[DropPass, ...]
 
     dropped_raters:      dict[str, int] = field(default_factory=dict)
     dropped_subject_ids: tuple[str | int, ...] = ()
     dropped_subject_distribution: dict[int, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """
+        Refuse to exist unless I describe a drop loop that could have run.
+
+        The cleaner sweeps until a pass drops nothing, so a real report has
+        at least one pass, numbered from 1, each dropping something but the
+        last, and pass totals that add up to what was dropped.
+        """
+        def fail(message: str) -> None:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: {message}. The report was built "
+                f"inconsistently; this is a bug, not a property of the data."
+            )
+
+        if not self.passes:
+            fail("no passes, but the drop loop always runs at least one")
+        numbers = [p.number for p in self.passes]
+        if numbers != list(range(1, len(numbers) + 1)):
+            fail(f"passes are numbered {numbers}, not 1 to {len(numbers)}")
+        last = self.passes[-1]
+        if not last.dropped_nothing:
+            fail(
+                f"the last pass dropped {counted(last.n_raters, 'rater')} and "
+                f"{counted(last.n_subjects, 'subject')}, but sweeps repeat "
+                f"until one drops nothing"
+            )
+        for p in self.passes[:-1]:
+            if p.dropped_nothing:
+                fail(
+                    f"pass {p.number} dropped nothing, so it would have been "
+                    f"the last, but {counted(len(self.passes), 'pass', 'passes')} ran"
+                )
+
+        totals = [
+            ("the passes' raters", sum(p.n_raters for p in self.passes),
+             "dropped_raters", self.n_raters_dropped),
+            ("the passes' subjects", sum(p.n_subjects for p in self.passes),
+             "dropped_subject_ids", self.n_subjects_dropped),
+        ]
+        if self.dropped_subject_distribution:
+            totals.append((
+                "dropped_subject_distribution",
+                sum(self.dropped_subject_distribution.values()),
+                "dropped_subject_ids", self.n_subjects_dropped,
+            ))
+        for name, got, against, want in totals:
+            if got != want:
+                fail(f"{name} total {got:,}, but {against} holds {want:,}")
 
     @property
     def n_passes(self) -> int:

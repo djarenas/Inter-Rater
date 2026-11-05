@@ -41,8 +41,6 @@ SR1 main: ratings, 1617 subjects, 4 raters, K=3, partially crossed.
 
 import itertools
 
-import pytest
-
 from interrater import SubsetPermutationAnalysis
 from interrater.contracts import EMPTY
 from interrater.intermediates.not_computed import NotComputed

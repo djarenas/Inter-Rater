@@ -1769,6 +1769,23 @@ def _analyzer_and_config(name: str):
     return getattr(analyzers, f"{name}Analyzer"), getattr(configs, f"{name}Config")
 
 
+class TestHypothesisTestSignature:
+    """The test's method comes from the config, never from an argument."""
+
+    @pytest.mark.parametrize("name, n_raters", _ALL_ANALYZERS)
+    def test_method_comes_from_the_config(self, name, n_raters):
+        """hypothesis_test() takes no arguments, on the base and every leaf:
+        the method is config.hypothesis_test_config.method. The base used to
+        declare a method argument that no analyzer accepted."""
+        import inspect
+
+        from interrater.analyzers.analyzer import Analyzer
+
+        analyzer_cls, _ = _analyzer_and_config(name)
+        for cls in (Analyzer, analyzer_cls):
+            assert list(inspect.signature(cls.hypothesis_test).parameters) == ["self"], cls
+
+
 class TestOneEstimate:
     """
     estimate() is written once, on Analyzer. Each analyzer supplies the

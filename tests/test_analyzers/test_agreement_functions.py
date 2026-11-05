@@ -544,6 +544,17 @@ class TestLightKappa:
         # Pairwise Cohens: (0,1)=1/2, (0,2)=1/2, (1,2)=0. Mean = 1/3.
         assert abs(light_kappa(THREE_RATER_INPUT) - 1 / 3) < TOL
 
+    def test_every_pair_undefined_is_nan_without_a_warning(self):
+        """All ratings in one category: every pair's kappa is undefined. The
+        mean is NaN, returned quietly -- np.nanmean used to warn "Mean of
+        empty slice", once per bootstrap draw that met it."""
+        import warnings
+
+        data = EstimatorInput(category_index=np.zeros((5, 3), dtype=np.int8), n_categories=2)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert math.isnan(light_kappa(data))
+
 
 # ========================================================================== #
 #  krippendorff                                                                #

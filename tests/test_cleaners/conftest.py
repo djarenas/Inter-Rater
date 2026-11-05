@@ -14,19 +14,12 @@ repairable typo ("inc"), and an unknown ("???"), so encoding tests can see
 each outcome in one frame.
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from interrater.semantics.categories import (
-    UnorderedCategories,
-    OrderedCategories,
-    WeightedCategories,
-)
+from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.cleaners.cleaner_config import CleanerConfig
-from interrater.cleaners.frame_layout import FrameLayout
-from interrater.cleaners.insufficient_data_policy import InsufficientDataPolicy
 
 
 # -- Category names ---------------------------------------------------------- #

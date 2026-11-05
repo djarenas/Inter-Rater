@@ -22,7 +22,6 @@ from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.estimator_parts import NijMatrix
 
 from interrater.analyzers.configs import (
-    AnalyzerConfig,
     FleissKappaConfig,
     GwetAC1Config,
     BrennanPredigerConfig,
