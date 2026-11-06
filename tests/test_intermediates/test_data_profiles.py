@@ -20,13 +20,14 @@ import numpy as np
 import pytest
 
 from interrater.contracts import EMPTY
-from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.data_profiles.rater_profile import RaterProfile
 from interrater.intermediates.data_profiles.rater_shared_matrix import RaterSharedMatrix
 from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
+
+from fixtures.through_cleaner import clean_ratings
 
 from .conftest import SIMPLE_SHARED
 
@@ -44,7 +45,7 @@ def gappy_ratings():
     semantics = RatingsSemantics(
         raters=["ann", "bob", "cat"], categories=UnorderedCategories(("x", "y")),
     )
-    return Ratings(index, semantics)
+    return clean_ratings(index, semantics)
 
 
 # -- Helpers ----------------------------------------------------------------- #

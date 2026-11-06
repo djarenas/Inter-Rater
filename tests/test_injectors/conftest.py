@@ -24,7 +24,6 @@ import pytest
 from interrater.contracts import INDEX_DTYPE
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
-from interrater.data_objects.ratings import Ratings
 from interrater.injectors.configs import (
     InjectorConfig,
     DistributionInjectorConfig,
@@ -33,6 +32,8 @@ from interrater.injectors.configs import (
     RaterBootstrapInjectorConfig,
     ExtremalInjectorConfig,
 )
+
+from fixtures.through_cleaner import clean_ratings
 
 
 # -- Config instances -------------------------------------------------------- #
@@ -218,7 +219,7 @@ def extremal_config_median():
 @pytest.fixture
 def simple_ratings():
     """4 subjects, 3 raters, 2 categories, fully crossed."""
-    return Ratings(
+    return clean_ratings(
         SIMPLE_INDEX.copy(), SIMPLE_SEMANTICS,
         subject_ids=SIMPLE_SUBJECT_IDS,
     )
@@ -227,7 +228,7 @@ def simple_ratings():
 @pytest.fixture
 def three_cat_ratings():
     """4 subjects, 3 raters, 3 categories, some unused per subject."""
-    return Ratings(
+    return clean_ratings(
         THREE_CAT_INDEX.copy(), THREE_CAT_SEMANTICS,
         subject_ids=SIMPLE_SUBJECT_IDS,
     )

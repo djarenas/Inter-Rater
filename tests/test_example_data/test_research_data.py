@@ -21,6 +21,7 @@ Datasets:
     SR5         -- ratings, 3 raters, K=2, balanced, ~88% skew
 """
 
+import numpy as np
 import pytest
 
 from interrater import (
@@ -71,6 +72,33 @@ class TestSR1Prelim:
 
         assert result.point == pytest.approx(0.493, abs=TOL)
         _assert_brackets_point(result)
+
+    def test_unquoted_category_names(
+        self, tmp_path, sr1_prelim_ratings, sr1_prelim_with_semantics, fast_fleiss_config,
+    ):
+        """
+        names: [1, 0, -1] unquoted gives the same ratings and the same kappa.
+
+        YAML reads them as numbers; the semantics store them as '1', '0',
+        '-1', which is what the data file holds, so nothing else changes.
+        """
+        semantics_file = tmp_path / "SR1_prelim_unquoted_semantics.yaml"
+        semantics_file.write_text(
+            "raters: 4\n"
+            "categories:\n"
+            "    kind: unordered\n"
+            "    names: [1, 0, -1]\n"
+            "n_subjects: 199\n"
+            "unique_subjects: true\n"
+        )
+        unquoted = sr1_prelim_with_semantics(semantics_file)
+        assert unquoted.semantics.categories.names == ("1", "0", "-1")
+        np.testing.assert_array_equal(unquoted.category_index, sr1_prelim_ratings.category_index)
+
+        quoted_point = FleissKappaAnalyzer(sr1_prelim_ratings, fast_fleiss_config).estimate().point
+        unquoted_point = FleissKappaAnalyzer(unquoted, fast_fleiss_config).estimate().point
+        assert unquoted_point == quoted_point
+        assert unquoted_point == pytest.approx(0.493, abs=TOL)
 
     def test_conger_kappa(self, sr1_prelim_ratings, fast_conger_config):
         """Conger's kappa = 0.494 (group-level, individual marginals).

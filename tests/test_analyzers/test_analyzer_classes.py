@@ -9,10 +9,12 @@ constraints, hypothesis-test guards, and result propagation.
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 
 import numpy as np
 import pytest
+import yaml
 
 # ------------------------------------------------------------------ #
 # Fixtures                                                             #
@@ -26,6 +28,8 @@ from interrater.intermediates.results.ci_results import (
     BootstrapCIResult,
     ParametricCIResult,
 )
+
+from fixtures.through_cleaner import clean_ratings
 
 
 def _assert_bootstrap_interval(
@@ -80,7 +84,7 @@ def _make_ratings(n_raters: int = 3) -> Ratings:
         )
     else:
         raise ValueError(f"Fixture does not support n_raters={n_raters}")
-    return Ratings(category_index=ci, semantics=sem)
+    return clean_ratings(category_index=ci, semantics=sem)
 
 
 def _make_nij(raters_per_subject: int = 3) -> NijMatrix:
@@ -675,6 +679,81 @@ class TestHypothesisTestGuards:
 
 
 # ------------------------------------------------------------------ #
+# Hypothesis test through the analyzer                                 #
+# ------------------------------------------------------------------ #
+
+
+def _ht_analyzer(name: str, request):
+    """An analyzer for one hypothesis-test case, on its usual fixture data."""
+    from interrater.analyzers import (
+        CohenKappaAnalyzer, FleissKappaAnalyzer, ScottsAnalyzer,
+    )
+    from interrater.analyzers.configs import (
+        CohenKappaConfig, FleissKappaConfig, ScottsConfig,
+    )
+    from interrater.analyzers.configs.hypothesis_test_config import (
+        HypothesisTestConfig,
+    )
+
+    parametric = HypothesisTestConfig(method="parametric_null")
+    permutation = HypothesisTestConfig(method="permutation", n_permutations=200)
+    cases = {
+        "fleiss_parametric":    (FleissKappaAnalyzer, FleissKappaConfig, parametric, "fleiss_1971_ratings"),
+        "scott_parametric":     (ScottsAnalyzer, ScottsConfig, parametric, "two_rater_ratings"),
+        "cohen_parametric":     (CohenKappaAnalyzer, CohenKappaConfig, parametric, "two_rater_ratings"),
+        "fleiss_permutation":   (FleissKappaAnalyzer, FleissKappaConfig, permutation, "fleiss_1971_ratings"),
+    }
+    analyzer_cls, config_cls, ht, data = cases[name]
+    config = config_cls(hypothesis_test_config=ht)
+    return analyzer_cls(request.getfixturevalue(data), config)
+
+
+_HT_CASES = ["fleiss_parametric", "scott_parametric", "cohen_parametric", "fleiss_permutation"]
+
+
+class TestHypothesisTestThroughAnalyzer:
+    """
+    hypothesis_test() end to end: the decision is a plain Python bool that
+    agrees with p and alpha, Fleiss (1971) rejects H₀, and the counts path
+    gives the same parametric test as the ratings path.
+    """
+
+    @pytest.mark.parametrize("name", _HT_CASES)
+    def test_reject_null_is_a_plain_bool(self, name, request):
+        """Not numpy.bool_: a plain bool survives JSON, YAML and `is True`."""
+        result = _ht_analyzer(name, request).hypothesis_test()
+        assert type(result.reject_null) is bool
+
+    @pytest.mark.parametrize("name", _HT_CASES)
+    def test_reject_null_agrees_with_p_and_alpha(self, name, request):
+        result = _ht_analyzer(name, request).hypothesis_test()
+        if result.p_value < result.alpha:
+            assert result.reject_null is True
+        elif result.p_value > result.alpha:
+            assert result.reject_null is False
+
+    def test_fleiss_1971_rejects_the_null(self, request):
+        """Fleiss (1971): kappa 0.430 on 30 subjects is far from chance."""
+        result = _ht_analyzer("fleiss_parametric", request).hypothesis_test()
+        assert result.reject_null is True
+
+    def test_counts_path_gives_the_same_test(self, request, fleiss_1971_nij_matrix):
+        """The parametric test needs only counts, so both paths agree exactly."""
+        from interrater.analyzers import FleissKappaAnalyzer
+
+        from_ratings = _ht_analyzer("fleiss_parametric", request)
+        from_counts = FleissKappaAnalyzer.build_from_nij_matrix(
+            fleiss_1971_nij_matrix, from_ratings.config,
+        )
+        a, b = from_ratings.hypothesis_test(), from_counts.hypothesis_test()
+        assert b.reject_null is True
+        assert type(b.reject_null) is bool
+        assert b.p_value == pytest.approx(a.p_value, abs=1e-12)
+        assert b.z_statistic == pytest.approx(a.z_statistic, abs=1e-12)
+        assert b.point == pytest.approx(a.point, abs=1e-12)
+
+
+# ------------------------------------------------------------------ #
 # Hypothesis test on an undefined coefficient                          #
 # ------------------------------------------------------------------ #
 
@@ -684,7 +763,7 @@ def _all_same_ratings(n_raters: int) -> Ratings:
     cats = UnorderedCategories(names=("A", "B"), labels={"A": "A", "B": "B"})
     sem = RatingsSemantics(raters=n_raters, categories=cats)
     ci = np.zeros((6, n_raters), dtype=np.int8)
-    return Ratings(category_index=ci, semantics=sem)
+    return clean_ratings(category_index=ci, semantics=sem)
 
 
 class TestHypothesisTestUndefinedCoefficient:
@@ -743,7 +822,147 @@ def _three_cat_ratings(n_raters: int, ordered: bool = False, unbalanced: bool = 
     names, labels = ("A", "B", "C"), {"A": "A", "B": "B", "C": "C"}
     cats = (OrderedCategories(names=names, labels=labels, weighting="linear") if ordered
             else UnorderedCategories(names=names, labels=labels))
-    return Ratings(category_index=codes, semantics=RatingsSemantics(raters=n_raters, categories=cats))
+    return clean_ratings(category_index=codes, semantics=RatingsSemantics(raters=n_raters, categories=cats))
+
+
+# The coefficients that take weights, with the panel size each one is run on
+_WEIGHTED = [("FleissKappa", 3), ("BrennanPrediger", 3), ("KrippendorffAlpha", 3), ("CohenKappa", 2)]
+
+# A declared matrix that no weighting scheme gives
+_DECLARED = [[1.0, 0.8, 0.0], [0.8, 1.0, 0.5], [0.0, 0.5, 1.0]]
+
+
+def _with_categories(n_raters: int, categories) -> Ratings:
+    """The same codes as _three_cat_ratings, under other categories."""
+    codes = _three_cat_ratings(n_raters).category_index
+    return clean_ratings(category_index=codes.copy(),
+                   semantics=RatingsSemantics(raters=n_raters, categories=categories))
+
+
+def _weighted_result(name: str, n_raters: int, categories):
+    analyzer_cls, config_cls = _analyzer_and_config(name)
+    ratings = _with_categories(n_raters, categories)
+    return analyzer_cls(ratings, config_cls(n_resamples=20, random_state=42)).estimate()
+
+
+class TestResultsRecordWeightMatrix:
+    """
+    A weighted result records the matrix it used, so a report shows the
+    numbers and not only the name of the scheme: None when unweighted, the
+    scheme's matrix for ordered categories, the declared one for weighted.
+    """
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_unordered_records_none(self, name, n_raters):
+        result = _weighted_result(name, n_raters, UnorderedCategories(("A", "B", "C")))
+        assert result.weights_type == "identity"
+        assert result.summary()["weight_matrix"] is None
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    @pytest.mark.parametrize("weighting", ["linear", "quadratic"])
+    def test_ordered_records_the_scheme_matrix(self, name, n_raters, weighting):
+        from interrater.semantics.categories import OrderedCategories
+
+        categories = OrderedCategories(("A", "B", "C"), weighting=weighting)
+        result = _weighted_result(name, n_raters, categories)
+        assert result.weights_type == weighting
+        assert result.summary()["weight_matrix"] == categories.weight_matrix().tolist()
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_weighted_records_the_declared_matrix(self, name, n_raters):
+        from interrater.semantics.categories import WeightedCategories
+
+        categories = WeightedCategories(("A", "B", "C"), np.array(_DECLARED))
+        result = _weighted_result(name, n_raters, categories)
+        assert result.weights_type == "custom"
+        assert result.summary()["weight_matrix"] == _DECLARED
+
+    @pytest.mark.parametrize("name", ["FleissKappa", "BrennanPrediger", "KrippendorffAlpha"])
+    def test_counts_path_records_none(self, name):
+        """Counts carry no category order, so the counts path is unweighted."""
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        result = analyzer_cls.build_from_nij_matrix(
+            _three_cat_ratings(3).to_nij_matrix(), config_cls(n_resamples=20, random_state=42),
+        ).estimate_from_nij_matrix()
+        assert result.summary()["weight_matrix"] is None
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_matrix_on_an_unweighted_result_refused(self, name, n_raters):
+        result = _weighted_result(name, n_raters, UnorderedCategories(("A", "B", "C")))
+        identity = np.eye(3).tolist()
+        with pytest.raises(ValueError, match="weight_matrix must be None when weights_type is 'identity'"):
+            dataclasses.replace(result, weight_matrix=identity)
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_non_square_matrix_refused(self, name, n_raters):
+        from interrater.semantics.categories import OrderedCategories
+
+        result = _weighted_result(name, n_raters, OrderedCategories(("A", "B", "C"), weighting="linear"))
+        with pytest.raises(ValueError, match="weight_matrix must be square, got shape \\(3, 2\\)"):
+            dataclasses.replace(result, weight_matrix=[[1.0, 0.5], [0.5, 1.0], [0.0, 0.5]])
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_summary_survives_yaml(self, name, n_raters):
+        """Plain types all the way down, so a report can be written as YAML."""
+        from interrater.semantics.categories import WeightedCategories
+
+        categories = WeightedCategories(("A", "B", "C"), np.array(_DECLARED))
+        summary = _weighted_result(name, n_raters, categories).summary()
+        loaded = yaml.safe_load(yaml.safe_dump(summary))
+        assert loaded["weight_matrix"] == _DECLARED
+        assert loaded["weights_type"] == "custom"
+
+
+class TestAnalyzersReadWeightsFromSemantics:
+    """
+    The analyzer takes its weights from the ratings' semantics. A coefficient
+    with no weighted form refuses ordered or weighted categories rather than
+    quietly computing the unweighted number under a weighted declaration.
+    """
+
+    @pytest.mark.parametrize("name, n_raters", [
+        ("ScottsAnalyzer", 2), ("GwetAC1", 3), ("CongerKappa", 3), ("LightKappa", 3),
+    ])
+    @pytest.mark.parametrize("kind", ["ordered", "weighted"])
+    def test_no_weighted_form_refuses_distance_categories(self, name, n_raters, kind):
+        from interrater.semantics.categories import OrderedCategories, WeightedCategories
+
+        categories = (
+            OrderedCategories(("A", "B", "C"), weighting="quadratic") if kind == "ordered"
+            else WeightedCategories(("A", "B", "C"), np.array(_DECLARED))
+        )
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        with pytest.raises(ValueError) as info:
+            analyzer_cls(_with_categories(n_raters, categories), config_cls(n_resamples=20))
+        message = str(info.value)
+        # One clean prefix: the leaf's own, said once
+        assert message.startswith(f"[{analyzer_cls.__name__}] Error: this coefficient has no weighted form")
+        assert message.count("Error") == 1
+        assert f"kind {kind!r}" in message
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_unordered_means_no_weights(self, name, n_raters):
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        analyzer = analyzer_cls(_three_cat_ratings(n_raters), config_cls(n_resamples=20))
+        assert analyzer.weights is None
+
+    @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
+    def test_ordered_gives_the_declared_scheme(self, name, n_raters):
+        from interrater.semantics.categories import OrderedCategories
+
+        categories = OrderedCategories(("A", "B", "C"), weighting="quadratic")
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        analyzer = analyzer_cls(_with_categories(n_raters, categories), config_cls(n_resamples=20))
+        assert analyzer.weights.kind == "quadratic"
+        np.testing.assert_array_equal(analyzer.weights.matrix, categories.weight_matrix())
+
+    @pytest.mark.parametrize("name", ["FleissKappa", "BrennanPrediger", "KrippendorffAlpha"])
+    def test_counts_path_has_no_weights(self, name):
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        analyzer = analyzer_cls.build_from_nij_matrix(
+            _three_cat_ratings(3).to_nij_matrix(), config_cls(n_resamples=20),
+        )
+        assert analyzer.weights is None
 
 
 @pytest.mark.filterwarnings("ignore::UserWarning")  # parametric_null warns; not the subject
@@ -882,7 +1101,7 @@ class TestPValueAgreesAcrossCoefficients:
             names=("A", "B", "C"), labels={"A": "A", "B": "B", "C": "C"}
         )
         rng = np.random.default_rng(42)
-        ratings = Ratings(
+        ratings = clean_ratings(
             category_index=rng.integers(0, 3, (30, 3)).astype(np.int8),
             semantics=RatingsSemantics(raters=3, categories=cats),
         )
@@ -1251,7 +1470,7 @@ class TestBootstrapSummaryWithFailedDraws:
         sem = RatingsSemantics(raters=3, categories=cats)
         index = np.zeros((6, 3), dtype=np.int8)
         index[0] = [1, 1, 0]
-        ratings = Ratings(category_index=index, semantics=sem)
+        ratings = clean_ratings(category_index=index, semantics=sem)
         config = FleissKappaConfig(n_resamples=1000, random_state=42)
         return FleissKappaAnalyzer(ratings, config).estimate()
 
@@ -1683,7 +1902,7 @@ class TestCongerNeedsCompleteData:
         index = np.array([[0, 0, e], [1, e, 1], [e, 1, 0], [1, 1, e]], dtype=np.int8)
         semantics = RatingsSemantics(raters=3, categories=UnorderedCategories(("a", "b")))
         with pytest.raises(ValueError, match="4 missing ratings in 4 subjects"):
-            CongerKappaAnalyzer(Ratings(category_index=index, semantics=semantics), self._config())
+            CongerKappaAnalyzer(clean_ratings(category_index=index, semantics=semantics), self._config())
 
     def test_complete_data_runs(self):
         from interrater.analyzers import CongerKappaAnalyzer
@@ -1721,7 +1940,7 @@ class TestLightNeedsCompleteData:
         index = np.array([[0, 0, e], [1, e, 1], [e, 1, 0], [1, 1, e]], dtype=np.int8)
         semantics = RatingsSemantics(raters=3, categories=UnorderedCategories(("a", "b")))
         with pytest.raises(ValueError, match="4 missing ratings in 4 subjects"):
-            LightKappaAnalyzer(Ratings(category_index=index, semantics=semantics), self._config())
+            LightKappaAnalyzer(clean_ratings(category_index=index, semantics=semantics), self._config())
 
     def test_complete_data_runs(self):
         from interrater.analyzers import LightKappaAnalyzer

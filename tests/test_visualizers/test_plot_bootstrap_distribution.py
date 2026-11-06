@@ -20,10 +20,11 @@ import pytest
 from interrater import plot_bootstrap_distribution
 from interrater.analyzers import BrennanPredigerAnalyzer, FleissKappaAnalyzer
 from interrater.analyzers.configs import BrennanPredigerConfig, FleissKappaConfig
-from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.results.ci_results import BootstrapCIResult
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
+
+from fixtures.through_cleaner import clean_ratings
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +42,7 @@ def ratings():
     copy = rng.random((40, 3)) < 0.7
     codes = np.where(copy, truth[:, None], noise).astype(np.int8)
     cats = UnorderedCategories(names=("A", "B", "C"), labels={"A": "A", "B": "B", "C": "C"})
-    return Ratings(category_index=codes, semantics=RatingsSemantics(raters=3, categories=cats))
+    return clean_ratings(category_index=codes, semantics=RatingsSemantics(raters=3, categories=cats))
 
 
 def _fleiss(ratings, **config):

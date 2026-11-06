@@ -207,15 +207,16 @@ on. These files exist to pin a specific piece of arithmetic.
 |------|------------|---------|
 | efron1986_lawschool_data.csv | 15 law schools, LSAT score and GPA. Efron & Tibshirani (1986) Fig. 1, p. 55. No raters, no categories, no coefficient -- the statistic is a Pearson correlation | test_analyzers/test_ci_methods.py (TestEfronLawSchool) |
 | efron1986_lawschool_expected.yaml | The paper's published values: point 0.776, z0 -0.0927, acceleration -0.0817, central 90% interval [0.43, 0.92], and the fifteen empirical influence values it computed the acceleration from. Records the two traps in reproducing it -- the interval is central 90% (alpha = 0.10), and the published acceleration comes from the infinitesimal jackknife, where this package's delete-one form gives -0.0757 | test_analyzers/test_ci_methods.py (TestEfronLawSchool) |
-| scruffy_ratings_generator.py | A generator for deliberately damaged ratings, with every corruption recorded so a cleaner can be checked against an answer known in advance | -- |
+| scruffy_ratings_generator.py | A generator for deliberately damaged ratings, with every corruption recorded so a cleaner can be checked against an answer known in advance | test_cleaners/test_scruffy.py |
 | scruffy_ratings_example.csv | One 40x5 output of that generator, checked in so the file can be read without running the generator | -- |
-| scruffy_cleaner_config.yaml | A config permissive enough to clean that file all the way through. The same file raises under the strict defaults, which is the point of the fixture: what is fatal is decided by the config, not by the data | -- |
+| scruffy_cleaner_config.yaml | A config permissive enough to clean that file all the way through. The same file raises under the strict defaults, which is the point of the fixture: what is fatal is decided by the config, not by the data | test_cleaners/test_scruffy.py |
+| through_cleaner.py | `clean_ratings(codes, semantics)`: builds test Ratings the way users get them, by writing the codes as a labelled table and running it through `RatingsCleaner`. Fails if the cleaner would change anything. Importable as `fixtures.through_cleaner` because `pyproject.toml` puts `tests/` on pytest's path | most test files outside test_data_objects/ |
 
-**Nothing currently imports the three scruffy files.** They are a complete,
-documented fixture with no test behind them -- the cleaner is tested in
-`test_cleaners/` against the small inline CLEAN_DF and MESSY_DF instead. Stated
-here rather than left to be discovered, because a fixture that looks used and
-is not will eventually be trusted by somebody.
+`test_cleaners/test_scruffy.py` runs the generator and the config end to
+end: it checks the cleaner's report and output against the recorded damage,
+then takes the cleaned ratings to a coefficient. `scruffy_ratings_example.csv`
+is still read by nothing; it is there so the damage can be seen without
+running the generator.
 
 
 ## Datasets

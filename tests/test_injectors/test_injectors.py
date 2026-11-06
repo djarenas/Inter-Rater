@@ -13,6 +13,7 @@ import pytest
 
 from interrater.contracts import INDEX_DTYPE
 from interrater.data_objects.ratings import Ratings
+from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.injectors import (
     RaterInjector,
     DistributionInjector,
@@ -34,6 +35,8 @@ from interrater.injectors.registry import (
     hydrate_injection_step,
     get_injector_class,
 )
+
+from fixtures.through_cleaner import clean_ratings
 
 
 # ============================================================================ #
@@ -709,6 +712,24 @@ class TestInjectionNeedsRatings:
 
         analyzer = FleissKappaAnalyzer(simple_ratings, self._config(FleissKappaConfig))
         assert analyzer.ratings.n_raters == simple_ratings.n_raters + 1
+
+    def test_injected_rater_keeps_ordered_categories(self, three_cat_ratings):
+        """The new rater joins the same rating task, weights included."""
+        from interrater.analyzers import FleissKappaAnalyzer
+        from interrater.analyzers.configs import FleissKappaConfig
+        from interrater.semantics.categories import OrderedCategories
+
+        categories = OrderedCategories(three_cat_ratings.semantics.categories.names, weighting="quadratic")
+        ordered = clean_ratings(
+            three_cat_ratings.category_index.copy(),
+            RatingsSemantics(raters=list(three_cat_ratings.semantics.raters), categories=categories),
+        )
+        analyzer = FleissKappaAnalyzer(ordered, self._config(FleissKappaConfig))
+        assert analyzer.ratings.n_raters == ordered.n_raters + 1
+        assert analyzer.ratings.semantics.categories == categories
+        result = analyzer.estimate()
+        assert result.weights_type == "quadratic"
+        assert result.weight_matrix == categories.weight_matrix().tolist()
 
 
 # ============================================================================ #

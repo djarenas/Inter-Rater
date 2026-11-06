@@ -831,6 +831,24 @@ class TestUnusedCategories:
         assert rc.report.categories.unused == ("moderate",)
         assert rc.report.categories.action == "kept"
 
+    def test_drop_refused(self):
+        """
+        'drop' was removed in 2.1.0: the cleaner no longer changes the
+        declared categories. The error names both ways forward.
+        """
+        with pytest.raises(ValueError, match="'drop' was removed in 2.1.0") as info:
+            CleanerConfig(unused_categories="drop")
+        message = str(info.value)
+        assert "set unused_categories='keep'" in message
+        assert "remove the category from your semantics file yourself" in message
+
+    def test_drop_refused_from_yaml(self, tmp_path):
+        """The same refusal when the setting comes from a config file."""
+        path = tmp_path / "config.yaml"
+        path.write_text("unused_categories: drop\n")
+        with pytest.raises(ValueError, match="'drop' was removed in 2.1.0"):
+            CleanerConfig.build_from_yaml(path)
+
 
 # ============================================================================ #
 #  Drops                                                                       #

@@ -359,6 +359,32 @@ class TestWeightsFactories:
             Weights.build_from_type("banana", 3)
 
 
+class TestWeightsBuildFromCategories:
+    """The semantics is the one place weights are declared; I read them from there."""
+
+    def test_unordered_gives_none(self):
+        from interrater.semantics.categories import UnorderedCategories
+
+        assert Weights.build_from_categories(UnorderedCategories(("a", "b", "c"))) is None
+
+    @pytest.mark.parametrize("weighting", ["linear", "quadratic"])
+    def test_ordered_gives_its_scheme(self, weighting):
+        from interrater.semantics.categories import OrderedCategories
+
+        categories = OrderedCategories(("low", "mid", "high"), weighting=weighting)
+        weights = Weights.build_from_categories(categories)
+        assert weights.kind == weighting
+        np.testing.assert_array_equal(weights.matrix, categories.weight_matrix())
+
+    def test_weighted_gives_custom(self):
+        from interrater.semantics.categories import WeightedCategories
+
+        matrix = np.array([[1.0, 0.8, 0.0], [0.8, 1.0, 0.2], [0.0, 0.2, 1.0]])
+        weights = Weights.build_from_categories(WeightedCategories(("a", "b", "c"), matrix))
+        assert weights.kind == "custom"
+        np.testing.assert_array_equal(weights.matrix, matrix)
+
+
 class TestWeightsProperties:
     """Computed properties."""
 

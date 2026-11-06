@@ -18,7 +18,6 @@ from interrater.analyzers.agreement_functions import (
     observed_agreement,
     rater_marginals,
 )
-from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.data_profiles import (
     AgreementProfile,
     PrevalenceBiasIndex,
@@ -27,12 +26,14 @@ from interrater.intermediates.estimator_parts import EstimatorInput, NijMatrix
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
+from fixtures.through_cleaner import clean_ratings
+
 E = EMPTY
 
 
 def _ratings(index, raters, cats=("yes", "no", "maybe")):
     sem = RatingsSemantics(raters=list(raters), categories=UnorderedCategories(cats))
-    return Ratings(category_index=np.array(index, dtype=np.int8), semantics=sem)
+    return clean_ratings(category_index=np.array(index, dtype=np.int8), semantics=sem)
 
 
 def _profile(index, raters, cats=("yes", "no", "maybe")):

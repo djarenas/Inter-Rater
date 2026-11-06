@@ -42,6 +42,8 @@ from interrater.intermediates.not_computed import NotComputed
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
+from fixtures.through_cleaner import clean_ratings
+
 CONFIGS = {
     "cohen_kappa": C.CohenKappaConfig,
     "scotts_pi": C.ScottsConfig,
@@ -78,7 +80,7 @@ def _complete_codes() -> np.ndarray:
 
 
 def _ratings(codes: np.ndarray) -> Ratings:
-    return Ratings(
+    return clean_ratings(
         category_index=codes,
         semantics=RatingsSemantics(raters=codes.shape[1], categories=_CATEGORIES),
     )

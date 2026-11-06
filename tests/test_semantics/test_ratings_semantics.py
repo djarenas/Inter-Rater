@@ -20,11 +20,18 @@ Key behaviours:
 - build_from_dict / to_dict round-trips support YAML-based declarations.
 """
 
+import numpy as np
 import pytest
+import yaml
 
+from interrater.semantics.categories import (
+    OrderedCategories,
+    UnorderedCategories,
+    WeightedCategories,
+)
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
-from .conftest import TWO_CAT_NAMES
+from .conftest import THREE_CAT_NAMES, TWO_CAT_NAMES
 
 
 # -- Construction ------------------------------------------------------------ #
@@ -173,6 +180,72 @@ class TestPublicAPI:
         """A declaration without categories is incomplete."""
         with pytest.raises(KeyError, match="missing"):
             RatingsSemantics.build_from_dict({"raters": 2})
+
+    def test_from_dict_unquoted_number_names_become_text(self):
+        """YAML's unquoted 1, 0, -1 reach the categories as '1', '0', '-1'."""
+        spec = yaml.safe_load(
+            "raters: 2\ncategories: {kind: unordered, names: [1, 0, -1]}"
+        )
+        sem = RatingsSemantics.build_from_dict(spec)
+        assert sem.categories.names == ("1", "0", "-1")
+
+    def test_from_dict_unquoted_yes_no_refused(self):
+        """Through build_from_dict, the quoting hint still reaches the user."""
+        spec = yaml.safe_load(
+            "raters: 2\ncategories: {kind: unordered, names: [yes, no]}"
+        )
+        with pytest.raises(ValueError, match="quote the names"):
+            RatingsSemantics.build_from_dict(spec)
+
+
+# -- Unknown keys ------------------------------------------------------------ #
+
+
+def _spec(**extra) -> dict:
+    """A valid declaration, plus whatever extra keys a test adds."""
+    return {
+        "raters": 2,
+        "categories": {"kind": "unordered", "names": list(TWO_CAT_NAMES)},
+        **extra,
+    }
+
+
+class TestUnknownKeys:
+    """
+    A misspelt optional key would otherwise be dropped without a word, and
+    the check the user thought they had switched on would never run.
+    """
+
+    @pytest.mark.parametrize("typo, meant", [
+        ("unique_subject", "unique_subjects"),
+        ("n_subject", "n_subjects"),
+    ])
+    def test_near_miss_gets_a_did_you_mean(self, typo, meant):
+        with pytest.raises(ValueError, match=f"'{typo}' -> did you mean '{meant}'"):
+            RatingsSemantics.build_from_dict(_spec(**{typo: True}))
+
+    def test_unrelated_key_has_no_hint(self):
+        with pytest.raises(ValueError, match=r"unknown key\(s\) \['colour'\]\. Known:") as info:
+            RatingsSemantics.build_from_dict(_spec(colour="blue"))
+        assert "did you mean" not in str(info.value)
+
+    def test_several_listed_at_once(self):
+        """All of them in one error, not one per run."""
+        with pytest.raises(ValueError) as info:
+            RatingsSemantics.build_from_dict(_spec(colour="blue", n_subject=10, zebra=1))
+        message = str(info.value)
+        assert "['colour', 'n_subject', 'zebra']" in message
+        assert "'n_subject' -> did you mean 'n_subjects'" in message
+
+    @pytest.mark.parametrize("categories", [
+        UnorderedCategories(TWO_CAT_NAMES, labels={"include": "Include"}),
+        OrderedCategories(THREE_CAT_NAMES, weighting="linear"),
+        WeightedCategories(TWO_CAT_NAMES, np.array([[1.0, 0.3], [0.3, 1.0]])),
+    ], ids=["unordered", "ordered", "weighted"])
+    def test_to_dict_round_trips_for_every_kind(self, categories):
+        """What to_dict writes, build_from_dict reads back: no key it does not know."""
+        sem = RatingsSemantics(raters=["ann", "bob"], categories=categories, n_subjects=40)
+        assert RatingsSemantics.build_from_dict(sem.to_dict()) == sem
 
 
 # -- Equality ---------------------------------------------------------------- #

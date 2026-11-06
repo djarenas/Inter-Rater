@@ -258,6 +258,27 @@ def sr1_prelim_ratings():
 
 
 @pytest.fixture(scope="module")
+def sr1_prelim_with_semantics():
+    """
+    SR1 preliminary data read under another semantics file.
+
+    Returns a callable taking the semantics path, so a test can check that
+    a different way of declaring the same thing gives the same ratings.
+
+    Usage:
+        ratings = sr1_prelim_with_semantics(SR1_DIR / "SR1_prelim_weighted_semantics.yaml")
+    """
+    def _make(semantics_path):
+        return _load_ratings(
+            SR1_DIR / "SR1_prelim_data.csv",
+            Path(semantics_path),
+            SR1_DIR / "SR1_prelim_cleaner_config.yaml",
+        )
+
+    return _make
+
+
+@pytest.fixture(scope="module")
 def sr1_main_ratings():
     """Ratings from SR1 main data (1617 subjects, 4 raters, K=3, unbalanced)."""
     return _load_ratings(

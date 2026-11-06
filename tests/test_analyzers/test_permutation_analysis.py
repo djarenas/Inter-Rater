@@ -30,6 +30,7 @@ from interrater.analyzers.permutation_analysis.permutation_analysis import (
 from interrater.analyzers.configs.cohen_kappa_config import CohenKappaConfig
 from interrater.analyzers.configs.conger_kappa_config import CongerKappaConfig
 from interrater.analyzers.configs.fleiss_kappa_config import FleissKappaConfig
+from interrater.analyzers.configs.gwet_ac1_config import GwetAC1Config
 from interrater.analyzers.configs.scotts_config import ScottsConfig
 from interrater.analyzers.configs.pairwise_permutation_config import (
     PairwisePermutationConfig,
@@ -56,6 +57,8 @@ from interrater.intermediates.not_computed import NotComputed
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.semantics import OrderedCategories, UnorderedCategories
+
+from fixtures.through_cleaner import clean_ratings
 
 # Tolerance for deterministic computations
 TOL = 1e-12
@@ -94,7 +97,7 @@ def _make_ratings(
 
     cats = UnorderedCategories(cat_names)
     semantics = RatingsSemantics(raters=rater_names, categories=cats)
-    return Ratings(category_index=category_index, semantics=semantics)
+    return clean_ratings(category_index=category_index, semantics=semantics)
 
 
 def _pairwise_config(
@@ -260,7 +263,7 @@ class TestWeightResolution:
                 unordered.semantics.categories.names, weighting="linear"
             ),
         )
-        ratings = Ratings(
+        ratings = clean_ratings(
             category_index=unordered.category_index, semantics=semantics
         )
         coc = CohenKappaConfig(
@@ -276,6 +279,44 @@ class TestWeightResolution:
         w = analysis.estimator_input.weights
         assert w is not None
         assert w.matrix.shape == (4, 4)
+
+
+class TestPermutationWeightsFromSemantics:
+    """Every pair or subset is computed under the semantics' weights, or refused."""
+
+    @staticmethod
+    def _ordered(n_raters):
+        unordered = _make_ratings(20, n_raters, n_categories=3)
+        semantics = RatingsSemantics(
+            raters=list(unordered.semantics.raters),
+            categories=OrderedCategories(unordered.semantics.categories.names, weighting="quadratic"),
+        )
+        return clean_ratings(category_index=unordered.category_index, semantics=semantics)
+
+    def test_every_pair_uses_the_weights(self):
+        ratings = self._ordered(3)
+        result = PairwisePermutationAnalysis(ratings, _pairwise_config()).run()
+        expected = ratings.semantics.categories.weight_matrix().tolist()
+        for pair, unit in result.pair_results.items():
+            assert unit.weights_type == "quadratic", pair
+            assert unit.weight_matrix == expected, pair
+
+    def test_pairwise_gwet_refuses_ordered(self):
+        config = PairwisePermutationConfig(
+            coefficient_to_compute="gwet_ac1",
+            config_of_coefficient=GwetAC1Config(n_resamples=20),
+        )
+        with pytest.raises(ValueError, match="gwet_ac1 has no weighted form.*kind 'ordered'"):
+            PairwisePermutationAnalysis(self._ordered(3), config)
+
+    def test_subset_gwet_refuses_ordered(self):
+        config = SubsetPermutationConfig(
+            coefficient_to_compute="gwet_ac1",
+            config_of_coefficient=GwetAC1Config(n_resamples=20),
+            subset_k=2,
+        )
+        with pytest.raises(ValueError, match="gwet_ac1 has no weighted form.*kind 'ordered'"):
+            SubsetPermutationAnalysis(self._ordered(3), config)
 
 
 class TestInjectionPipeline:
@@ -642,7 +683,7 @@ class TestPairwiseSparseData:
 
         cats = UnorderedCategories(["A", "B"])
         semantics = RatingsSemantics(raters=["r0", "r1", "r2"], categories=cats)
-        ratings = Ratings(category_index=category_index, semantics=semantics)
+        ratings = clean_ratings(category_index=category_index, semantics=semantics)
 
         config = _pairwise_config(n_resamples=50)
         result = PairwisePermutationAnalysis(ratings, config).run()
@@ -788,7 +829,7 @@ class TestMeanUsesTheSamePairs:
         sem = RatingsSemantics(
             raters=["a", "b", "c"], categories=UnorderedCategories(["C0", "C1"])
         )
-        return Ratings(category_index=index, semantics=sem)
+        return clean_ratings(category_index=index, semantics=sem)
 
     def _config(self, method, cls=PairwisePermutationConfig, **extra):
         coefficient = "cohen_kappa" if cls is PairwisePermutationConfig else "fleiss_kappa"
@@ -915,7 +956,7 @@ class TestPairwiseDifferentCoefficients:
 
         cats = UnorderedCategories(["A", "B"])
         semantics = RatingsSemantics(raters=["r0", "r1", "r2"], categories=cats)
-        ratings = Ratings(category_index=category_index, semantics=semantics)
+        ratings = clean_ratings(category_index=category_index, semantics=semantics)
 
         r_cohen = PairwisePermutationAnalysis(
             ratings, _pairwise_config(coefficient="cohen_kappa", n_resamples=50)
@@ -1373,7 +1414,7 @@ class TestResultSummary:
         index = np.zeros((6, 3), dtype=np.int8)
         index[0] = [1, 1, 0]
         index[1] = [0, 1, 1]
-        ratings = Ratings(category_index=index, semantics=sem)
+        ratings = clean_ratings(category_index=index, semantics=sem)
         config = _pairwise_config(
             n_resamples=400, bootstrap_mean="correlated"
         )
@@ -1599,7 +1640,7 @@ class TestEachUnitIsTheAnalyzersResult:
         columns = ratings.category_index[:, list(unit)]
         rows = (columns != EMPTY).sum(axis=1) >= 2
         names = [ratings.semantics.raters[i] for i in unit]
-        unit_ratings = Ratings(
+        unit_ratings = clean_ratings(
             category_index=columns[rows],
             semantics=RatingsSemantics(
                 raters=names, categories=ratings.semantics.categories,
@@ -1640,6 +1681,10 @@ class TestSubsetsNotComputed:
     A subset with no result holds NotComputed and says why, and the mean
     leaves it out. Raters r0 and r1 rate subjects 0-9; r2 and r3 rate
     10-19; r4 rates all 20; r5 rates subject 0 only.
+
+    Built by hand on purpose: the cleaner drops a rater with one rating
+    (min_ratings_per_rater cannot go below 2), so r5 only exists this way.
+    The rule under test is the defence for when such a rater gets through.
     """
 
     def _ratings(self):
@@ -1685,6 +1730,10 @@ class TestResampleWithAnIdleRater:
     r0, r1, r2 has a coefficient, but a resample that misses subject 0
     leaves r2 idle: that draw is really the pair r0, r1. It counts as
     failed, under the same rule as the subset's own value.
+
+    Built by hand on purpose: the cleaner drops a rater with one rating
+    (min_ratings_per_rater cannot go below 2), so r2 only exists this way.
+    The rule under test is the defence for when such a rater gets through.
     """
 
     def test_draws_that_drop_the_rater_fail(self):

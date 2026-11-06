@@ -72,9 +72,10 @@ from interrater.intermediates.data_profiles.rater_profile import RaterProfile
 from interrater.intermediates.data_profiles.rater_shared_matrix import RaterSharedMatrix
 from interrater.intermediates.not_computed import NotComputed
 from interrater.intermediates.results import AgreementParts
-from interrater.data_objects.ratings import Ratings
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
+
+from fixtures.through_cleaner import clean_ratings
 
 from .conftest import BALANCED_NIJ, UNBALANCED_NIJ
 
@@ -156,7 +157,7 @@ def _rater_profile(index) -> AgreementProfile:
     semantics = RatingsSemantics(
         raters=index.shape[1], categories=UnorderedCategories(("a", "b", "c")),
     )
-    return AgreementProfile.build_from_ratings(Ratings(category_index=index, semantics=semantics))
+    return AgreementProfile.build_from_ratings(clean_ratings(category_index=index, semantics=semantics))
 
 
 # Two raters with identical marginals (1/4, 1/2, 1/4), so Cohen's ceiling is 1

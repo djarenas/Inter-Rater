@@ -34,9 +34,10 @@ from interrater.analyzers.permutation_analysis import (
     PairwisePermutationAnalysis,
     SubsetPermutationAnalysis,
 )
-from interrater.data_objects.ratings import Ratings
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
+
+from fixtures.through_cleaner import clean_ratings
 
 # A few words of the caveat, as they appear once the legend wraps it
 CAVEAT_WORDS = ("independent bootstrap", "too narrow")
@@ -57,7 +58,7 @@ def ratings():
     copy = rng.random((40, 4)) < 0.7
     codes = np.where(copy, truth[:, None], noise).astype(np.int8)
     cats = UnorderedCategories(names=("A", "B", "C"))
-    return Ratings(category_index=codes, semantics=RatingsSemantics(raters=4, categories=cats))
+    return clean_ratings(category_index=codes, semantics=RatingsSemantics(raters=4, categories=cats))
 
 
 def _mean_config(method):

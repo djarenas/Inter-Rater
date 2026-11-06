@@ -19,6 +19,7 @@ which is the path YAML declarations take.
 
 import numpy as np
 import pytest
+import yaml
 
 from interrater.semantics.categories import (
     UnorderedCategories,
@@ -71,6 +72,46 @@ class TestCategoriesBaseValidation:
             UnorderedCategories(
                 TWO_CAT_NAMES, labels={"nonexistent": "display name"}
             )
+
+
+# -- Category names are always text ----------------------------------------- #
+
+
+class TestCategoryNamesAreText:
+    """
+    Ratings are matched as text, so names are stored as text. YAML gives a
+    number for unquoted 1 and -1, which becomes '1' and '-1'; it gives a
+    boolean for unquoted yes/no, which cannot be turned back into the word
+    and is refused with a hint to quote the names.
+    """
+
+    def test_unquoted_numbers_from_yaml_become_text(self):
+        spec = yaml.safe_load("names: [1, 0, -1]")
+        assert spec["names"] == [1, 0, -1]  # what YAML gives
+        cats = UnorderedCategories(spec["names"])
+        assert cats.names == ("1", "0", "-1")
+        assert cats.index_of("-1") == 2
+
+    def test_number_label_keys_become_text(self):
+        spec = yaml.safe_load("names: [1, 0]\nlabels: {1: include, 0: exclude}")
+        cats = UnorderedCategories(spec["names"], labels=spec["labels"])
+        assert cats.labels == {"1": "include", "0": "exclude"}
+
+    @pytest.mark.parametrize("written", ["[yes, no]", "[on, off]", "[true, false]"])
+    def test_unquoted_yes_no_refused_with_quoting_hint(self, written):
+        names = yaml.safe_load(f"names: {written}")["names"]
+        assert names == [True, False]  # the words are already gone
+        with pytest.raises(ValueError, match="quote the names"):
+            UnorderedCategories(names)
+
+    def test_boolean_label_key_refused(self):
+        with pytest.raises(ValueError, match="quote the names"):
+            UnorderedCategories(("yes", "no"), labels={True: "Yes"})
+
+    def test_none_refused(self):
+        """YAML gives None for an empty entry (``[a, , b]`` or ``~``)."""
+        with pytest.raises(ValueError, match="must be text or a number, got NoneType"):
+            UnorderedCategories(("a", None, "b"))
 
 
 # -- UnorderedCategories ----------------------------------------------------- #
@@ -293,3 +334,85 @@ class TestBuildCategories:
         """Every kind needs names."""
         with pytest.raises(KeyError, match="names"):
             build_categories({"kind": "unordered"})
+
+
+# -- weights_file ------------------------------------------------------------ #
+
+
+_MATRIX = [[1.0, 0.8, 0.0], [0.8, 1.0, 0.2], [0.0, 0.2, 1.0]]
+
+
+def _weights_file(folder, names=("1", "0", "-1"), matrix=_MATRIX, name="weights.yaml", **extra):
+    """Write a weights file holding names and matrix (and any extra keys)."""
+    path = folder / name
+    path.write_text(yaml.safe_dump({"names": list(names), "matrix": matrix, **extra}))
+    return path
+
+
+def _weighted_spec(**overrides) -> dict:
+    return {"kind": "weighted", "names": ["1", "0", "-1"], **overrides}
+
+
+class TestWeightsFile:
+    """
+    A weighted scheme's matrix may live in its own YAML file. The file
+    names its categories, so a matrix cannot be read against the wrong
+    ones; anything ambiguous is refused.
+    """
+
+    def test_file_matches_inline(self, tmp_path):
+        _weights_file(tmp_path)
+        from_file = build_categories(_weighted_spec(weights_file="weights.yaml"), base_dir=tmp_path)
+        inline = build_categories(_weighted_spec(weights=_MATRIX))
+        assert from_file == inline
+        np.testing.assert_array_equal(from_file.weight_matrix(), np.array(_MATRIX))
+
+    def test_relative_path_read_from_base_dir_not_working_directory(self, tmp_path, monkeypatch):
+        semantics_dir = tmp_path / "study"
+        semantics_dir.mkdir()
+        _weights_file(semantics_dir)
+        monkeypatch.chdir(tmp_path)  # the file is not here
+        cats = build_categories(_weighted_spec(weights_file="weights.yaml"), base_dir=semantics_dir)
+        np.testing.assert_array_equal(cats.weight_matrix(), np.array(_MATRIX))
+
+    def test_names_mismatch_refused(self, tmp_path):
+        _weights_file(tmp_path, names=("yes", "maybe", "no"))
+        with pytest.raises(ValueError, match="is written for categories"):
+            build_categories(_weighted_spec(weights_file="weights.yaml"), base_dir=tmp_path)
+
+    def test_names_in_another_order_refused(self, tmp_path):
+        """Same names, other order: every weight would land on the wrong pair."""
+        _weights_file(tmp_path, names=("-1", "0", "1"))
+        with pytest.raises(ValueError, match="same order"):
+            build_categories(_weighted_spec(weights_file="weights.yaml"), base_dir=tmp_path)
+
+    def test_both_inline_and_file_refused(self, tmp_path):
+        _weights_file(tmp_path)
+        with pytest.raises(ValueError, match="both 'weights' and 'weights_file'"):
+            build_categories(
+                _weighted_spec(weights=_MATRIX, weights_file="weights.yaml"), base_dir=tmp_path,
+            )
+
+    @pytest.mark.parametrize("name", ["weights.csv", "weights.json", "weights.txt"])
+    def test_non_yaml_file_refused(self, tmp_path, name):
+        _weights_file(tmp_path, name=name)
+        with pytest.raises(ValueError, match="must be a YAML file"):
+            build_categories(_weighted_spec(weights_file=name), base_dir=tmp_path)
+
+    def test_extra_key_in_file_refused(self, tmp_path):
+        _weights_file(tmp_path, kind="weighted")
+        with pytest.raises(ValueError, match="must hold exactly 'names' and 'matrix'"):
+            build_categories(_weighted_spec(weights_file="weights.yaml"), base_dir=tmp_path)
+
+    def test_only_for_weighted_kind(self, tmp_path):
+        """An ordered scale derives its weights from 'weighting'."""
+        _weights_file(tmp_path)
+        spec = {"kind": "ordered", "names": ["1", "0", "-1"], "weighting": "linear",
+                "weights_file": "weights.yaml"}
+        with pytest.raises(ValueError, match="only allowed with kind 'weighted'"):
+            build_categories(spec, base_dir=tmp_path)
+
+    def test_missing_file_says_where_it_looked(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match="read from the folder of the semantics file"):
+            build_categories(_weighted_spec(weights_file="nowhere.yaml"), base_dir=tmp_path)
+

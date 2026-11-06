@@ -55,3 +55,9 @@ dev = ["pytest>=8.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/interrater"]
+
+[tool.pytest.ini_options]
+# Lets every test import the shared helpers in tests/fixtures/ by name
+# (``from fixtures.through_cleaner import clean_ratings``). Test runs only;
+# nothing under tests/ is part of the installed package.
+pythonpath = ["tests"]

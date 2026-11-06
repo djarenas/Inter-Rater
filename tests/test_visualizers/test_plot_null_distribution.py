@@ -26,6 +26,8 @@ from interrater.intermediates.results import HypothesisTestResult
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
+from fixtures.through_cleaner import clean_ratings
+
 
 @pytest.fixture(autouse=True)
 def _close_figures():
@@ -40,7 +42,7 @@ def _ratings(agreement: float) -> Ratings:
     noise = rng.integers(0, 3, (30, 3))
     codes = np.where(rng.random((30, 3)) < agreement, truth[:, None], noise)
     cats = UnorderedCategories(names=("A", "B", "C"), labels={"A": "A", "B": "B", "C": "C"})
-    return Ratings(category_index=codes.astype(np.int8),
+    return clean_ratings(category_index=codes.astype(np.int8),
                    semantics=RatingsSemantics(raters=3, categories=cats))
 
 

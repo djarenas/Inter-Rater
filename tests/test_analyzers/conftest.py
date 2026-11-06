@@ -18,7 +18,6 @@ import pytest
 from interrater.contracts import INDEX_DTYPE
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
-from interrater.data_objects.ratings import Ratings
 from interrater.intermediates.estimator_parts import NijMatrix
 
 from interrater.analyzers.configs import (
@@ -36,6 +35,8 @@ from interrater.analyzers.configs.pairwise_permutation_config import PairwisePer
 from interrater.analyzers.configs.subset_permutation_config import SubsetPermutationConfig
 from interrater.analyzers.configs.permutation_bootstrap_mean_config import PermutationBootstrapMeanConfig
 from interrater.analyzers.convergence_test import ConvergenceTest
+
+from fixtures.through_cleaner import clean_ratings
 
 
 # -- Raw arrays (inlined from test_agreement_functions/conftest.py) --------- #
@@ -206,19 +207,19 @@ CONVERGENCE_TEST_STUB = ConvergenceTest()
 @pytest.fixture
 def two_rater_ratings():
     """Ratings from TWO_RATER_INDEX: 10 subjects, 2 raters, K=2."""
-    return Ratings(TWO_RATER_INDEX.copy(), SEM_2RATER_2CAT)
+    return clean_ratings(TWO_RATER_INDEX.copy(), SEM_2RATER_2CAT)
 
 
 @pytest.fixture
 def fleiss_1971_ratings():
     """Ratings expanded from Fleiss (1971) Table 1: 30 subjects, 6 raters, K=5."""
-    return Ratings(FLEISS_1971_INDEX.copy(), SEM_6RATER_5CAT)
+    return clean_ratings(FLEISS_1971_INDEX.copy(), SEM_6RATER_5CAT)
 
 
 @pytest.fixture
 def three_rater_ratings():
     """Three-rater dataset: 10 subjects, 3 raters, K=2."""
-    return Ratings(THREE_RATER_INDEX.copy(), SEM_3RATER_2CAT)
+    return clean_ratings(THREE_RATER_INDEX.copy(), SEM_3RATER_2CAT)
 
 
 # -- Fixtures: NijMatrix objects ------------------------------------------- #

@@ -6,10 +6,12 @@ Tests are organized by class, following the inheritance hierarchy.
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 
 import pytest
 
+from interrater.analyzers import configs
 from interrater.analyzers.configs import (
     AnalyzerConfig,
     BrennanPredigerConfig,
@@ -973,3 +975,46 @@ class TestParametricNullWarningBoundary:
         assert config_cls.__name__.replace("Config", "") in message or (
             "not available" in message
         )
+
+
+# -- Weights live in the semantics, not in any config ------------------------ #
+
+
+_ALL_CONFIGS = sorted(
+    (getattr(configs, name) for name in dir(configs) if name.endswith("Config")),
+    key=lambda cls: cls.__name__,
+)
+
+
+class TestConfigsCarryNoWeights:
+    """
+    Since 2.1.0 the weights come from the semantics. No config declares
+    them, every coefficient config builds without them, and the old way of
+    passing a weights file is gone.
+    """
+
+    @pytest.mark.parametrize("config_cls", _ALL_CONFIGS, ids=lambda cls: cls.__name__)
+    def test_no_weight_field(self, config_cls):
+        fields = [f.name for f in dataclasses.fields(config_cls)]
+        assert [name for name in fields if "weight" in name] == []
+
+    @pytest.mark.parametrize("config_cls", [
+        FleissKappaConfig, ScottsConfig, GwetAC1Config, BrennanPredigerConfig,
+        KrippendorffAlphaConfig, CohenKappaConfig, CongerKappaConfig, LightKappaConfig,
+    ], ids=lambda cls: cls.__name__)
+    def test_coefficient_config_builds_without_weights(self, config_cls):
+        summary = config_cls().summary()
+        assert [key for key in summary if "weight" in key] == []
+
+    def test_custom_weights_input_is_gone(self):
+        import interrater
+
+        assert not hasattr(interrater, "CustomWeightsInput")
+        assert not hasattr(configs, "CustomWeightsInput")
+
+    def test_weights_from_file_is_gone(self):
+        from interrater.intermediates.estimator_parts import Weights
+
+        assert not hasattr(Weights, "from_file")
+        assert not hasattr(Weights, "build_from_file")
+

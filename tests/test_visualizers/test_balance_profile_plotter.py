@@ -24,9 +24,10 @@ from interrater.analyzers.configs.pairwise_permutation_config import (
 )
 from interrater.analyzers.permutation_analysis import PairwisePermutationAnalysis
 from interrater.contracts import EMPTY
-from interrater.data_objects.ratings import Ratings
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
+
+from fixtures.through_cleaner import clean_ratings
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +48,7 @@ def gappy():
         [EMPTY, EMPTY, 1, 1],
     ])
     semantics = RatingsSemantics(raters=4, categories=UnorderedCategories(("x", "y")))
-    return Ratings(index, semantics)
+    return clean_ratings(index, semantics)
 
 
 @pytest.fixture
@@ -56,7 +57,7 @@ def complete():
     rng = np.random.default_rng(42)
     codes = rng.integers(0, 3, (20, 4)).astype(np.int8)
     semantics = RatingsSemantics(raters=4, categories=UnorderedCategories(("A", "B", "C")))
-    return Ratings(codes, semantics)
+    return clean_ratings(codes, semantics)
 
 
 def _config():

@@ -26,13 +26,23 @@ ordinary config on ratings whose categories are declared ordered
 (``ordered_ratings``), and compares against the same data declared unordered.
 """
 
+from pathlib import Path
+
+import numpy as np
 import pytest
+import yaml
 
 from interrater import (
     FleissKappaAnalyzer,
     KrippendorffAlphaAnalyzer,
     CohenKappaAnalyzer,
     BrennanPredigerAnalyzer,
+    OrderedCategories,
+    RatingsSemantics,
+)
+from interrater.analyzers.permutation_analysis import (
+    PairwisePermutationAnalysis,
+    SubsetPermutationAnalysis,
 )
 
 # Tolerance: 3 decimal places.
@@ -119,6 +129,97 @@ class TestSR1PrelimWeighted:
 
         # Result reports the correct weights type
         assert result.weights_type == "linear"
+
+
+# ── SR1 prelim, weights declared in the semantics ──────────────────── #
+#
+# The shipped weighted example gives its matrix two ways: in a separate
+# weights file (SR1_prelim_weighted_semantics.yaml) and inline
+# (SR1_prelim_weighted_inline_semantics.yaml). Same matrix, so every
+# coefficient and every pair or subset must come out identical.
+
+SR1_DIR = Path(__file__).resolve().parents[2] / "example_data" / "SR1_OSF2018"
+SR1_MATRIX = [[1.0, 0.8, 0.0], [0.8, 1.0, 0.2], [0.0, 0.2, 1.0]]
+
+
+@pytest.fixture(scope="module")
+def from_file(sr1_prelim_with_semantics):
+    """SR1 prelim with its matrix in a separate weights file."""
+    return sr1_prelim_with_semantics(SR1_DIR / "SR1_prelim_weighted_semantics.yaml")
+
+
+@pytest.fixture(scope="module")
+def inline(sr1_prelim_with_semantics):
+    """SR1 prelim with the same matrix written inline."""
+    return sr1_prelim_with_semantics(SR1_DIR / "SR1_prelim_weighted_inline_semantics.yaml")
+
+
+class TestSR1PrelimWeightsFromSemantics:
+    """The weights come from the semantics, however they are written down."""
+
+    @pytest.mark.parametrize("analyzer_cls, config_name", [
+        (FleissKappaAnalyzer, "fast_fleiss_config"),
+        (BrennanPredigerAnalyzer, "fast_bp_config"),
+        (KrippendorffAlphaAnalyzer, "fast_krippendorff_config"),
+    ], ids=["fleiss", "brennan_prediger", "krippendorff"])
+    def test_file_and_inline_give_identical_results(
+        self, from_file, inline, analyzer_cls, config_name, request,
+    ):
+        config = request.getfixturevalue(config_name)
+        a = analyzer_cls(from_file, config).estimate()
+        b = analyzer_cls(inline, config).estimate()
+        assert a.point == b.point
+        assert a.confidence_interval.as_tuple() == b.confidence_interval.as_tuple()
+        assert a.weights_type == b.weights_type == "custom"
+        assert a.weight_matrix == b.weight_matrix == SR1_MATRIX
+
+    @pytest.mark.parametrize("analyzer_cls, config_name, expected", [
+        (FleissKappaAnalyzer, "fast_fleiss_config", 0.5929),
+        (BrennanPredigerAnalyzer, "fast_bp_config", 0.7180),
+        (KrippendorffAlphaAnalyzer, "fast_krippendorff_config", 0.5934),
+    ], ids=["fleiss", "brennan_prediger", "krippendorff"])
+    def test_quadratic_matrix_in_a_file_reproduces_ordered_quadratic(
+        self, tmp_path, sr1_prelim_with_semantics, ordered_ratings,
+        analyzer_cls, config_name, expected, request,
+    ):
+        """A file holding the quadratic matrix is the quadratic scheme, number for number."""
+        quadratic = OrderedCategories(("1", "0", "-1"), weighting="quadratic").weight_matrix()
+        (tmp_path / "quadratic_weights.yaml").write_text(yaml.safe_dump(
+            {"names": ["1", "0", "-1"], "matrix": quadratic.tolist()}
+        ))
+        semantics = tmp_path / "semantics.yaml"
+        semantics.write_text(
+            "raters: 4\n"
+            "categories:\n"
+            "    kind: weighted\n"
+            "    names: ['1', '0', '-1']\n"
+            "    weights_file: quadratic_weights.yaml\n"
+            "n_subjects: 199\n"
+        )
+        config = request.getfixturevalue(config_name)
+        declared = analyzer_cls(sr1_prelim_with_semantics(semantics), config).estimate()
+        ordered = analyzer_cls(ordered_ratings("sr1_prelim", "quadratic"), config).estimate()
+        assert declared.point == pytest.approx(ordered.point, abs=1e-12)
+        assert declared.point == pytest.approx(expected, abs=5e-5)
+        assert declared.weight_matrix == ordered.weight_matrix
+
+    def test_loads_from_any_working_directory(self, tmp_path, monkeypatch):
+        """weights_file is read next to the semantics file, not from where Python runs."""
+        monkeypatch.chdir(tmp_path)
+        semantics = RatingsSemantics.build_from_yaml(SR1_DIR / "SR1_prelim_weighted_semantics.yaml")
+        np.testing.assert_array_equal(semantics.categories.weight_matrix(), np.array(SR1_MATRIX))
+
+    def test_pairs_use_the_semantics_weights(self, from_file, pairwise_config):
+        result = PairwisePermutationAnalysis(from_file, pairwise_config()).run()
+        for pair, unit in result.pair_results.items():
+            assert unit.weights_type == "custom", pair
+            assert unit.weight_matrix == SR1_MATRIX, pair
+
+    def test_subsets_use_the_semantics_weights(self, from_file, subset_config):
+        result = SubsetPermutationAnalysis(from_file, subset_config(3)).run()
+        for subset, unit in result.per_k_results[3].subset_results.items():
+            assert unit.weights_type == "custom", subset
+            assert unit.weight_matrix == SR1_MATRIX, subset
 
 
 # ── Gwet cont3x3 (ratings, 2 raters, K=3, balanced) ─────────────────── #
