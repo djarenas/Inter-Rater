@@ -260,10 +260,10 @@ def _draws_for(ci: BootstrapCIResult) -> np.ndarray:
     return draws
 
 
-def _pe(point, ci=None, balance_profile=None) -> PointEstimateResult:
+def _pe(point, ci=None) -> PointEstimateResult:
     """A PointEstimateResult whose draws, if any, agree with its interval."""
     draws = _draws_for(ci) if isinstance(ci, BootstrapCIResult) else None
-    return PointEstimateResult(point, ci, draws, balance_profile, **_NOT_UNDER_TEST)
+    return PointEstimateResult(point, ci, draws, _bp(), **_NOT_UNDER_TEST)
 
 
 def _bp() -> BalanceProfile:
@@ -448,18 +448,28 @@ class TestPointEstimateResultConstruction:
     """Valid construction with various combinations of optional fields."""
 
     def test_point_only(self):
-        """Minimal: just a point estimate, everything else None."""
+        """Minimal: a point estimate and its balance profile; no interval, no draws."""
         r = PointEstimateResult(
             point=0.75,
             confidence_interval=None,
             bootstrap_distribution=None,
-            balance_profile=None,
+            balance_profile=_bp(),
             **_NOT_UNDER_TEST,
         )
         assert r.point == 0.75
         assert r.confidence_interval is None
         assert r.bootstrap_distribution is None
-        assert r.balance_profile is None
+
+    def test_balance_profile_required(self):
+        """Every result carries the balance profile of its data."""
+        with pytest.raises(ValueError, match="balance_profile must not be None"):
+            PointEstimateResult(
+                point=0.75,
+                confidence_interval=None,
+                bootstrap_distribution=None,
+                balance_profile=None,
+                **_NOT_UNDER_TEST,
+            )
 
     def test_with_ci(self):
         """Point estimate with a bootstrap interval and its draws."""
@@ -468,7 +478,7 @@ class TestPointEstimateResultConstruction:
             point=0.5,
             confidence_interval=ci,
             bootstrap_distribution=_draws_for(ci),
-            balance_profile=None,
+            balance_profile=_bp(),
             **_NOT_UNDER_TEST,
         )
         assert r.confidence_interval is ci
@@ -481,7 +491,7 @@ class TestPointEstimateResultConstruction:
             point=0.5,
             confidence_interval=_ci(0.4, 0.6, n_resamples=3),
             bootstrap_distribution=boot,
-            balance_profile=None,
+            balance_profile=_bp(),
             **_NOT_UNDER_TEST,
         )
         np.testing.assert_array_equal(r.bootstrap_distribution, boot)
@@ -525,7 +535,7 @@ class TestPointEstimateResultConstruction:
             ci = ParametricCIResult(
                 lower=0.401, upper=0.639, alpha=0.05, variance_source="null",
             )
-        r = PointEstimateResult(0.52, ci, None, None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(0.52, ci, None, _bp(), **_NOT_UNDER_TEST)
         assert r.confidence_interval is ci
 
     def test_with_undefined_ci(self):
@@ -536,18 +546,18 @@ class TestPointEstimateResultConstruction:
 
     def test_is_analysis_result(self):
         """PointEstimateResult is a subclass of AnalysisResult."""
-        r = PointEstimateResult(0.5, None, None, None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(0.5, None, None, _bp(), **_NOT_UNDER_TEST)
         assert isinstance(r, AnalysisResult)
 
     def test_is_frozen(self):
         """Frozen dataclass: cannot reassign attributes."""
-        r = PointEstimateResult(0.5, None, None, None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(0.5, None, None, _bp(), **_NOT_UNDER_TEST)
         with pytest.raises(AttributeError):
             r.point = 0.9
 
     def test_int_point_accepted(self):
         """Integer point values are accepted (int is numeric)."""
-        r = PointEstimateResult(1, None, None, None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(1, None, None, _bp(), **_NOT_UNDER_TEST)
         assert r.point == 1
 
 
@@ -557,16 +567,16 @@ class TestPointEstimateResultValidationRejects:
     def test_point_not_numeric(self):
         """Point must be int or float, not str."""
         with pytest.raises(TypeError, match="point must be float"):
-            PointEstimateResult("0.5", None, None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult("0.5", None, None, _bp(), **_NOT_UNDER_TEST)
 
     def test_ci_tuple_rejected(self):
         """A bare pair of floats is no longer an interval."""
         with pytest.raises(TypeError, match="confidence_interval must be"):
-            PointEstimateResult(0.5, (0.3, 0.7), None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, (0.3, 0.7), None, _bp(), **_NOT_UNDER_TEST)
 
     def test_ci_list_rejected(self):
         with pytest.raises(TypeError, match="confidence_interval must be"):
-            PointEstimateResult(0.5, [0.3, 0.7], None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, [0.3, 0.7], None, _bp(), **_NOT_UNDER_TEST)
 
     # Bounds ordering, bounds types and interval length are no longer checked
     # here. An interval validates those when it is built, so a result that
@@ -576,17 +586,17 @@ class TestPointEstimateResultValidationRejects:
     def test_bootstrap_not_ndarray(self):
         """Bootstrap distribution must be np.ndarray."""
         with pytest.raises(TypeError, match="bootstrap_distribution must be"):
-            PointEstimateResult(0.5, None, [0.4, 0.5, 0.6], None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, None, [0.4, 0.5, 0.6], _bp(), **_NOT_UNDER_TEST)
 
     def test_bootstrap_wrong_ndim(self):
         """Bootstrap distribution must be 1-dimensional."""
         with pytest.raises(ValueError, match="must be 1-dimensional"):
-            PointEstimateResult(0.5, None, np.array([[0.4, 0.5]]), None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, None, np.array([[0.4, 0.5]]), _bp(), **_NOT_UNDER_TEST)
 
     def test_bootstrap_empty(self):
         """Bootstrap distribution must not be empty."""
         with pytest.raises(ValueError, match="must have at least 1 value"):
-            PointEstimateResult(0.5, None, np.array([]), None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, None, np.array([]), _bp(), **_NOT_UNDER_TEST)
 
     def test_balance_profile_wrong_type(self):
         """Balance profile must be BalanceProfile, not dict."""
@@ -596,7 +606,7 @@ class TestPointEstimateResultValidationRejects:
     def test_error_prefix(self):
         """Error messages start with [PointEstimateResult] Error."""
         with pytest.raises(TypeError, match=r"\[PointEstimateResult\] Error"):
-            PointEstimateResult("bad", None, None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult("bad", None, None, _bp(), **_NOT_UNDER_TEST)
 
 
 class TestPointEstimateResultPointOutsideInterval:
@@ -640,7 +650,7 @@ class TestPointEstimateResultPointOutsideInterval:
 
     def test_no_interval_is_not_outside(self):
         assert (
-            PointEstimateResult(0.5, None, None, None, **_NOT_UNDER_TEST).point_outside_interval
+            PointEstimateResult(0.5, None, None, _bp(), **_NOT_UNDER_TEST).point_outside_interval
             is False
         )
 
@@ -658,7 +668,7 @@ class TestPointEstimateResultStr:
 
     def test_point_only(self):
         """Just the point value, no CI or bootstrap."""
-        s = str(PointEstimateResult(0.523, None, None, None, **_NOT_UNDER_TEST))
+        s = str(PointEstimateResult(0.523, None, None, _bp(), **_NOT_UNDER_TEST))
         assert s == "= 0.523"
 
     def test_with_ci(self):
@@ -679,7 +689,7 @@ class TestPointEstimateResultStr:
     def test_with_ci_and_bootstrap(self):
         """The bootstrap count is dropped once an interval says n= itself."""
         boot = np.ones(1000)
-        s = str(PointEstimateResult(1.0, _ci(1.0, 1.0), boot, None, **_NOT_UNDER_TEST))
+        s = str(PointEstimateResult(1.0, _ci(1.0, 1.0), boot, _bp(), **_NOT_UNDER_TEST))
         assert "n=1000" in s
         assert "n_bootstrap" not in s
 
@@ -715,9 +725,9 @@ class TestPointEstimateResultSummary:
     """The plain-types dict under different field combinations."""
 
     def test_point_only(self):
-        """Minimal summary: the point and the three required fields."""
-        d = PointEstimateResult(0.75, None, None, None, **_NOT_UNDER_TEST).summary()
-        assert set(d) == {"point", "raters", "parts", "kappa_max", "agreement_profile"}
+        """Minimal summary: the point and the required fields."""
+        d = PointEstimateResult(0.75, None, None, _bp(), **_NOT_UNDER_TEST).summary()
+        assert set(d) == {"point", "balance", "raters", "parts", "kappa_max", "agreement_profile"}
         assert d["point"] == 0.75
 
     def test_with_ci(self):
@@ -734,7 +744,7 @@ class TestPointEstimateResultSummary:
         """Draws add their mean and standard error; counts live in 'ci'."""
         boot = np.array([1.0, 2.0, 3.0])
         d = PointEstimateResult(
-            2.0, _ci(1.0, 3.0, n_resamples=3), boot, None,
+            2.0, _ci(1.0, 3.0, n_resamples=3), boot, _bp(),
             **_NOT_UNDER_TEST,
         ).summary()
         assert abs(d["bootstrap_draws_mean"] - 2.0) < 1e-12
@@ -770,7 +780,7 @@ class TestPointEstimateResultParts:
 
     def _result(self, point, **overrides):
         kwargs = dict(_NOT_UNDER_TEST, **overrides)
-        return PointEstimateResult(point, None, None, None, **kwargs)
+        return PointEstimateResult(point, None, None, _bp(), **kwargs)
 
     def test_parts_that_rebuild_the_point_accepted(self):
         parts = AgreementParts(observed=0.8, chance=0.5, kind="agreement", weighted=False)
@@ -837,7 +847,7 @@ class TestPointEstimateResultDrawsMatchInterval:
 
     def test_draws_without_interval_refused(self):
         with pytest.raises(ValueError, match="not a BootstrapCIResult"):
-            PointEstimateResult(0.5, None, np.array([0.4, 0.5, 0.6]), None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, None, np.array([0.4, 0.5, 0.6]), _bp(), **_NOT_UNDER_TEST)
 
     def test_draws_with_parametric_interval_refused(self):
         with warnings.catch_warnings():
@@ -846,35 +856,35 @@ class TestPointEstimateResultDrawsMatchInterval:
                 lower=0.401, upper=0.639, alpha=0.05, variance_source="null",
             )
         with pytest.raises(ValueError, match="ParametricCIResult"):
-            PointEstimateResult(0.52, ci, np.array([0.5, 0.5]), None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.52, ci, np.array([0.5, 0.5]), _bp(), **_NOT_UNDER_TEST)
 
     def test_bootstrap_interval_without_draws_refused(self):
         with pytest.raises(ValueError, match="comes with the draws"):
-            PointEstimateResult(0.5, _ci(0.3, 0.7), None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, _ci(0.3, 0.7), None, _bp(), **_NOT_UNDER_TEST)
 
     def test_draw_count_must_match(self):
         with pytest.raises(ValueError, match="has 3 draws but .* resampled 1000"):
-            PointEstimateResult(0.5, _ci(0.3, 0.7), np.array([0.4, 0.5, 0.6]), None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, _ci(0.3, 0.7), np.array([0.4, 0.5, 0.6]), _bp(), **_NOT_UNDER_TEST)
 
     def test_failed_count_must_match(self):
         draws = np.array([np.nan, 0.4, 0.5, 0.6])
         with pytest.raises(ValueError, match="1 unusable .* counted 0 failed"):
-            PointEstimateResult(0.5, _ci(0.3, 0.7, n_resamples=4), draws, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, _ci(0.3, 0.7, n_resamples=4), draws, _bp(), **_NOT_UNDER_TEST)
 
     def test_infinite_draw_counts_as_failed(self):
         """Same rule as the interval: usable means finite."""
         draws = np.array([np.inf, 0.4, 0.5, 0.6])
         ci = _ci(0.4, 0.6, n_resamples=4, n_failed=1)
-        assert PointEstimateResult(0.5, ci, draws, None, **_NOT_UNDER_TEST).point == 0.5
+        assert PointEstimateResult(0.5, ci, draws, _bp(), **_NOT_UNDER_TEST).point == 0.5
 
     def test_every_draw_failed_is_consistent(self):
         ci = _undefined_ci()
-        r = PointEstimateResult(0.5, ci, np.full(200, np.nan), None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(0.5, ci, np.full(200, np.nan), _bp(), **_NOT_UNDER_TEST)
         assert r.confidence_interval.is_defined is False
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[PointEstimateResult\] Error"):
-            PointEstimateResult(0.5, _ci(0.3, 0.7), None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, _ci(0.3, 0.7), None, _bp(), **_NOT_UNDER_TEST)
 
 
 class TestPointEstimateResultDrawsNotKept:
@@ -887,26 +897,26 @@ class TestPointEstimateResultDrawsNotKept:
     NOT_KEPT = NotComputed("draws not kept: keep_draws false")
 
     def test_bootstrap_interval_with_draws_not_kept(self):
-        r = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, _bp(), **_NOT_UNDER_TEST)
         assert r.bootstrap_distribution is self.NOT_KEPT
 
     def test_none_still_refused_with_a_bootstrap_interval(self):
         with pytest.raises(ValueError, match="or with NotComputed saying why"):
-            PointEstimateResult(0.5, _ci(0.3, 0.7), None, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, _ci(0.3, 0.7), None, _bp(), **_NOT_UNDER_TEST)
 
     def test_not_kept_needs_a_bootstrap_interval(self):
         with pytest.raises(ValueError, match="only a bootstrap has draws to not keep"):
-            PointEstimateResult(0.5, None, self.NOT_KEPT, None, **_NOT_UNDER_TEST)
+            PointEstimateResult(0.5, None, self.NOT_KEPT, _bp(), **_NOT_UNDER_TEST)
 
     def test_summary_says_why(self):
-        d = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, None, **_NOT_UNDER_TEST).summary()
+        d = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, _bp(), **_NOT_UNDER_TEST).summary()
         assert d["bootstrap_draws_mean"] == {"not_computed": "draws not kept: keep_draws false"}
         assert d["bootstrap_se"] == {"not_computed": "draws not kept: keep_draws false"}
 
     def test_plot_says_why(self):
         from interrater.visualizers import plot_bootstrap_distribution
 
-        r = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, None, **_NOT_UNDER_TEST)
+        r = PointEstimateResult(0.5, _ci(0.3, 0.7), self.NOT_KEPT, _bp(), **_NOT_UNDER_TEST)
         with pytest.raises(ValueError, match="draws were not kept"):
             plot_bootstrap_distribution(r)
 
@@ -918,7 +928,7 @@ class TestPointEstimateResultDrawMoments:
         """One NaN draw used to make both numbers NaN."""
         draws = np.array([np.nan, 1.0, 2.0, 3.0])
         ci = _ci(1.0, 3.0, n_resamples=4, n_failed=1)
-        d = PointEstimateResult(2.0, ci, draws, None, **_NOT_UNDER_TEST).summary()
+        d = PointEstimateResult(2.0, ci, draws, _bp(), **_NOT_UNDER_TEST).summary()
         assert d["bootstrap_draws_mean"] == 2.0
         assert d["bootstrap_se"] == 1.0
 
@@ -926,14 +936,14 @@ class TestPointEstimateResultDrawMoments:
         """Efron & Tibshirani (1993) eq. 6.6."""
         draws = np.array([0.0, 1.0])
         d = PointEstimateResult(
-            0.5, _ci(0.0, 1.0, n_resamples=2), draws, None,
+            0.5, _ci(0.0, 1.0, n_resamples=2), draws, _bp(),
             **_NOT_UNDER_TEST,
         ).summary()
         assert abs(d["bootstrap_se"] - np.sqrt(0.5)) < 1e-12
 
     def test_every_draw_failed_gives_none(self):
         d = PointEstimateResult(
-            0.5, _undefined_ci(), np.full(200, np.nan), None,
+            0.5, _undefined_ci(), np.full(200, np.nan), _bp(),
             **_NOT_UNDER_TEST,
         ).summary()
         assert d["bootstrap_draws_mean"] is None
@@ -942,7 +952,7 @@ class TestPointEstimateResultDrawMoments:
     def test_one_usable_draw_has_a_mean_but_no_se(self):
         draws = np.array([np.nan, 0.5])
         ci = _ci(0.5, 0.5, n_resamples=2, n_failed=1)
-        d = PointEstimateResult(0.5, ci, draws, None, **_NOT_UNDER_TEST).summary()
+        d = PointEstimateResult(0.5, ci, draws, _bp(), **_NOT_UNDER_TEST).summary()
         assert d["bootstrap_draws_mean"] == 0.5
         assert d["bootstrap_se"] is None
 

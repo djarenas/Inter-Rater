@@ -88,7 +88,7 @@ class GwetsAC1Result(PointEstimateResult):
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile | None
+    balance_profile: BalanceProfile
     rater_profile: RaterProfile | NotComputed
     parts: AgreementParts
     kappa_max: NotComputed
@@ -101,12 +101,6 @@ class GwetsAC1Result(PointEstimateResult):
 
     def __post_init__(self) -> None:
         """Validate Gwet's AC1 result attributes."""
-
-        # Gwet's AC1 always requires a balance_profile
-        if self.balance_profile is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None for Gwet's AC1"
-            )
 
         # Validate ci_method
         if not isinstance(self.ci_method, str):

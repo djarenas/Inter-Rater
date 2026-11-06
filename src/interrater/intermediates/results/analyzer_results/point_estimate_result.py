@@ -57,10 +57,9 @@ class PointEstimateResult(AnalysisResult):
     draws as it counted failed.
 
     I carry a balance_profile so every result is self-describing: the number
-    of subjects, the number of raters, whether the data was balanced, and the
-    quality of rater-level information are all available without needing to
-    go back to the input data. When balance_profile is None, this structural
-    metadata was not available at construction time.
+    of subjects and whether the data was balanced are available without
+    needing to go back to the input data. Who the raters were and how much
+    each rated is my rater_profile.
 
     I also carry what the coefficient is made of, so a reader can tell two
     equal coefficients apart: the observed and chance terms (``parts``), the
@@ -88,9 +87,9 @@ class PointEstimateResult(AnalysisResult):
         otherwise (no interval, or a parametric one). NotComputed when the
         bootstrap ran but its draws were not kept (a permutation analysis
         with keep_draws false), saying so.
-    balance_profile : BalanceProfile | None
+    balance_profile : BalanceProfile
         Structural metadata about the subjects: n_subjects and how many
-        ratings each got. None if not available at construction time.
+        ratings each got.
     rater_profile : RaterProfile | NotComputed
         The raters: names, how much each rated, and how much each pair
         overlapped. NotComputed when the result was built from counts,
@@ -118,7 +117,7 @@ class PointEstimateResult(AnalysisResult):
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile | None
+    balance_profile: BalanceProfile
     rater_profile: RaterProfile | NotComputed
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
@@ -186,15 +185,17 @@ class PointEstimateResult(AnalysisResult):
         except ValueError as exc:
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # If balance_profile is provided, validate its type
-        if self.balance_profile is not None:
-            from ...data_profiles.balance_profile import BalanceProfile
+        # Every result carries the balance profile of its data
+        if self.balance_profile is None:
+            raise ValueError(f"{_ERROR_PREFIX}: balance_profile must not be None")
 
-            if not isinstance(self.balance_profile, BalanceProfile):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: balance_profile must be BalanceProfile or None, "
-                    f"got {type(self.balance_profile).__name__}"
-                )
+        from ...data_profiles.balance_profile import BalanceProfile
+
+        if not isinstance(self.balance_profile, BalanceProfile):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: balance_profile must be BalanceProfile, "
+                f"got {type(self.balance_profile).__name__}"
+            )
 
         if not isinstance(self.rater_profile, (RaterProfile, NotComputed)):
             raise TypeError(
@@ -202,7 +203,7 @@ class PointEstimateResult(AnalysisResult):
                 f"NotComputed, got {type(self.rater_profile).__name__}"
             )
         # Both profiles describe the same data
-        if isinstance(self.rater_profile, RaterProfile) and self.balance_profile is not None:
+        if isinstance(self.rater_profile, RaterProfile):
             if self.rater_profile.n_subjects != self.balance_profile.n_subjects:
                 raise ValueError(
                     f"{_ERROR_PREFIX}: rater_profile has "
@@ -226,8 +227,6 @@ class PointEstimateResult(AnalysisResult):
         # Ratings and build_from_nij_matrix refuse subjects rated fewer than
         # twice, so none can be left out. If one is, something built me from
         # data that skipped that rule.
-        if self.balance_profile is None:
-            return
         total = self.balance_profile.n_subjects
         used  = self.agreement_profile.n_subjects
         if used != total:
@@ -392,8 +391,7 @@ class PointEstimateResult(AnalysisResult):
             'bootstrap_draws_mean' and 'bootstrap_se' (the mean and standard
             error of the usable draws, None when too few are usable -- the
             draw counts are in 'ci'; ``{"not_computed": reason}`` when the
-            draws were not kept); 'balance' if balance_profile is
-            not None; and 'raters', 'parts', 'kappa_max' and
+            draws were not kept); 'balance'; and 'raters', 'parts', 'kappa_max' and
             'agreement_profile', each a plain value or
             ``{"not_computed": reason}``.
         """
@@ -410,8 +408,7 @@ class PointEstimateResult(AnalysisResult):
             mean, se = draw_moments(self.bootstrap_distribution)
             result["bootstrap_draws_mean"] = mean
             result["bootstrap_se"] = se
-        if self.balance_profile is not None:
-            result["balance"] = self.balance_profile.summary()
+        result["balance"] = self.balance_profile.summary()
         result["raters"] = self.rater_profile.summary()
         result["parts"] = self.parts.summary()
         result["kappa_max"] = (

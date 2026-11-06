@@ -97,7 +97,7 @@ class CongerKappaResult(IndividualMarginalResult):
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile | None
+    balance_profile: BalanceProfile
     rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: float | NotComputed

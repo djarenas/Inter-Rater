@@ -88,7 +88,7 @@ class IndividualMarginalResult(PointEstimateResult):
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile | None
+    balance_profile: BalanceProfile
     rater_profile: RaterProfile
 
     # Constructor ------------------------------------------------------------ #
@@ -100,13 +100,6 @@ class IndividualMarginalResult(PointEstimateResult):
         RaterProfile -- individual marginal coefficients always require
         rater identity.
         """
-
-        # Individual marginal coefficients always require a balance_profile
-        if self.balance_profile is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None for "
-                f"individual marginal coefficients (rater identity required)."
-            )
 
         # Individual marginal coefficients always require the raters
         if isinstance(self.rater_profile, NotComputed):

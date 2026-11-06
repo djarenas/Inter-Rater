@@ -113,7 +113,7 @@ class LightKappaResult(PointEstimateResult):
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile | None
+    balance_profile: BalanceProfile
     rater_profile: RaterProfile
     parts: NotComputed
     kappa_max: NotComputed
@@ -129,13 +129,6 @@ class LightKappaResult(PointEstimateResult):
 
     def __post_init__(self) -> None:
         """Validate Light's kappa result attributes."""
-
-        # Light's kappa always requires a balance_profile
-        if self.balance_profile is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None for "
-                f"Light's kappa"
-            )
 
         # Validate n_pairs
         if not isinstance(self.n_pairs, int):

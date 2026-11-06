@@ -96,7 +96,7 @@ class BrennanPredigerResult(PointEstimateResult):
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile | None
+    balance_profile: BalanceProfile
     rater_profile: RaterProfile | NotComputed
     parts: AgreementParts
     kappa_max: NotComputed
@@ -111,13 +111,6 @@ class BrennanPredigerResult(PointEstimateResult):
 
     def __post_init__(self) -> None:
         """Validate Brennan-Prediger result attributes."""
-
-        # Brennan-Prediger always requires a balance_profile
-        if self.balance_profile is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None for "
-                f"Brennan-Prediger"
-            )
 
         # Validate ci_method
         if not isinstance(self.ci_method, str):
