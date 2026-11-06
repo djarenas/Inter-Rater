@@ -75,7 +75,7 @@ the type.
 
 ### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
 
-- Reads the Weights object from the semantics of the ratings (`Weights.from_categories`)
+- Reads the Weights object from the semantics of the ratings (`Weights.build_from_categories`)
 - Validates weight matrix dimensions match the number of categories
 - Supports "identity" (unweighted), "linear", "quadratic", and "custom"
 

@@ -100,7 +100,7 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
 
         # Weights come from the semantics; rebuild EstimatorInput with them
         from ..intermediates.estimator_parts import Weights
-        self.weights = Weights.from_categories(self.ratings.semantics.categories)
+        self.weights = Weights.build_from_categories(self.ratings.semantics.categories)
         if self.weights is not None:
             self.estimator_input = self._rebuild_estimator_input_with_weights()
 

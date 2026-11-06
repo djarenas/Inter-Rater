@@ -15,7 +15,7 @@ Three objects hold those decisions, bottom-up:
 | `InsufficientDataPolicy` | Minimum ratings per rater and per subject for dropping thin data. Sweeps repeat until nothing more falls below them. |
 | `CleanerConfig`          | Everything else -- case sensitivity, whitespace stripping, missing-value markers, value repairs, policies for unknown responses and unused categories, plus the two delegates above. |
 
-`CleanerConfig.from_dict` and `CleanerConfig.build_from_yaml` build a
+`CleanerConfig.build_from_dict` and `CleanerConfig.build_from_yaml` build a
 config from a plain dictionary or a YAML file, so the entire cleaning
 specification can live in a versioned file alongside the analysis.
 

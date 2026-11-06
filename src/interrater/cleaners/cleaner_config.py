@@ -249,7 +249,7 @@ class CleanerConfig:
     # Classmethods -----------------------------------------------------------  #
 
     @classmethod
-    def from_dict(cls, spec: dict) -> CleanerConfig:
+    def build_from_dict(cls, spec: dict) -> CleanerConfig:
         spec   = dict(spec)
         layout = spec.pop("frame_layout", None)
         drops  = spec.pop("insufficient_data_drops", None)
@@ -265,13 +265,13 @@ class CleanerConfig:
             )
 
         try:
-            frame_layout = FrameLayout.from_dict(layout) if layout else None
+            frame_layout = FrameLayout.build_from_dict(layout) if layout else None
         except (KeyError, TypeError, ValueError) as error:
             raise type(error)(f"{_ERROR_PREFIX}: {error}") from error
 
         try:
             insufficient = (
-                InsufficientDataPolicy.from_dict(drops) if drops else None
+                InsufficientDataPolicy.build_from_dict(drops) if drops else None
             )
         except (KeyError, TypeError, ValueError) as error:
             raise type(error)(f"{_ERROR_PREFIX}: {error}") from error
@@ -312,14 +312,14 @@ class CleanerConfig:
                 f"{_ERROR_PREFIX}: {path} must contain a YAML mapping, got "
                 f"{type(spec).__name__}."
             )
-        return cls.from_dict(spec)
+        return cls.build_from_dict(spec)
 
     def to_dict(self) -> dict:
         """
-        Me in plain types, in the shape ``from_dict`` reads.
+        Me in plain types, in the shape ``build_from_dict`` reads.
 
         So a cleaning report can carry the exact config that produced it, and
-        ``CleanerConfig.from_dict(config.to_dict()) == config``.
+        ``CleanerConfig.build_from_dict(config.to_dict()) == config``.
         """
         layout = self.frame_layout
         drops  = self.insufficient_data_drops

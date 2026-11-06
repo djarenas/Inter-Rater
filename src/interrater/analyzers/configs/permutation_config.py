@@ -275,7 +275,7 @@ class PermutationConfig:
             bmc = data_dict["bootstrap_mean_config"]
             if isinstance(bmc, dict):
                 data_dict["bootstrap_mean_config"] = (
-                    PermutationBootstrapMeanConfig.from_dict(bmc)
+                    PermutationBootstrapMeanConfig.build_from_dict(bmc)
                 )
 
         return data_dict

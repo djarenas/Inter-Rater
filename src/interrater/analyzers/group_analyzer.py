@@ -171,7 +171,7 @@ class GroupAnalyzer(Analyzer, ABC):
         instance.nij_matrix = nij
 
         # Compute BalanceProfile from nij_matrix
-        instance.balance_profile = BalanceProfile.from_nij_matrix(nij)
+        instance.balance_profile = BalanceProfile.build_from_nij_matrix(nij)
 
         # Validate config type and balance constraint
         instance._validate_group_config()
@@ -351,8 +351,8 @@ class GroupAnalyzer(Analyzer, ABC):
         from ..intermediates.data_profiles import AgreementProfile
 
         if self.ratings is not None:
-            return AgreementProfile.from_ratings(self.ratings)
-        return AgreementProfile.from_nij_matrix(self.nij_matrix)
+            return AgreementProfile.build_from_ratings(self.ratings)
+        return AgreementProfile.build_from_nij_matrix(self.nij_matrix)
 
     def _n_categories(self) -> int:
         """

@@ -589,7 +589,7 @@ class TestPermutationBootstrapMeanConfig:
         with pytest.raises(
             TypeError, match=r"\['n_bootstraps'\] were removed in 2\.1\.0.*n_bootstraps -> n_resamples"
         ):
-            PermutationBootstrapMeanConfig.from_dict(
+            PermutationBootstrapMeanConfig.build_from_dict(
                 {"method": "correlated", "n_bootstraps": 4000}
             )
 
@@ -603,7 +603,7 @@ class TestPermutationBootstrapMeanConfig:
 
     def test_other_unknown_key_refused(self):
         with pytest.raises(ValueError, match="only key is 'method'"):
-            PermutationBootstrapMeanConfig.from_dict({"method": "correlated", "n_draws": 10})
+            PermutationBootstrapMeanConfig.build_from_dict({"method": "correlated", "n_draws": 10})
 
     def test_removed_fields_not_in_summary_or_repr(self):
         cfg = PermutationBootstrapMeanConfig(method="correlated")
@@ -611,7 +611,7 @@ class TestPermutationBootstrapMeanConfig:
         assert repr(cfg) == "PermutationBootstrapMeanConfig(method='correlated')"
 
     def test_from_yaml_shape(self):
-        cfg = PermutationBootstrapMeanConfig.from_dict({"method": "correlated"})
+        cfg = PermutationBootstrapMeanConfig.build_from_dict({"method": "correlated"})
         assert cfg == PermutationBootstrapMeanConfig(method="correlated")
 
 

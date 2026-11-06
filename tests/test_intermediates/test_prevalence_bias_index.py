@@ -30,7 +30,7 @@ def _pair_index():
 
 
 def _from_pair():
-    return PrevalenceBiasIndex.from_pair(_pair_index(), CATS, RATERS)
+    return PrevalenceBiasIndex.build_from_pair(_pair_index(), CATS, RATERS)
 
 
 class TestFromPair:
@@ -55,7 +55,7 @@ class TestFromPair:
         assert "BI = +0.050: Bob says 'include' more often than Ann" in text
 
     def test_swapping_raters_flips_the_bias_sign(self):
-        swapped = PrevalenceBiasIndex.from_pair(
+        swapped = PrevalenceBiasIndex.build_from_pair(
             _pair_index()[:, ::-1], CATS, RATERS[::-1]
         )
         assert swapped.bias_index == pytest.approx(-_from_pair().bias_index)
@@ -63,11 +63,11 @@ class TestFromPair:
 
     def test_subjects_not_rated_by_both_are_left_out(self):
         index = np.vstack([_pair_index(), [[0, EMPTY], [EMPTY, 1]]])
-        assert PrevalenceBiasIndex.from_pair(index, CATS, RATERS).n_subjects == N
+        assert PrevalenceBiasIndex.build_from_pair(index, CATS, RATERS).n_subjects == N
 
     def test_needs_two_columns(self):
         with pytest.raises(ValueError, match="exactly 2 rater columns"):
-            PrevalenceBiasIndex.from_pair(np.zeros((5, 3), dtype=np.int8), CATS, RATERS)
+            PrevalenceBiasIndex.build_from_pair(np.zeros((5, 3), dtype=np.int8), CATS, RATERS)
 
 
 class TestFromCounts:
@@ -77,11 +77,11 @@ class TestFromCounts:
         return np.array([[2, 0]] * A + [[1, 1]] * (B + C) + [[0, 2]] * D)
 
     def test_prevalence_index_still_computed(self):
-        p = PrevalenceBiasIndex.from_counts(self._counts(), CATS)
+        p = PrevalenceBiasIndex.build_from_counts(self._counts(), CATS)
         assert p.prevalence_index == pytest.approx(A / N - D / N)
 
     def test_bias_index_says_why_not(self):
-        p = PrevalenceBiasIndex.from_counts(self._counts(), CATS)
+        p = PrevalenceBiasIndex.build_from_counts(self._counts(), CATS)
         assert isinstance(p.bias_index, NotComputed)
         assert "each rater's ratings" in p.bias_index.reason
         assert "BI not computed" in str(p)
@@ -89,11 +89,11 @@ class TestFromCounts:
 
     def test_more_than_two_ratings_refused(self):
         with pytest.raises(ValueError, match="more than two ratings"):
-            PrevalenceBiasIndex.from_counts(np.array([[2, 1], [1, 1]]), CATS)
+            PrevalenceBiasIndex.build_from_counts(np.array([[2, 1], [1, 1]]), CATS)
 
     def test_single_ratings_left_out(self):
         counts = np.vstack([self._counts(), [[1, 0], [0, 1]]])
-        assert PrevalenceBiasIndex.from_counts(counts, CATS).n_subjects == N
+        assert PrevalenceBiasIndex.build_from_counts(counts, CATS).n_subjects == N
 
 
 class TestSelfChecks:

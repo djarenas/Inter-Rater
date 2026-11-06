@@ -26,9 +26,9 @@ class BalanceProfile:
     I describe whether ratings are balanced and how they are distributed.
 
     I answer structural questions about data: Are all subjects rated the same
-    number of times? If not, what's the distribution? How many subjects did
-    each rater see? I exist because visualization and interpretation depend on
-    understanding the data shape, not just the coefficient value.
+    number of times? If not, what's the distribution? I exist because
+    visualization and interpretation depend on understanding the data shape,
+    not just the coefficient value.
 
     If is_balanced is True, the data is uniform and I report it simply. If
     False, I hold the granular distribution for diagnostics and visualization.
@@ -147,8 +147,8 @@ class BalanceProfile:
 
     # Public API ------------------------------------------------------------- #
 
-    @staticmethod
-    def from_ratings(ratings: Ratings) -> BalanceProfile:
+    @classmethod
+    def build_from_ratings(cls, ratings: Ratings) -> BalanceProfile:
         """
         Construct a BalanceProfile from a Ratings object.
 
@@ -170,15 +170,15 @@ class BalanceProfile:
 
         raters_per_subject = int(n_per_subject_arr[0]) if is_balanced_flag else None
 
-        return BalanceProfile(
+        return cls(
             is_balanced=is_balanced_flag,
             n_per_subject=n_per_subject_arr,
             subject_counts=subject_counts_dict,
             raters_per_subject=raters_per_subject,
         )
 
-    @staticmethod
-    def from_nij_matrix(nij: NijMatrix) -> BalanceProfile:
+    @classmethod
+    def build_from_nij_matrix(cls, nij: NijMatrix) -> BalanceProfile:
         """
         Construct a BalanceProfile from an NijMatrix (counts matrix).
 
@@ -209,7 +209,7 @@ class BalanceProfile:
 
         raters_per_subject = int(n_per_subject_arr[0]) if is_balanced_flag else None
 
-        return BalanceProfile(
+        return cls(
             is_balanced=is_balanced_flag,
             n_per_subject=n_per_subject_arr,
             subject_counts=subject_counts_dict,

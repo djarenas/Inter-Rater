@@ -35,7 +35,7 @@ Key properties: `semantics_changed`, `k_changed`, `survived`,
 
 `summary()` returns the full record in plain types, including the cleaner
 config that produced it (`cleaner_config`, in the shape
-`CleanerConfig.from_dict` reads) and the package version
+`CleanerConfig.build_from_dict` reads) and the package version
 (`_package_version`). `to_yaml(path)` writes it to disk, so the record alone
 says how the data was cleaned and by which release.
 

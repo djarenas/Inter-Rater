@@ -89,7 +89,7 @@ class PermutationBootstrapMeanConfig:
     # Public API ------------------------------------------------------------- #
 
     @classmethod
-    def from_dict(cls, data: dict) -> PermutationBootstrapMeanConfig:
+    def build_from_dict(cls, data: dict) -> PermutationBootstrapMeanConfig:
         """
         Build from a plain dict, as read from YAML.
 

@@ -15,7 +15,7 @@ and integers.
 
 A frozen dataclass. Built from class methods (`identity`, `linear`,
 `quadratic`), or from the categories a semantics declares
-(`from_categories`), which is how the analyzers get theirs. Remembers its
+(`build_from_categories`), which is how the analyzers get theirs. Remembers its
 `kind` so a report can say *how* a coefficient was weighted.
 
 ## NijMatrix

@@ -82,7 +82,7 @@ class InsufficientDataPolicy:
     # Class methods ----------------------------------------------------------  #
 
     @classmethod
-    def from_dict(cls, spec: dict) -> InsufficientDataPolicy:
+    def build_from_dict(cls, spec: dict) -> InsufficientDataPolicy:
         # method is passed on so it gets the removed-in-2.1.0 error.
         unknown = sorted(set(spec) - {
             "min_ratings_per_rater", "min_ratings_per_subject", "method"

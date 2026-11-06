@@ -145,7 +145,7 @@ class Weights:
         return cls(1.0 - distance / distance.max(), kind="quadratic")
 
     @classmethod
-    def from_categories(cls, categories) -> Weights | None:
+    def build_from_categories(cls, categories) -> Weights | None:
         """
         The weights a rating task declares, read from its categories.
 
@@ -174,7 +174,7 @@ class Weights:
         return None
 
     @classmethod
-    def from_type(cls, weights_type: str, n_categories: int) -> Weights | None:
+    def build_from_type(cls, weights_type: str, n_categories: int) -> Weights | None:
         """
         Factory method to build Weights from a type string.
 
@@ -205,7 +205,7 @@ class Weights:
             return cls.quadratic(n_categories)
         elif weights_type == "custom":
             raise ValueError(
-                f"{_WEIGHTS_ERROR}: from_type does not support 'custom'. "
+                f"{_WEIGHTS_ERROR}: build_from_type does not support 'custom'. "
                 "Pass the matrix directly to Weights(), or declare it in the "
                 "semantics (categories kind 'weighted')."
             )

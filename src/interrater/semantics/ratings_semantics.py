@@ -100,7 +100,7 @@ class RatingsSemantics:
     # Class methods ----------------------------------------------------------  #
 
     @classmethod
-    def from_dict(
+    def build_from_dict(
         cls, spec: dict, base_dir: str | Path | None = None
     ) -> RatingsSemantics:
         """
@@ -176,7 +176,7 @@ class RatingsSemantics:
                 f"{_ERROR_PREFIX}: {path} must contain a YAML mapping, got "
                 f"{type(spec).__name__}."
             )
-        return cls.from_dict(spec, base_dir=Path(path).parent)
+        return cls.build_from_dict(spec, base_dir=Path(path).parent)
 
     # Public API -------------------------------------------------------------  #
 
@@ -191,7 +191,7 @@ class RatingsSemantics:
 
     def to_dict(self) -> dict:
         """
-        The mapping ``from_dict`` would rebuild me from.
+        The mapping ``build_from_dict`` would rebuild me from.
 
         The inverse of construction. A cleaner that had to drop a rater cannot
         hand back a corrected declaration unless I can write myself out, and a

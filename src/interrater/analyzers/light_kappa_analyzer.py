@@ -310,7 +310,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             rater_profile=self.rater_profile,
             parts=NotComputed(PARTS_NOT_COMPUTED),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
+            agreement_profile=AgreementProfile.build_from_ratings(self.ratings),
             n_pairs=n_pairs,
             ci_method=self.config.ci_method,
             pair_parts=pair_parts,

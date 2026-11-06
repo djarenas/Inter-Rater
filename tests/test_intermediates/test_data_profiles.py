@@ -183,11 +183,11 @@ class TestBalanceProfileProperties:
 
 
 class TestBalanceProfileFromNijMatrix:
-    """BalanceProfile.from_nij_matrix factory method."""
+    """BalanceProfile.build_from_nij_matrix factory method."""
 
     def test_from_balanced(self, balanced_nij):
         """Balanced nij matrix produces a balanced profile, every field exact."""
-        bp = BalanceProfile.from_nij_matrix(balanced_nij)
+        bp = BalanceProfile.build_from_nij_matrix(balanced_nij)
         assert bp.is_balanced is True
         assert bp.raters_per_subject == 3
         np.testing.assert_array_equal(bp.n_per_subject, [3, 3, 3, 3])
@@ -197,7 +197,7 @@ class TestBalanceProfileFromNijMatrix:
 
     def test_from_unbalanced(self, unbalanced_nij):
         """Unbalanced nij matrix produces an unbalanced profile, every field exact."""
-        bp = BalanceProfile.from_nij_matrix(unbalanced_nij)
+        bp = BalanceProfile.build_from_nij_matrix(unbalanced_nij)
         assert bp.is_balanced is False
         assert bp.raters_per_subject is None
         np.testing.assert_array_equal(bp.n_per_subject, [3, 2, 4, 2])
@@ -209,7 +209,7 @@ class TestBalanceProfileFromNijMatrix:
         """Nij matrix where every row sums to zero raises."""
         nij = NijMatrix(np.zeros((3, 2), dtype=np.int32))
         with pytest.raises(ValueError, match="all subjects have zero raters"):
-            BalanceProfile.from_nij_matrix(nij)
+            BalanceProfile.build_from_nij_matrix(nij)
 
 
 class TestBalanceProfileSummary:
@@ -236,7 +236,7 @@ class TestBalanceProfileSummary:
 
     def test_summary_has_no_rater_fields(self, balanced_nij):
         """The same keys from ratings or counts: the subject side only."""
-        s = BalanceProfile.from_nij_matrix(balanced_nij).summary()
+        s = BalanceProfile.build_from_nij_matrix(balanced_nij).summary()
         assert set(s) == {"is_balanced", "n_subjects", "n_raters_lower_bound", "raters_per_subject"}
 
 

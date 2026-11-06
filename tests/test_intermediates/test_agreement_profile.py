@@ -38,7 +38,7 @@ def _ratings(index, raters, cats=("yes", "no", "maybe")):
 def _profile(index, raters, cats=("yes", "no", "maybe")):
     # From the array, as internal steps build it: Ratings refuses a subject
     # rated once, and these tests need one.
-    return AgreementProfile.from_category_index(
+    return AgreementProfile.build_from_category_index(
         np.array(index, dtype=np.int8), tuple(cats), tuple(raters)
     )
 
@@ -81,7 +81,7 @@ class TestMatchesTheCoefficients:
 
     def test_specific_agreement_decomposes_po_on_balanced_data(self):
         """Po = Sum_j p_j * s_j when every subject has the same raters."""
-        profile = AgreementProfile.from_ratings(_ratings(BALANCED, "abc"))
+        profile = AgreementProfile.build_from_ratings(_ratings(BALANCED, "abc"))
         data, _ = _pool_input(BALANCED)
         decomposed = sum(
             profile.prevalence[c] * profile.specific_agreement[c]
@@ -92,7 +92,7 @@ class TestMatchesTheCoefficients:
     def test_specific_agreement_for_two_raters(self):
         """2 n_jj / (row_j + col_j), the usual two-rater form."""
         index = [[0, 0], [0, 1], [1, 1], [1, 1], [0, 0], [1, 0]]
-        profile = AgreementProfile.from_ratings(_ratings(index, "ab", ("yes", "no")))
+        profile = AgreementProfile.build_from_ratings(_ratings(index, "ab", ("yes", "no")))
         # yes: n_jj = 2, row (a says yes) = 3, col (b says yes) = 3
         assert profile.specific_agreement["yes"] == pytest.approx(2 * 2 / (3 + 3))
         # no: n_jj = 2, row = 3, col = 3
@@ -107,7 +107,7 @@ class TestPoolAndEdgeCases:
         assert profile.n_ratings == 12
 
     def test_unused_category(self):
-        profile = AgreementProfile.from_ratings(
+        profile = AgreementProfile.build_from_ratings(
             _ratings([[0, 0], [1, 1], [0, 1]], "ab")
         )
         assert profile.prevalence["maybe"] == 0.0
@@ -119,14 +119,14 @@ class TestPrevalenceBias:
 
     def test_two_raters_two_categories(self):
         index = [[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]
-        profile = AgreementProfile.from_ratings(_ratings(index, ("Ann", "Bob"), ("yes", "no")))
-        expected = PrevalenceBiasIndex.from_pair(
+        profile = AgreementProfile.build_from_ratings(_ratings(index, ("Ann", "Bob"), ("yes", "no")))
+        expected = PrevalenceBiasIndex.build_from_pair(
             np.array(index), ("yes", "no"), ("Ann", "Bob")
         )
         assert profile.prevalence_bias == expected
 
     def test_otherwise_says_why_not(self):
-        profile = AgreementProfile.from_ratings(_ratings(BALANCED, "abc"))
+        profile = AgreementProfile.build_from_ratings(_ratings(BALANCED, "abc"))
         assert isinstance(profile.prevalence_bias, NotComputed)
         assert "3 raters and 3 categories" in profile.prevalence_bias.reason
 
@@ -135,7 +135,7 @@ class TestFromCounts:
 
     def test_counts_only(self):
         counts = np.array([[2, 0], [1, 1], [0, 2], [2, 0], [1, 0]])
-        profile = AgreementProfile.from_nij_matrix(NijMatrix(counts))
+        profile = AgreementProfile.build_from_nij_matrix(NijMatrix(counts))
         assert profile.category_names == ("column 0", "column 1")
         assert profile.n_subjects == 4
         assert isinstance(profile.rater_marginals, NotComputed)
@@ -145,7 +145,7 @@ class TestFromCounts:
 
     def test_more_than_two_ratings_per_subject(self):
         counts = np.array([[3, 0], [1, 2], [2, 1]])
-        profile = AgreementProfile.from_nij_matrix(NijMatrix(counts))
+        profile = AgreementProfile.build_from_nij_matrix(NijMatrix(counts))
         assert isinstance(profile.prevalence_bias, NotComputed)
         assert "up to 3 ratings per subject" in profile.prevalence_bias.reason
 
@@ -153,7 +153,7 @@ class TestFromCounts:
         """The same data as counts or as ratings gives the same numbers."""
         from_ratings = _profile(UNBALANCED, "abc")
         data, _ = _pool_input(UNBALANCED)
-        from_counts = AgreementProfile.from_nij_matrix(data.nij)
+        from_counts = AgreementProfile.build_from_nij_matrix(data.nij)
         np.testing.assert_allclose(
             list(from_ratings.prevalence.values()), list(from_counts.prevalence.values())
         )
@@ -199,7 +199,7 @@ class TestSelfChecks:
             AgreementProfile(**self._kwargs(n_ratings=5))
 
     def test_prevalence_bias_must_use_these_categories(self):
-        wrong = PrevalenceBiasIndex.from_pair(
+        wrong = PrevalenceBiasIndex.build_from_pair(
             np.array([[0, 0], [1, 1]]), ("no", "yes"), ("a", "b")
         )
         with pytest.raises(ValueError, match="positive first"):
@@ -213,7 +213,7 @@ class TestSelfChecks:
 class TestOutputs:
 
     def test_summary(self):
-        profile = AgreementProfile.from_ratings(_ratings(BALANCED, "abc"))
+        profile = AgreementProfile.build_from_ratings(_ratings(BALANCED, "abc"))
         s = profile.summary()
         assert s["n_subjects"] == 5
         assert s["category_names"] == ["yes", "no", "maybe"]
@@ -221,13 +221,13 @@ class TestOutputs:
         assert s["prevalence_bias"] == {"not_computed": profile.prevalence_bias.reason}
 
     def test_printed(self):
-        text = str(AgreementProfile.from_ratings(_ratings(BALANCED, "abc")))
+        text = str(AgreementProfile.build_from_ratings(_ratings(BALANCED, "abc")))
         assert "5 subjects rated at least twice, 15 ratings" in text
         assert "How often each category was used (share of ratings)" in text
         assert "How often raters agreed on each category" in text
         assert "Prevalence and bias: not computed (defined for two raters" in text
 
     def test_rater_rows_sit_under_overall(self):
-        lines = str(AgreementProfile.from_ratings(_ratings(BALANCED, "abc"))).splitlines()
+        lines = str(AgreementProfile.build_from_ratings(_ratings(BALANCED, "abc"))).splitlines()
         overall = next(i for i, line in enumerate(lines) if line.strip().startswith("overall"))
         assert [lines[overall + n].split()[0] for n in (1, 2, 3)] == ["a", "b", "c"]

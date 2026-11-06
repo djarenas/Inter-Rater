@@ -35,16 +35,16 @@ on each category. On unbalanced data the overall row is the per-subject
 average the coefficients use, so it is not exactly the mean of the rater
 rows.
 
-Built with `from_ratings()` or `from_nij_matrix()`. A nij matrix carries no
+Built with `build_from_ratings()` or `build_from_nij_matrix()`. A nij matrix carries no
 category names, so categories are labelled "column 0", "column 1", ...
 
 ## BalanceProfile
 
 A frozen dataclass with two construction paths:
 
-- **`from_ratings()`** -- all fields are exact. Rater identity is known,
+- **`build_from_ratings()`** -- all fields are exact. Rater identity is known,
   so `n_raters`, `n_per_rater`, and `fill_rate` are populated.
-- **`from_nij_matrix()`** -- subject-level fields are exact, but
+- **`build_from_nij_matrix()`** -- subject-level fields are exact, but
   rater-level fields (`n_raters`, `n_per_rater`, `fill_rate`) are `None`.
   Rater identity is gone in a counts matrix; honest absence is better
   than fabricated data. Use `n_raters_lower_bound` (always available)
@@ -67,9 +67,9 @@ out from them, so they cannot disagree.
 
 Two construction paths, as for `BalanceProfile`:
 
-- **`from_pair()`** -- two raters' answers on the subjects both rated. Both
+- **`build_from_pair()`** -- two raters' answers on the subjects both rated. Both
   indices are computed.
-- **`from_counts()`** -- per-subject category counts. The prevalence index is
+- **`build_from_counts()`** -- per-subject category counts. The prevalence index is
   computed; the bias index is `NotComputed`, because counts do not say which
   rater gave which answer.
 

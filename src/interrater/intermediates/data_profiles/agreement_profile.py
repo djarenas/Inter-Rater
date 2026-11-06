@@ -147,16 +147,16 @@ class AgreementProfile:
             )
 
     @classmethod
-    def from_ratings(cls, ratings: Ratings) -> AgreementProfile:
+    def build_from_ratings(cls, ratings: Ratings) -> AgreementProfile:
         """Build from ratings, where each rater's answers are known."""
-        return cls.from_category_index(
+        return cls.build_from_category_index(
             ratings.category_index,
             tuple(ratings.semantics.categories.names),
             tuple(ratings.semantics.raters),
         )
 
     @classmethod
-    def from_category_index(
+    def build_from_category_index(
         cls,
         category_index: np.ndarray,
         category_names: tuple,
@@ -193,7 +193,7 @@ class AgreementProfile:
                 marginals[str(rater)] = dict(zip(category_names, map(float, shares)))
 
         if len(rater_names) == 2 and k == 2:
-            prevalence_bias = PrevalenceBiasIndex.from_pair(
+            prevalence_bias = PrevalenceBiasIndex.build_from_pair(
                 index, tuple(category_names), tuple(map(str, rater_names))
             )
         else:
@@ -204,7 +204,7 @@ class AgreementProfile:
         return cls._from_counts(counts, tuple(category_names), marginals, prevalence_bias)
 
     @classmethod
-    def from_nij_matrix(cls, nij: NijMatrix) -> AgreementProfile:
+    def build_from_nij_matrix(cls, nij: NijMatrix) -> AgreementProfile:
         """
         Build from category counts per subject.
 
@@ -224,7 +224,7 @@ class AgreementProfile:
             "category counts only, which do not say who rated what"
         )
         if k == 2 and (per_subject <= 2).all():
-            prevalence_bias = PrevalenceBiasIndex.from_counts(counts, names)
+            prevalence_bias = PrevalenceBiasIndex.build_from_counts(counts, names)
         else:
             prevalence_bias = NotComputed(
                 "defined for two raters and two categories; these counts have "

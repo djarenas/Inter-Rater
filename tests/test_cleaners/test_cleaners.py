@@ -9,7 +9,7 @@ first, then CleanerConfig that holds them, then the RatingsCleaner pipeline.
 Key behaviours:
 - Defaults produce a valid object with strict, reproducible settings.
 - Type guards catch booleans passed as ints, floats passed as ints, etc.
-- from_dict rejects unknown keys so a YAML typo is caught at load time.
+- build_from_dict rejects unknown keys so a YAML typo is caught at load time.
 - build_from_yaml round-trips through a YAML file on disk.
 - Equality compares all fields, not identity.
 - CleanerConfig's double-claim check uses folded matching, so a
@@ -77,17 +77,17 @@ class TestFrameLayoutValidation:
 
 
 class TestFrameLayoutFromDict:
-    """from_dict round-trips and rejects unknowns."""
+    """build_from_dict round-trips and rejects unknowns."""
 
     def test_round_trip(self):
         spec = {"use_column_names": False, "subject_id_col": "doc_id"}
-        fl = FrameLayout.from_dict(spec)
+        fl = FrameLayout.build_from_dict(spec)
         assert fl.use_column_names is False
         assert fl.subject_id_col == "doc_id"
 
     def test_unknown_key(self):
         with pytest.raises(ValueError, match="unknown key"):
-            FrameLayout.from_dict({"use_column_names": True, "typo": 1})
+            FrameLayout.build_from_dict({"use_column_names": True, "typo": 1})
 
 
 class TestFrameLayoutEquality:
@@ -154,25 +154,25 @@ class TestInsufficientDataPolicyValidation:
 
 
 class TestInsufficientDataPolicyFromDict:
-    """from_dict round-trips and rejects unknowns."""
+    """build_from_dict round-trips and rejects unknowns."""
 
     def test_round_trip(self):
         spec = {
             "min_ratings_per_rater": 3,
             "min_ratings_per_subject": 4,
         }
-        p = InsufficientDataPolicy.from_dict(spec)
+        p = InsufficientDataPolicy.build_from_dict(spec)
         assert p.min_ratings_per_rater == 3
         assert p.min_ratings_per_subject == 4
 
     def test_unknown_key(self):
         with pytest.raises(ValueError, match="unknown key"):
-            InsufficientDataPolicy.from_dict({"min_ratings_per_rater": 2, "typo": 1})
+            InsufficientDataPolicy.build_from_dict({"min_ratings_per_rater": 2, "typo": 1})
 
     def test_method_removed(self):
         """Gets the removed-in-2.1.0 error, not "unknown key"."""
         with pytest.raises(TypeError, match="method was removed in 2.1.0"):
-            InsufficientDataPolicy.from_dict({"method": "iterate"})
+            InsufficientDataPolicy.build_from_dict({"method": "iterate"})
 
 
 class TestInsufficientDataPolicyEquality:
@@ -306,11 +306,11 @@ class TestCleanerConfigValidation:
 
 
 class TestCleanerConfigFromDict:
-    """from_dict delegates to sub-objects and rejects unknowns."""
+    """build_from_dict delegates to sub-objects and rejects unknowns."""
 
     def test_flat(self):
         spec = {"case_sensitive": True, "unknown_policy": "empty"}
-        cfg = CleanerConfig.from_dict(spec)
+        cfg = CleanerConfig.build_from_dict(spec)
         assert cfg.case_sensitive is True
         assert cfg.unknown_policy == "empty"
 
@@ -319,7 +319,7 @@ class TestCleanerConfigFromDict:
             "frame_layout": {"use_column_names": False},
             "insufficient_data_drops": {"min_ratings_per_subject": 3},
         }
-        cfg = CleanerConfig.from_dict(spec)
+        cfg = CleanerConfig.build_from_dict(spec)
         assert cfg.frame_layout.use_column_names is False
         assert cfg.insufficient_data_drops.min_ratings_per_subject == 3
 
@@ -332,13 +332,13 @@ class TestCleanerConfigFromDict:
 
     def test_unknown_key(self):
         with pytest.raises(ValueError, match="unknown key"):
-            CleanerConfig.from_dict({"typo": True})
+            CleanerConfig.build_from_dict({"typo": True})
 
     def test_delegate_error_chained(self):
-        """A delegate's from_dict error is wrapped with the config prefix."""
+        """A delegate's build_from_dict error is wrapped with the config prefix."""
         spec = {"frame_layout": {"use_column_names": "yes"}}
         with pytest.raises(TypeError, match=r"\[CleanerConfig\]"):
-            CleanerConfig.from_dict(spec)
+            CleanerConfig.build_from_dict(spec)
 
 
 class TestCleanerConfigYaml:
@@ -371,7 +371,7 @@ class TestCleanerConfigYaml:
             CleanerConfig.build_from_yaml("/nonexistent/config.yaml")
 
     def test_to_dict_round_trips(self):
-        """Every setting survives to_dict -> from_dict, so a report can carry it."""
+        """Every setting survives to_dict -> build_from_dict, so a report can carry it."""
         cfg = CleanerConfig(
             frame_layout=FrameLayout(use_column_names=False, subject_id_col=None),
             case_sensitive=True, strip_whitespace=False,
@@ -381,7 +381,7 @@ class TestCleanerConfigYaml:
                 min_ratings_per_rater=3, min_ratings_per_subject=2,
             ),
         )
-        assert CleanerConfig.from_dict(cfg.to_dict()) == cfg
+        assert CleanerConfig.build_from_dict(cfg.to_dict()) == cfg
 
     def test_value_map_conflict_refused_on_load(self, tmp_path):
         """Caught when the YAML is read, before any semantics or data."""

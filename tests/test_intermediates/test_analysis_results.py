@@ -82,7 +82,7 @@ from .conftest import BALANCED_NIJ, UNBALANCED_NIJ
 # -- Helpers ----------------------------------------------------------------- #
 
 
-_PROFILE = AgreementProfile.from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
+_PROFILE = AgreementProfile.build_from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
 
 # The fields every point estimate carries that most tests here are not
 # about. The parts, kappa_max and rater profile say they were left out; the
@@ -156,7 +156,7 @@ def _rater_profile(index) -> AgreementProfile:
     semantics = RatingsSemantics(
         raters=index.shape[1], categories=UnorderedCategories(("a", "b", "c")),
     )
-    return AgreementProfile.from_ratings(Ratings(category_index=index, semantics=semantics))
+    return AgreementProfile.build_from_ratings(Ratings(category_index=index, semantics=semantics))
 
 
 # Two raters with identical marginals (1/4, 1/2, 1/4), so Cohen's ceiling is 1
@@ -268,12 +268,12 @@ def _pe(point, ci=None, balance_profile=None) -> PointEstimateResult:
 
 def _bp() -> BalanceProfile:
     """Balanced profile: 4 subjects, 3 categories, 3 raters each."""
-    return BalanceProfile.from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
+    return BalanceProfile.build_from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
 
 
 def _unbalanced_bp() -> BalanceProfile:
     """Unbalanced profile: 4 subjects, 2 categories, variable raters."""
-    return BalanceProfile.from_nij_matrix(NijMatrix(UNBALANCED_NIJ.copy()))
+    return BalanceProfile.build_from_nij_matrix(NijMatrix(UNBALANCED_NIJ.copy()))
 
 
 # -- Pairs and subsets: each one is its coefficient's own result ----------- #
@@ -3833,7 +3833,7 @@ class TestPrintedForm:
 
     def test_every_subject_is_used(self):
         """A subject the coefficient left out is an error, not a printed count."""
-        fewer = AgreementProfile.from_nij_matrix(NijMatrix(BALANCED_NIJ[:3].copy()))
+        fewer = AgreementProfile.build_from_nij_matrix(NijMatrix(BALANCED_NIJ[:3].copy()))
         with pytest.raises(
             ValueError, match="the data has 4 subjects, but the agreement profile uses 3",
         ):

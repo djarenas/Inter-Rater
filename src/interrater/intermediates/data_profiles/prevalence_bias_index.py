@@ -124,7 +124,7 @@ class PrevalenceBiasIndex:
                 )
 
     @classmethod
-    def from_pair(
+    def build_from_pair(
         cls,
         category_index: np.ndarray,
         category_names: tuple[str, str],
@@ -164,7 +164,7 @@ class PrevalenceBiasIndex:
         )
 
     @classmethod
-    def from_counts(
+    def build_from_counts(
         cls,
         counts: np.ndarray,
         category_names: tuple[str, str],

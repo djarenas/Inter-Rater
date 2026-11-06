@@ -78,7 +78,7 @@ class FrameLayout:
     # Classmethods -----------------------------------------------------------  #
 
     @classmethod
-    def from_dict(cls, spec: dict) -> FrameLayout:
+    def build_from_dict(cls, spec: dict) -> FrameLayout:
         unknown = sorted(set(spec) - {"use_column_names", "subject_id_col"})
         if unknown:
             raise ValueError(

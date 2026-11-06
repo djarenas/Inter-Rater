@@ -17,7 +17,7 @@ Key behaviours:
   a Sequence, a bool is an int.
 - Validation rejects < 2 raters, duplicate names, blank names, and bad
   n_subjects.
-- from_dict / to_dict round-trips support YAML-based declarations.
+- build_from_dict / to_dict round-trips support YAML-based declarations.
 """
 
 import pytest
@@ -151,7 +151,7 @@ class TestPublicAPI:
             simple_semantics.index_of_rater("nobody")
 
     def test_to_dict_round_trip(self, two_cat):
-        """to_dict produces a mapping from_dict can rebuild from."""
+        """to_dict produces a mapping build_from_dict can rebuild from."""
         sem = RatingsSemantics(
             raters=["ann", "bob"],
             categories=two_cat,
@@ -159,20 +159,20 @@ class TestPublicAPI:
             unique_subjects=False,
         )
         spec = sem.to_dict()
-        rebuilt = RatingsSemantics.from_dict(spec)
+        rebuilt = RatingsSemantics.build_from_dict(spec)
         assert rebuilt == sem
 
     def test_from_dict_missing_raters(self):
         """A declaration without raters is incomplete."""
         with pytest.raises(KeyError, match="missing"):
-            RatingsSemantics.from_dict({
+            RatingsSemantics.build_from_dict({
                 "categories": {"kind": "unordered", "names": list(TWO_CAT_NAMES)},
             })
 
     def test_from_dict_missing_categories(self):
         """A declaration without categories is incomplete."""
         with pytest.raises(KeyError, match="missing"):
-            RatingsSemantics.from_dict({"raters": 2})
+            RatingsSemantics.build_from_dict({"raters": 2})
 
 
 # -- Equality ---------------------------------------------------------------- #

@@ -70,6 +70,8 @@ _LAZY_EXPORTS = {
     "plot_subset_strip": "interrater.visualizers",
     "plot_bootstrap_distribution": "interrater.visualizers",
     "plot_null_distribution": "interrater.visualizers",
+    "RaterProfilePlotter": "interrater.visualizers",
+    "BalanceProfilePlotter": "interrater.visualizers",
 }
 
 
@@ -161,4 +163,6 @@ __all__ = [
     "plot_subset_strip",
     "plot_bootstrap_distribution",
     "plot_null_distribution",
+    "RaterProfilePlotter",
+    "BalanceProfilePlotter",
 ]

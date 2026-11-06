@@ -122,7 +122,7 @@ class Analyzer(ABC):
         from ..intermediates.not_computed import NotComputed
 
         if self.ratings is not None:
-            self.balance_profile = BalanceProfile.from_ratings(self.ratings)
+            self.balance_profile = BalanceProfile.build_from_ratings(self.ratings)
             self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
         else:
             # BalanceProfile will be computed by subclass from nij_matrix

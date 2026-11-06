@@ -616,7 +616,7 @@ class TestCleaningReportSummary:
 
         s = report_stable.summary()
         assert s["_package_version"] == __version__
-        assert CleanerConfig.from_dict(s["cleaner_config"]) == report_stable.config
+        assert CleanerConfig.build_from_dict(s["cleaner_config"]) == report_stable.config
 
     def test_record_survives_yaml(self, report_changed, tmp_path):
         import yaml

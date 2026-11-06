@@ -94,7 +94,7 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         # Validate config type; weights come from the semantics
         self._validate_weightable_config()
         from ..intermediates.estimator_parts import Weights
-        self.weights = Weights.from_categories(self.ratings.semantics.categories)
+        self.weights = Weights.build_from_categories(self.ratings.semantics.categories)
 
     @classmethod
     def build_from_nij_matrix(

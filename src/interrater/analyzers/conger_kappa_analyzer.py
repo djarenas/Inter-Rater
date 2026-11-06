@@ -299,6 +299,6 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(),
             kappa_max=self._kappa_max(),
-            agreement_profile=AgreementProfile.from_ratings(self.ratings),
+            agreement_profile=AgreementProfile.build_from_ratings(self.ratings),
             ci_method=self.config.ci_method,
         )

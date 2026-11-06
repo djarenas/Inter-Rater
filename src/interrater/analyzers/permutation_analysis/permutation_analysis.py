@@ -304,7 +304,7 @@ class PermutationAnalysis:
                 raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
         # Build BalanceProfile and RaterProfile
-        self.balance_profile = BalanceProfile.from_ratings(self.ratings)
+        self.balance_profile = BalanceProfile.build_from_ratings(self.ratings)
         self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
 
         # The panel must be balanced only if the config says so
@@ -583,7 +583,7 @@ class PermutationAnalysis:
                 f"{categories._KIND!r}. To compute it, use a semantics with "
                 f"kind: unordered for these ratings."
             )
-        return Weights.from_categories(categories)
+        return Weights.build_from_categories(categories)
 
     def _resolve_estimator(self) -> Estimator:
         """
