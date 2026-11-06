@@ -84,6 +84,11 @@ class PairwisePermutationResult(PermutationResult):
     rater_profile : RaterProfile
         Inherited. The panel's raters; keys are positions into its
         rater_names.
+    weights_type : str
+        Inherited. The weighting every pair was computed with; the mean is
+        weighted the same way.
+    weight_matrix : list[list[float]] | None
+        Inherited. The matrix used; None when unweighted.
     pair_results : dict[tuple[int, int], PointEstimateResult | NotComputed]
         Each pair's result, computed on the subjects both raters rated: its
         balance profile says how many, since a pair resting on 756 subjects
@@ -120,6 +125,8 @@ class PairwisePermutationResult(PermutationResult):
     ci_method: str
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Each pair (rater heterogeneity)
     pair_results: dict   # values are a coefficient's result, or NotComputed

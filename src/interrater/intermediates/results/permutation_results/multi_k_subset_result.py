@@ -9,6 +9,7 @@ from ..analyzer_results import result_class_for
 from .permutation_result import (
     INDEPENDENT_MEAN_CAVEAT,
     PermutationResult,
+    has_weighted_form,
     interval_notes,
     raters_phrase,
 )
@@ -52,6 +53,10 @@ class MultiKSubsetResult(PermutationResult):
         Inherited. Structural metadata of the full dataset.
     rater_profile : RaterProfile
         Inherited. The panel's raters, shared by every k.
+    weights_type : str
+        Inherited. The weighting every subset of every k was computed with.
+    weight_matrix : list[list[float]] | None
+        Inherited. The matrix used; None when unweighted.
     per_k_results : dict[int, SubsetPermutationResult]
         One result per subset size. Keys are k values (each >= 2),
         values are complete SubsetPermutationResult objects.
@@ -67,6 +72,8 @@ class MultiKSubsetResult(PermutationResult):
     ci_method: str
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Multi-k container
     per_k_results: dict  # dict[int, SubsetPermutationResult]
@@ -156,6 +163,15 @@ class MultiKSubsetResult(PermutationResult):
                     f"{_ERROR_PREFIX}: per_k_results[{k}] has a "
                     f"different rater_profile than the parent"
                 )
+            if (
+                result.weights_type != self.weights_type
+                or result.weight_matrix != self.weight_matrix
+            ):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: per_k_results[{k}] was weighted "
+                    f"'{result.weights_type}', but the parent says "
+                    f"'{self.weights_type}'"
+                )
             if result.subset_k != k:
                 raise ValueError(
                     f"{_ERROR_PREFIX}: per_k_results[{k}] has "
@@ -208,7 +224,7 @@ class MultiKSubsetResult(PermutationResult):
         """
         Return my printed form: one line per k.
 
-            Subsets, Fleiss' κ: 199 subjects, 4 raters
+            Subsets, Fleiss' κ: 199 subjects, 4 raters, unweighted
               k=2   6 subsets   mean 0.492 [0.367, 0.601]
               k=3   4 subsets   mean 0.493 [0.370, 0.600]
               k=4   1 subset    mean 0.493 [0.372, 0.600]
@@ -223,7 +239,13 @@ class MultiKSubsetResult(PermutationResult):
         """
         name = result_class_for(self.coefficient_name).NAME
         bp = self.balance_profile
-        lines = [f"Subsets, {name}: {bp.n_subjects:,} subjects, {raters_phrase(self.rater_profile)}"]
+        # Weighted as the coefficient's own result says it, e.g. 'quadratic weights'
+        weights = ""
+        if has_weighted_form(self.coefficient_name):
+            from ..analyzer_results.point_estimate_result import PointEstimateResult
+
+            weights = f", {PointEstimateResult._weights_phrase(self.weights_type)}"
+        lines = [f"Subsets, {name}: {bp.n_subjects:,} subjects, {raters_phrase(self.rater_profile)}{weights}"]
 
         first_ci, method = None, None
         rows = []

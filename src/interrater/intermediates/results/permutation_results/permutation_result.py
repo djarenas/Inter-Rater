@@ -6,6 +6,8 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from ..analysis_result import AnalysisResult
 from ..analyzer_results import result_class_for
 
@@ -27,6 +29,14 @@ INDEPENDENT_MEAN_CAVEAT = (
 
 # A coefficient's printed name, symbol and result class all come from its
 # result class (analyzer_results.result_class_for), so nothing here spells them.
+
+# The weightings a result can record; "identity" is unweighted
+_WEIGHTS_TYPES = ("identity", "linear", "quadratic", "custom")
+
+
+def has_weighted_form(coefficient: str) -> bool:
+    """Whether the coefficient's own result records a weighting."""
+    return "weights_type" in result_class_for(coefficient).__dataclass_fields__
 
 
 def raters_phrase(rater_profile: RaterProfile) -> str:
@@ -104,6 +114,15 @@ class PermutationResult(AnalysisResult):
         identity. Pairs and subsets are keyed by position, e.g. (0, 2);
         everything shown to people -- the printed table, to_frame,
         summary, plots -- names them through rater_names.
+    weights_type : str
+        The weighting every pair or subset was computed with: "identity"
+        (unweighted), "linear", "quadratic" or "custom". The mean is over
+        those coefficients, so it is weighted the same way. Always
+        "identity" for a coefficient with no weighted form.
+    weight_matrix : list[list[float]] | None
+        The weight matrix that was used, as nested lists; None when
+        unweighted. Every pair or subset that records weights must have
+        this same matrix.
     """
 
     # Attribute declaration
@@ -112,6 +131,8 @@ class PermutationResult(AnalysisResult):
     ci_method: str
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -159,8 +180,35 @@ class PermutationResult(AnalysisResult):
 
         try:
             self._check_rater_profile()
+            self._check_weights()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
+    def _check_weights(self) -> None:
+        """The weighting is stated, and a coefficient with no weighted form has none."""
+        if self.weights_type not in _WEIGHTS_TYPES:
+            raise ValueError(
+                f"weights_type must be one of {list(_WEIGHTS_TYPES)}, "
+                f"got {self.weights_type!r}"
+            )
+        if (self.weights_type == "identity") != (self.weight_matrix is None):
+            raise ValueError(
+                f"weight_matrix must be None exactly when weights_type is "
+                f"'identity' (unweighted); got weights_type "
+                f"{self.weights_type!r} with "
+                f"{'no matrix' if self.weight_matrix is None else 'a matrix'}"
+            )
+        if self.weight_matrix is not None:
+            matrix = np.asarray(self.weight_matrix, dtype=float)
+            if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+                raise ValueError(
+                    f"weight_matrix must be square, got shape {matrix.shape}"
+                )
+        if self.weights_type != "identity" and not has_weighted_form(self.coefficient_name):
+            raise ValueError(
+                f"{self.coefficient_name} has no weighted form, so "
+                f"weights_type must be 'identity', got {self.weights_type!r}"
+            )
 
     def _check_rater_profile(self) -> None:
         """A RaterProfile, which checks its own names and counts."""
@@ -263,11 +311,14 @@ class PermutationResult(AnalysisResult):
         Returns
         -------
         dict
-            Keys: coefficient_name, ci_method, balance, raters.
+            Keys: coefficient_name, ci_method, weights_type,
+            weight_matrix, balance, raters.
         """
         return {
             "coefficient_name": self.coefficient_name,
             "ci_method": self.ci_method,
+            "weights_type": self.weights_type,
+            "weight_matrix": self.weight_matrix,
             "balance": self.balance_profile.summary(),
             "raters": self.rater_profile.summary(),
         }
@@ -367,6 +418,17 @@ class PermutationResult(AnalysisResult):
                     f"{word} {key} was built with ci_method "
                     f"'{unit.ci_method}', not '{self.ci_method}'"
                 )
+            # The mean is weighted as its units are, so they must agree
+            if hasattr(unit, "weights_type") and (
+                unit.weights_type != self.weights_type
+                or unit.weight_matrix != self.weight_matrix
+            ):
+                raise ValueError(
+                    f"{word} {key} was computed with weights_type "
+                    f"'{unit.weights_type}' and its own matrix, but this "
+                    f"result says '{self.weights_type}'; the mean is "
+                    f"weighted as its {word}s are"
+                )
             points.append(float(unit.point))
             kept.add(not isinstance(unit.bootstrap_distribution, NotComputed))
 
@@ -404,7 +466,7 @@ class PermutationResult(AnalysisResult):
 
             Pairwise Cohen's κ, 6 pairs: mean = 0.496 [0.377, 0.605] (...), correlated bootstrap
               ! independent bootstrap: ...           (independent mean only)
-              199 subjects; 4 raters; each pair on the subjects both raters rated
+              199 subjects; 4 raters; unweighted; each pair on the subjects both raters rated
                 raters      κ     95% CI            subjects
                 0, 1    0.539    [0.383, 0.682]       199
                 ...
@@ -423,9 +485,15 @@ class PermutationResult(AnalysisResult):
         if mean_method == "independent":
             lines.append(f"  ! {INDEPENDENT_MEAN_CAVEAT}")
         bp = self.balance_profile
+        # Weighted as the coefficient's own result says it, e.g. 'quadratic weights'
+        weights = ""
+        if has_weighted_form(self.coefficient_name):
+            from ..analyzer_results.point_estimate_result import PointEstimateResult
+
+            weights = f"{PointEstimateResult._weights_phrase(self.weights_type)}; "
         lines.append(
             f"  {bp.n_subjects:,} subjects; {raters_phrase(self.rater_profile)}; "
-            f"each {unit} on {pool}"
+            f"{weights}each {unit} on {pool}"
         )
 
         rows = self._units()

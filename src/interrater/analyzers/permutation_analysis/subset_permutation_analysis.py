@@ -170,6 +170,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
+            **self._weights_record(),
             per_k_results=per_k_results,
             ks=list(self.ks),
         )
@@ -330,6 +331,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
+            **self._weights_record(),
             subset_results=subset_results,
             n_subsets=n_subsets,
             subset_k=k,

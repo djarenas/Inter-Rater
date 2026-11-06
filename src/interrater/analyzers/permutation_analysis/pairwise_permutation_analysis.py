@@ -163,6 +163,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             ci_method=coc.ci_method,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
+            **self._weights_record(),
             pair_results=pair_results,
             n_pairs=n_pairs,
             mean_over_pairs=mean_over_pairs,

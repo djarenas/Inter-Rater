@@ -85,6 +85,11 @@ class SubsetPermutationResult(PermutationResult):
     rater_profile : RaterProfile
         Inherited. The panel's raters; keys are positions into its
         rater_names.
+    weights_type : str
+        Inherited. The weighting every subset was computed with; the mean is
+        weighted the same way.
+    weight_matrix : list[list[float]] | None
+        Inherited. The matrix used; None when unweighted.
     subset_results : dict[tuple[int, ...], PointEstimateResult | NotComputed]
         Each subset's result, computed on the subjects at least two of its
         raters rated: its balance profile says how many, since a subset
@@ -124,6 +129,8 @@ class SubsetPermutationResult(PermutationResult):
     ci_method: str
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Each subset (rater heterogeneity)
     subset_results: dict   # values are a coefficient's result, or NotComputed

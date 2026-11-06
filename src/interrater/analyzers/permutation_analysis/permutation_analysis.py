@@ -585,6 +585,18 @@ class PermutationAnalysis:
             )
         return Weights.build_from_categories(categories)
 
+    def _weights_record(self) -> dict:
+        """
+        The weighting my result records: weights_type and weight_matrix.
+
+        Read from the weights every pair or subset was computed with, so the
+        result cannot say one thing while its units did another.
+        """
+        weights = self.estimator_input.weights
+        if weights is None:
+            return {"weights_type": "identity", "weight_matrix": None}
+        return {"weights_type": weights.kind, "weight_matrix": weights.matrix.tolist()}
+
     def _resolve_estimator(self) -> Estimator:
         """
         Map coefficient name to the estimator callable.

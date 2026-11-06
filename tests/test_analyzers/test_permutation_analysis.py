@@ -301,6 +301,44 @@ class TestPermutationWeightsFromSemantics:
             assert unit.weights_type == "quadratic", pair
             assert unit.weight_matrix == expected, pair
 
+    def test_pairwise_result_records_the_weights(self):
+        """The mean is over weighted kappas, and the result says so."""
+        ratings = self._ordered(3)
+        result = PairwisePermutationAnalysis(ratings, _pairwise_config()).run()
+        expected = ratings.semantics.categories.weight_matrix().tolist()
+        assert result.weights_type == "quadratic"
+        assert result.weight_matrix == expected
+        assert result.summary()["weights_type"] == "quadratic"
+        assert result.summary()["weight_matrix"] == expected
+        assert "; quadratic weights; each pair on" in str(result)
+
+    def test_subset_results_record_the_weights(self):
+        ratings = self._ordered(3)
+        config = SubsetPermutationConfig(
+            coefficient_to_compute="fleiss_kappa",
+            config_of_coefficient=FleissKappaConfig(n_resamples=20),
+            subset_k=[2, 3],
+        )
+        result = SubsetPermutationAnalysis(ratings, config).run()
+        assert result.weights_type == "quadratic"
+        assert "quadratic weights" in str(result).split("\n")[0]
+        for k in (2, 3):
+            assert result[k].weights_type == "quadratic"
+            assert "; quadratic weights; each subset on" in str(result[k])
+
+    def test_unordered_records_unweighted(self):
+        result = PairwisePermutationAnalysis(_make_ratings(20, 3, n_categories=3), _pairwise_config()).run()
+        assert result.weights_type == "identity"
+        assert result.weight_matrix is None
+        assert "; unweighted; each pair on" in str(result)
+
+    def test_no_weighted_form_prints_no_weighting(self):
+        """Scott's pi has no weighted form, so its table says nothing about weights."""
+        config = _pairwise_config(coefficient="scotts_pi")
+        result = PairwisePermutationAnalysis(_make_ratings(20, 3, n_categories=3), config).run()
+        assert result.weights_type == "identity"
+        assert "weight" not in str(result).split("\n")[1]
+
     def test_pairwise_gwet_refuses_ordered(self):
         config = PairwisePermutationConfig(
             coefficient_to_compute="gwet_ac1",

@@ -348,6 +348,8 @@ def _pairwise_kwargs(**overrides):
         ci_method="percentile",
         balance_profile=_bp(),
         rater_profile=_RATERS,
+        weights_type="identity",
+        weight_matrix=None,
         pair_results=_units(PAIRS),
         n_pairs=3,
         mean_over_pairs=PAIRWISE_MEAN,
@@ -385,6 +387,8 @@ def _subset_kwargs(**overrides):
         ci_method="percentile",
         balance_profile=_bp(),
         rater_profile=_RATERS,
+        weights_type="identity",
+        weight_matrix=None,
         subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
         n_subsets=3,
         subset_k=2,
@@ -430,6 +434,8 @@ def _multi_k_kwargs(**overrides):
         ci_method="percentile",
         balance_profile=bp,
         rater_profile=_RATERS,
+        weights_type="identity",
+        weight_matrix=None,
         per_k_results={
             2: SubsetPermutationResult(**_subset_kwargs(balance_profile=bp)),
             3: SubsetPermutationResult(**_subset_k3_kwargs(balance_profile=bp)),
@@ -1523,53 +1529,90 @@ class TestPermutationResult:
     """Base class: coefficient_name, ci_method, balance_profile."""
 
     def test_valid_construction(self):
-        r = PermutationResult("cohen_kappa", "percentile", _bp(), _RATERS)
+        r = PermutationResult("cohen_kappa", "percentile", _bp(), _RATERS, "identity", None)
         assert r.coefficient_name == "cohen_kappa"
         assert r.ci_method == "percentile"
 
     def test_is_analysis_result(self):
-        r = PermutationResult("cohen_kappa", "bca", _bp(), _RATERS)
+        r = PermutationResult("cohen_kappa", "bca", _bp(), _RATERS, "identity", None)
         assert isinstance(r, AnalysisResult)
 
     def test_coefficient_name_not_str(self):
         """Non-str coefficient_name raises TypeError (not ValueError)."""
         with pytest.raises(TypeError, match="coefficient_name must be str"):
-            PermutationResult(42, "percentile", _bp(), _RATERS)
+            PermutationResult(42, "percentile", _bp(), _RATERS, "identity", None)
 
     def test_coefficient_name_empty(self):
         with pytest.raises(ValueError, match="coefficient_name must be non-empty"):
-            PermutationResult("", "percentile", _bp(), _RATERS)
+            PermutationResult("", "percentile", _bp(), _RATERS, "identity", None)
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
-            PermutationResult("cohen_kappa", 42, _bp(), _RATERS)
+            PermutationResult("cohen_kappa", 42, _bp(), _RATERS, "identity", None)
 
     def test_ci_method_parametric_null(self):
         """parametric_null is not available for permutation results."""
         with pytest.raises(ValueError, match="ci_method must be"):
-            PermutationResult("cohen_kappa", "parametric_null", _bp(), _RATERS)
+            PermutationResult("cohen_kappa", "parametric_null", _bp(), _RATERS, "identity", None)
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
-            PermutationResult("cohen_kappa", "invalid", _bp(), _RATERS)
+            PermutationResult("cohen_kappa", "invalid", _bp(), _RATERS, "identity", None)
 
     def test_balance_profile_none(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            PermutationResult("cohen_kappa", "percentile", None, _RATERS)
+            PermutationResult("cohen_kappa", "percentile", None, _RATERS, "identity", None)
 
     def test_balance_profile_wrong_type(self):
         with pytest.raises(TypeError, match="balance_profile must be BalanceProfile"):
-            PermutationResult("cohen_kappa", "percentile", {"n_raters": 3}, _RATERS)
+            PermutationResult("cohen_kappa", "percentile", {"n_raters": 3}, _RATERS, "identity", None)
 
     def test_summary_keys(self):
-        d = PermutationResult("fleiss_kappa", "bca", _bp(), _RATERS).summary()
+        d = PermutationResult("fleiss_kappa", "bca", _bp(), _RATERS, "identity", None).summary()
         assert d["coefficient_name"] == "fleiss_kappa"
         assert d["ci_method"] == "bca"
+        assert d["weights_type"] == "identity"
+        assert d["weight_matrix"] is None
         assert isinstance(d["balance"], dict)
+
+    # -- The weighting the mean was computed under --------------------------- #
+
+    LINEAR = [[1.0, 0.5, 0.0], [0.5, 1.0, 0.5], [0.0, 0.5, 1.0]]
+
+    def test_weighted_records_its_matrix(self):
+        d = PermutationResult("fleiss_kappa", "percentile", _bp(), _RATERS, "linear", self.LINEAR).summary()
+        assert d["weights_type"] == "linear"
+        assert d["weight_matrix"] == self.LINEAR
+
+    def test_unknown_weights_type_refused(self):
+        with pytest.raises(ValueError, match="weights_type must be one of"):
+            PermutationResult("fleiss_kappa", "percentile", _bp(), _RATERS, "cubic", self.LINEAR)
+
+    def test_weighting_without_a_matrix_refused(self):
+        with pytest.raises(ValueError, match="got weights_type 'linear' with no matrix"):
+            PermutationResult("fleiss_kappa", "percentile", _bp(), _RATERS, "linear", None)
+
+    def test_matrix_without_a_weighting_refused(self):
+        with pytest.raises(ValueError, match="got weights_type 'identity' with a matrix"):
+            PermutationResult("fleiss_kappa", "percentile", _bp(), _RATERS, "identity", self.LINEAR)
+
+    def test_non_square_matrix_refused(self):
+        with pytest.raises(ValueError, match=r"weight_matrix must be square, got shape \(2, 3\)"):
+            PermutationResult("fleiss_kappa", "percentile", _bp(), _RATERS, "custom", self.LINEAR[:2])
+
+    @pytest.mark.parametrize("coefficient", ["scotts_pi", "gwet_ac1", "conger_kappa"])
+    def test_no_weighted_form_must_be_unweighted(self, coefficient):
+        with pytest.raises(ValueError, match=f"{coefficient} has no weighted form"):
+            PermutationResult(coefficient, "percentile", _bp(), _RATERS, "linear", self.LINEAR)
+
+    def test_unit_with_other_weights_refused(self):
+        """The mean is weighted as its units are; a container that says otherwise is refused."""
+        with pytest.raises(ValueError, match="pair \\(0, 1\\) was computed with weights_type 'identity'"):
+            PairwisePermutationResult(**_pairwise_kwargs(weights_type="linear", weight_matrix=self.LINEAR))
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[PermutationResult\] Error"):
-            PermutationResult("", "percentile", _bp(), _RATERS)
+            PermutationResult("", "percentile", _bp(), _RATERS, "identity", None)
 
 
 # ============================================================================ #
@@ -2280,6 +2323,8 @@ class TestMultiKSubsetResultConstruction:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
@@ -2293,6 +2338,8 @@ class TestMultiKSubsetResultConstruction:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -2307,6 +2354,12 @@ class TestMultiKSubsetResultConstruction:
 
 class TestMultiKSubsetResultValidation:
     """Each validation constraint tested with one failing input."""
+
+    def test_per_k_weighting_must_match_the_parent(self):
+        """Every k is computed under the same weights as the whole result."""
+        linear = [[1.0, 0.5, 0.0], [0.5, 1.0, 0.5], [0.0, 0.5, 1.0]]
+        with pytest.raises(ValueError, match="per_k_results\\[2\\] was weighted 'identity', but the parent says 'linear'"):
+            MultiKSubsetResult(**_multi_k_kwargs(weights_type="linear", weight_matrix=linear))
 
     def test_ks_not_list(self):
         with pytest.raises(TypeError, match="ks must be list"):
@@ -2357,6 +2410,8 @@ class TestMultiKSubsetResultValidation:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             subset_results=_units(SUBSETS_K2, "gwet_ac1"),
             n_subsets=3,
             subset_k=2,
@@ -2371,6 +2426,8 @@ class TestMultiKSubsetResultValidation:
                 ci_method="percentile",
                 balance_profile=bp,
                 rater_profile=_RATERS,
+                weights_type="identity",
+                weight_matrix=None,
                 per_k_results={2: wrong_result},
                 ks=[2],
             )
@@ -2384,6 +2441,8 @@ class TestMultiKSubsetResultValidation:
             ci_method="percentile",
             balance_profile=bp_child,  # Different object!
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,
@@ -2398,6 +2457,8 @@ class TestMultiKSubsetResultValidation:
                 ci_method="percentile",
                 balance_profile=bp_parent,
                 rater_profile=_RATERS,
+                weights_type="identity",
+                weight_matrix=None,
                 per_k_results={2: result_k2},
                 ks=[2],
             )
@@ -2410,6 +2471,8 @@ class TestMultiKSubsetResultValidation:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             subset_results=_units(SUBSETS_K2, "fleiss_kappa"),
             n_subsets=3,
             subset_k=2,  # subset_k=2 but stored under key 3
@@ -2424,6 +2487,8 @@ class TestMultiKSubsetResultValidation:
                 ci_method="percentile",
                 balance_profile=bp,
                 rater_profile=_RATERS,
+                weights_type="identity",
+                weight_matrix=None,
                 per_k_results={3: result_wrong_k},
                 ks=[3],
             )
@@ -2474,6 +2539,8 @@ class TestMultiKSubsetResultStr:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             subset_results={
                 (0, 1): _unit(0.6, "fleiss_kappa", ci=_ci(0.50, 0.70)),
                 (0, 2): _unit(0.4, "fleiss_kappa", ci=_ci(0.30, 0.50)),
@@ -2491,6 +2558,8 @@ class TestMultiKSubsetResultStr:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             subset_results=_units(SUBSETS_K3, "fleiss_kappa"),
             n_subsets=1,
             subset_k=3,
@@ -2504,6 +2573,8 @@ class TestMultiKSubsetResultStr:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             per_k_results={2: result_k2, 3: result_k3},
             ks=[2, 3],
         )
@@ -2528,6 +2599,8 @@ class TestMultiKSubsetResultStr:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             per_k_results={2: result_k2},
             ks=[2],
         )
@@ -2549,6 +2622,8 @@ class TestMultiKSubsetResultStr:
             ci_method="percentile",
             balance_profile=bp,
             rater_profile=_RATERS,
+            weights_type="identity",
+            weight_matrix=None,
             per_k_results={2: result_k2},
             ks=[2],
         )
