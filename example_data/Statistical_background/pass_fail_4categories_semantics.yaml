@@ -1,0 +1,9 @@
+# The strict grader's essays with two categories nobody used, as in Scott's
+# "whimsical researcher" (Scott 1955, p. 322). Read with
+# unused_categories_cleaner_config.yaml, which keeps them.
+raters: ['A', 'B']
+categories:
+    kind: unordered
+    names: ['pass', 'fail', 'distinction', 'incomplete']
+n_subjects: 100
+unique_subjects: true

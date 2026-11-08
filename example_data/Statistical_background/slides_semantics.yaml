@@ -1,0 +1,7 @@
+# Two pathologists, cancer or healthy (pathologists, prevalence sweep,
+# two-rater biopsies). No n_subjects: the tables differ in size.
+raters: ['A', 'B']
+categories:
+    kind: unordered
+    names: ['cancer', 'healthy']
+unique_subjects: true

@@ -1,0 +1,13 @@
+# As complete_cleaner_config.yaml, but keeps declared categories nobody used.
+frame_layout:
+    use_column_names: true
+    subject_id_col: "subject_id"
+case_sensitive: false
+strip_whitespace: true
+missing_values: []            # every cell is rated
+value_map: {}
+unknown_policy: 'error'
+unused_categories: 'keep'      # Scott's two extra categories stay in q
+insufficient_data_drops:
+    min_ratings_per_rater:   2
+    min_ratings_per_subject: 2

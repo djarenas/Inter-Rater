@@ -1,0 +1,8 @@
+# Three reviewers screening 1,000 abstracts (simulated, seed 42).
+# No n_subjects: the cleaner drops the 500 rated once, and the check
+# is made on what it keeps.
+raters: ['A', 'B', 'C']
+categories:
+    kind: unordered
+    names: ['include', 'exclude']
+unique_subjects: true

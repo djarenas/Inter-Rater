@@ -19,6 +19,7 @@ example_data/
   SR3_JGIM2019/        ratings
   SR4_FIS_CVD/         ratings
   SR5_CocCardio/       ratings
+  Statistical_background/  ratings, every table on guide/statistical_background.md
   Unbalanced_nij/      nij only, the one unbalanced counts matrix
 ```
 
@@ -365,11 +366,6 @@ exist so the two analyzer pathways can be validated against each other: the
 same data through `estimate()` and `estimate_from_nij_matrix()` must give the
 same point estimate.
 
-### Fleiss1971/Fleiss1971_psychiatric_data_nij.txt
-
-Tab-separated twin of the CSV, with a header row and no subject-ID column.
-Same 30 x 5 counts. The CSV is what the tests load.
-
 ### Synthetic_2raters/synthetic_2raters_data_nij.csv
 
 Nij form of the synthetic 2-rater data: 100 subjects x 3 categories, all row
@@ -411,3 +407,30 @@ It covers a real gap -- the nij pathway on unbalanced data, where Fleiss, B-P
 and AC1 all fall back to an approximation and Krippendorff does not. Closing
 it means establishing reference values first, which for synthetic data means
 deciding what they should be validated *against*.
+
+---
+
+## Statistical_background/
+
+Every table on `guide/statistical_background.md`, as ratings files that load
+through the cleaner. Synthetic: built from the page's cells, or simulated
+with seed 42.
+
+| Files | Page section |
+|---|---|
+| `professors_data.csv` | Percent agreement; Cohen's kappa |
+| `strict_grader_data.csv` | Pooled or individual rates; Scott's quote |
+| `pathologists_data.csv`, `prevalence_*_data.csv` | When the condition is rare |
+| `biopsies_2raters_data.csv`, `biopsy_panel_data.csv` | More than two raters |
+| `abstracts_data.csv` | When not everyone rates everything |
+
+- `generate_tables.py` builds the CSVs. `--check` fails if a committed file
+  differs from what it builds.
+- `reproduce_page.py` runs interrater on each table and checks the page's
+  numbers at the precision the page prints. The simulated panel is seeded,
+  so its observed columns are checked the same way; its theoretical columns
+  are computed from the design, and each theoretical kappa must lie inside
+  the observed 95% interval.
+- Each prevalence table has the fewest slides at which every cell is a whole
+  number, so the sweep is exact.
+- `tests/test_example_data/test_statistical_background.py` runs both.

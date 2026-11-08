@@ -1,0 +1,7 @@
+# Two graders, pass or fail (professors, strict grader)
+raters: ['A', 'B']
+categories:
+    kind: unordered
+    names: ['pass', 'fail']
+n_subjects: 100
+unique_subjects: true

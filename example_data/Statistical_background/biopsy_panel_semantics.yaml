@@ -1,0 +1,13 @@
+# 32 readers on 1,000 biopsies (simulated, seed 42). A smaller panel is
+# its first k readers.
+raters: [
+    'reader01', 'reader02', 'reader03', 'reader04', 'reader05', 'reader06', 'reader07', 'reader08',
+    'reader09', 'reader10', 'reader11', 'reader12', 'reader13', 'reader14', 'reader15', 'reader16',
+    'reader17', 'reader18', 'reader19', 'reader20', 'reader21', 'reader22', 'reader23', 'reader24',
+    'reader25', 'reader26', 'reader27', 'reader28', 'reader29', 'reader30', 'reader31', 'reader32',
+]
+categories:
+    kind: unordered
+    names: ['cancer', 'healthy']
+n_subjects: 1000
+unique_subjects: true
