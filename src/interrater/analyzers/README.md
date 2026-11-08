@@ -2,7 +2,7 @@
 
 Analyzers are the computational engine of interrater v2. Each analyzer takes
 a Ratings object and a Config, validates both, and provides an `estimate()`
-method that returns a result object. Analyzers are mutable -- they hold state,
+method that returns a result object. Analyzers are mutable: they hold state,
 rebuild internals, and can update their own attributes. The data objects they
 consume (Ratings, configs) are frozen.
 
@@ -46,13 +46,10 @@ Analyzer (ABC)
           └── LightKappaAnalyzer
 ```
 
-The split is not an implementation choice. Group coefficients treat all raters
-as interchangeable -- they pool the raters into one distribution and ask "did
-they agree?" Individual marginal coefficients ask "given that rater A uses
-these rates and rater B uses those rates, did they agree more than that
-difference would predict?" The same data yields different numbers depending
-on which question you ask, and the hierarchy makes the question explicit in
-the type.
+The splits are meant to be conceptual: Group coefficients treat all raters
+as interchangeable; they pool the raters into one distribution; individual marginal coefficients 
+use marginal rates. Therefore, some capabilities such as building from nij matrices would be
+available to the former but not the latter. 
 
 
 ## What each level does
@@ -137,9 +134,9 @@ print(result.confidence_interval)
 ## Confidence interval methods
 
 CI computation lives in `ci_methods.py`. Both bootstrap methods return a
-`BootstrapCIResult` rather than a pair of floats, because an interval that
-reports only its bounds cannot say which method produced them or how many
-resamples it had to work with.
+`BootstrapCIResult` rather than a pair of floats. There is a lot more useful
+information than just the lower and upper limits; i.e. the method, if any bootstraps
+failed, ....
 
 ### Percentile (`ci_method="percentile"`)
 
@@ -148,7 +145,7 @@ bootstrap distribution directly. No bias correction. Reliable and stable.
 
 It is also the floor of the module. BCa can decline and hand its work here;
 this has nothing simpler to hand off to in turn, so percentile either runs
-or nothing does -- it never reports a fallback.
+or nothing does.
 
 ### BCa (`ci_method="bca"`)
 
@@ -375,6 +372,11 @@ coefficient on one data slice. An Orchestrator enumerates subsets (pairs,
 leave-one-out, arbitrary k) and calls an Analyzer or estimator on each,
 then assembles the results.
 
+Leave-one-rater-out is subset permutation at k = n - 1: `subset_k: 3` on a
+4-rater panel gives the coefficient without each rater in turn, with its
+interval and its subject count. The `rater_jackknife` config flag, which
+would report this on the analyzer's own result, is refused until 2.2.
+
 See `permutation_analysis/README.md`.
 
 ### `configs/`
@@ -435,3 +437,11 @@ once, before the loop, in the analyzer.
 **Resampling is separated from computation.** Resampling functions yield
 modified arrays. Agreement functions compute coefficients on arrays. The
 analyzer composes them. None knows about the others' internals.
+
+**A step that drops raters measures only what is left.** A pair, a subset,
+or the panel without one rater computes its point, and resamples, only on
+the subjects still rated by at least two of its raters. With fewer than two
+such subjects, or a rater who rated none of them, it has no coefficient and
+says why. The rule is written once (`unit_problem` in
+`agreement_functions/rater_combinations.py`) and every such step calls it;
+see `permutation_analysis/README.md`.

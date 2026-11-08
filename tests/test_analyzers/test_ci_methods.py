@@ -371,6 +371,25 @@ class TestBcaCi:
         assert fallen.lower == pytest.approx(plain.lower, abs=1e-12)
         assert fallen.upper == pytest.approx(plain.upper, abs=1e-12)
 
+    def test_correction_past_its_pole_falls_back(self):
+        """
+        1 - a(z0 + z) must stay positive. With the point above every draw, z0
+        sits at its clip (+6.4), and a positive acceleration near its 1/6
+        bound pushes the upper end below zero. That used to give inverted
+        bounds and crash; it is now a percentile fallback like any other.
+        """
+        rng = np.random.default_rng(42)
+        dist = rng.normal(loc=0.5, scale=0.1, size=2000)
+        jackknife = np.full(100, 0.5) + rng.normal(0, 1e-4, 100)
+        jackknife[0] = -2.0  # one subject moves the estimate a lot: a > 0
+        fallen = bca_ci(dist, 1.5, 0.05, jackknife)
+        plain = percentile_ci(dist, 0.05)
+
+        assert fallen.method_intended == "bca"
+        assert fallen.method_used == "percentile"
+        assert fallen.lower == pytest.approx(plain.lower, abs=1e-12)
+        assert fallen.upper == pytest.approx(plain.upper, abs=1e-12)
+
     def test_all_draws_failed_means_no_method_ran(self):
         ci = bca_ci(np.full(200, np.nan), 0.5, 0.05, _JACKKNIFE)
         assert ci.method_intended == "bca"

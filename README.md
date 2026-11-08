@@ -176,12 +176,23 @@ pairwise = PairwisePermutationAnalysis(ratings, PairwisePermutationConfig(
     bootstrap_mean_config=PermutationBootstrapMeanConfig(method="correlated"),
 )).run()
 
-pairwise.pairwise_values      # (0,1) 0.539  (0,2) 0.453  (0,3) 0.425
-                              # (1,2) 0.553  (1,3) 0.522  (2,3) 0.481
-pairwise.mean_over_pairs      # 0.496
-print(pairwise.bootstrap_ci_of_mean)
-                              # [0.387, 0.608] (95% CI, bca, n=4000)
+print(pairwise)
 ```
+
+```
+Pairwise Cohen's κ, 6 pairs: mean = 0.496 [0.387, 0.608] (95% CI, bca, n=4000), correlated bootstrap
+  199 subjects; 4 raters; unweighted; each pair on the subjects both raters rated
+    raters              κ  95% CI          subjects
+    rater0, rater1  0.539  [0.376, 0.681]       199
+    rater0, rater2  0.453  [0.296, 0.613]       199
+    rater0, rater3  0.425  [0.288, 0.565]       199
+    rater1, rater2  0.553  [0.396, 0.701]       199
+    rater1, rater3  0.522  [0.383, 0.654]       199
+    rater2, rater3  0.481  [0.337, 0.619]       199
+```
+
+Each pair is a full `CohenKappaResult` in `pairwise.pair_results`, and
+`pairwise.to_frame()` gives the table as a DataFrame.
 
 And what a fifth reviewer would have done to the number:
 

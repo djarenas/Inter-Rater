@@ -31,12 +31,6 @@ def rater_jackknife(category_index: np.ndarray) -> Iterator[np.ndarray]:
         Each iteration yields data with one rater's column removed. Shape is
         (n_subjects, n_raters - 1), dtype int8.
 
-    Examples
-    --------
-    >>> import numpy as np
-    >>> ratings = np.array([[0, 1, 0], [1, 0, 1]], dtype=np.int8)
-    >>> for i, jackknife_draw in enumerate(rater_jackknife(ratings)):
-    ...     print(f"Omit rater {i}: shape {jackknife_draw.shape}")
     Raises
     ------
     TypeError
@@ -44,6 +38,12 @@ def rater_jackknife(category_index: np.ndarray) -> Iterator[np.ndarray]:
     ValueError
         If category_index is not 2D or has fewer than 2 raters.
 
+    Examples
+    --------
+    >>> import numpy as np
+    >>> ratings = np.array([[0, 1, 0], [1, 0, 1]], dtype=np.int8)
+    >>> for i, jackknife_draw in enumerate(rater_jackknife(ratings)):
+    ...     print(f"Omit rater {i}: shape {jackknife_draw.shape}")
     Omit rater 0: shape (2, 2)
     Omit rater 1: shape (2, 2)
     Omit rater 2: shape (2, 2)

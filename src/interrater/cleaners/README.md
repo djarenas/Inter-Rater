@@ -1,8 +1,8 @@
 # Cleaners
 
-The only way in: a messy pandas DataFrame becomes a validated `Ratings`,
-with a receipt for everything that changed. The receipt is the
-`CleaningReport`.
+The preferred way to build objects for analysis.
+Cleaners take messy pandas DataFrame and convert them to validated `Ratings`;
+the process yields a receipt (`CleaningReport`) for everything that changed.
 
 ## Configuration layer
 
@@ -11,12 +11,12 @@ Three objects hold those decisions, bottom-up:
 
 | Class                    | What it declares                                        |
 |--------------------------|---------------------------------------------------------|
-| `FrameLayout`            | Whether the frame has column headers and which column (if any) holds subject IDs. |
+| `FrameLayout`            | Whether the frame's column labels must match the declared raters (otherwise raters are taken by position), and which column (if any) holds subject IDs. |
 | `InsufficientDataPolicy` | Minimum ratings per rater and per subject for dropping thin data. Sweeps repeat until nothing more falls below them. |
 | `CleanerConfig`          | Everything else -- case sensitivity, whitespace stripping, missing-value markers, value repairs, policies for unknown responses and unused categories, plus the two delegates above. |
 
 `CleanerConfig.build_from_dict` and `CleanerConfig.build_from_yaml` build a
-config from a plain dictionary or a YAML file, so the entire cleaning
+config from a plain dictionary or a YAML file, so that the entire cleaning
 specification can live in a versioned file alongside the analysis.
 
 ## RatingsCleaner
@@ -55,7 +55,6 @@ column with a blank cell into float64, and `1` arrives as `1.0`. Use
 | `_string_utils.py`| `fold`, `fold_collisions`, `describe_folding`, `build_lookup` -- string normalisation, finding different strings that fold alike, and lookup-table construction. Free functions over plain strings; the config and the cleaner call the same code so matching is guaranteed consistent. |
 | `_drop_utils.py`  | `rating_counts`, `sweep_once`, `sweep_until_settled`, `distribution` -- row/column dropping over the code array. Free functions over numpy; the cleaner supplies thresholds, gets back boolean masks. |
 
-## Data flow
 
 ```
 DataFrame (messy strings)

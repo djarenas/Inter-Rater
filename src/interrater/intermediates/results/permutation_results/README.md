@@ -1,12 +1,13 @@
 # Permutation Results
 
 One coefficient, recomputed over subsets of the raters. Where the analyzer
-results answer *what is the coefficient*, these answer *how much does it move
-when the rater set changes* -- across all pairs, across leave-k-out subsets at
+results answer *what is the coefficient*, these also answer *how much does it move
+when the rater set changes*; across all pairs, across leave-k-out subsets at
 one k, or across several k at once.
 
 ```
-PermutationResult               coefficient_name, ci_method, balance_profile
+PermutationResult               coefficient_name, ci_method, balance_profile,
+                                rater_profile, weights_type, weight_matrix
 ├── PairwisePermutationResult   all C(n,2) pairs
 ├── SubsetPermutationResult     leave-k-out at a single k
 └── MultiKSubsetResult          several k values at once
@@ -14,7 +15,7 @@ PermutationResult               coefficient_name, ci_method, balance_profile
 
 | Class                       | What It Holds                                                                 | Why It Exists                                                        |
 |-----------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------|
-| `PermutationResult`         | coefficient_name, ci_method, balance_profile                                   | Shared base. Deliberately carries no point estimate -- see below.    |
+| `PermutationResult`         | coefficient_name, ci_method, balance_profile, rater_profile, weights_type, weight_matrix | Shared base. Deliberately carries no point estimate -- see below.    |
 | `PairwisePermutationResult` | pair_results (each pair's own result, or NotComputed), n_pairs, mean_over_pairs; optionally bootstrap_mean_method, bootstrap_ci_of_mean, bootstrap_distribution_of_mean | All C(n,2) pairwise coefficients, each a full result.                |
 | `SubsetPermutationResult`   | subset_results (each subset's own result, or NotComputed), n_subsets, subset_k, mean_over_subsets; the same three optional fields for the mean | Leave-one-out or leave-k-out at a single k.                          |
 | `MultiKSubsetResult`        | per_k_results (dict[int, SubsetPermutationResult]), ks                          | Stability curve: how the coefficient moves as more raters are removed. |
@@ -45,11 +46,19 @@ fails:
 
 - each unit is the coefficient's own result class, or `NotComputed`;
 - each was built with the container's `ci_method`;
+- each unit that records weights has the container's `weights_type` and
+  `weight_matrix` -- the mean is weighted as its units are;
 - each computed unit has a bootstrap interval -- the per-unit bootstrap
   always runs, so one without is a bug;
 - the draws are kept for every computed unit or for none -- `keep_draws`
   applies to the whole analysis;
 - the mean is the mean of the units' defined points.
+
+`weights_type` and `weight_matrix` come from the semantics, as for a single
+coefficient: `"identity"` and `None` when unweighted. `summary()` has both,
+and the printed data line states the weighting -- `quadratic weights`,
+`unweighted` -- for coefficients that have a weighted form. A
+`MultiKSubsetResult` checks that every k was weighted the same way.
 
 **A unit with no coefficient holds `NotComputed`**, which says why: "raters
 ann, bob share 1 subject", or "rater cat rated none of the 40 subjects the
@@ -86,10 +95,12 @@ Under a partially crossed design two raters may overlap on very few subjects,
 and a coefficient from a thin overlap should not be read beside one from a
 thick overlap without that context travelling with it.
 
-To see every pair's overlap at once, `RaterSharedMatrix` (in
-`intermediates/data_profiles`) can be used: it counts the subjects each pair
-of raters shares, and prints them as a grid, or as a list of the thinnest
-pairs first.
+To see every pair's overlap at once,
+`RaterProfilePlotter.build_from_result(result).draw_overlap()` draws it as a
+heatmap, with pairs too thin for a coefficient hatched (see
+`visualizers/README.md`). The numbers are in
+`result.rater_profile.rater_overlap`, a `RaterSharedMatrix`, which prints
+them as a grid, or as a list of the thinnest pairs first.
 
 **What counts as a subject here is a rule, not an obvious fact.** A subject
 contributes to a k-rater subset when **at least two of those k raters rated
@@ -143,5 +154,5 @@ each unit's draws are checked against its interval by its own result.
 - `..analyzer_results` (each coefficient's result class, for the units)
 - `..ci_results` (BootstrapCIResult)
 - `...not_computed` (NotComputed)
-- `...data_profiles` (BalanceProfile)
+- `...data_profiles` (BalanceProfile, RaterProfile)
 - `numpy` (bootstrap distributions)

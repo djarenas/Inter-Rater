@@ -1,6 +1,6 @@
 frame_layout:
-    use_column_names: false     # The data_SR1.txt file has no headers
-    subject_id_col: 'Subject'       # The file has no column holding subject_IDs. The cleaner assumes there are no duplicate subjects and assigns IDs.
+    use_column_names: false     # raters taken by position; column labels not matched to the semantics
+    subject_id_col: 'Subject'   # the column holding subject ids
 case_sensitive: false
 strip_whitespace: true
 missing_values: ['o']         # v1's marker for "not rated"

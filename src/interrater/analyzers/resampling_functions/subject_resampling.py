@@ -59,7 +59,9 @@ def subject_bootstrap(
     ...     print(f"Draw {i}: shape {resample.shape}")
     Draw 0: shape (3, 2)
     Draw 1: shape (3, 2)
-    ...
+    Draw 2: shape (3, 2)
+    Draw 3: shape (3, 2)
+    Draw 4: shape (3, 2)
     """
     # Type checks
     if not isinstance(category_index, np.ndarray):
@@ -121,10 +123,6 @@ def subject_jackknife(category_index: np.ndarray) -> Iterator[np.ndarray]:
         Each iteration yields data with one subject removed. Shape is
         (n_subjects - 1, n_raters), dtype int8.
 
-    Examples
-    --------
-    >>> import numpy as np
-    >>> ratings = np.array([[0, 1], [1, 0], [1, 1]], dtype=np.int8)
     Raises
     ------
     TypeError
@@ -132,6 +130,10 @@ def subject_jackknife(category_index: np.ndarray) -> Iterator[np.ndarray]:
     ValueError
         If category_index is not 2D or has fewer than 2 subjects.
 
+    Examples
+    --------
+    >>> import numpy as np
+    >>> ratings = np.array([[0, 1], [1, 0], [1, 1]], dtype=np.int8)
     >>> for i, jackknife_draw in enumerate(subject_jackknife(ratings)):
     ...     print(f"Omit subject {i}: shape {jackknife_draw.shape}")
     Omit subject 0: shape (2, 2)

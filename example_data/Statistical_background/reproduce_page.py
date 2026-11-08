@@ -8,12 +8,10 @@ them with the values printed on the page (held in ``PAGE`` below, so a
 change to the page is a change here too).
 
 - **Built tables** must match the page at the precision it prints.
-- **The simulated biopsy panel** must land within error: the page's kappa
-  inside interrater's 95% interval, and P_o, P_e and unanimity within
-  ``PANEL_TOLERANCE`` of the page's expected values.
-
-``guide/statistical_background_numbers.py`` checks the same page with the
-standard library alone, so the two are independent.
+- **The simulated biopsy panel** is seeded, so its observed columns must
+  match too. Its theoretical columns are computed from the panel's design in
+  ``generate_tables.py``, and each theoretical kappa must lie inside the
+  observed 95% interval.
 
 Usage::
 
@@ -22,6 +20,7 @@ Usage::
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -47,12 +46,8 @@ RANDOM_STATE = 42
 # Only the points are checked on built tables, so a short bootstrap will do;
 # 250 is the smallest count the results call enough.
 N_RESAMPLES_POINT = 250
-# The panel's check uses the interval, so it gets a full bootstrap.
+# The panel's intervals are printed on the page, so they get a full bootstrap.
 N_RESAMPLES_PANEL = 1000
-# How far a simulated proportion may sit from its expected value. With 1,000
-# biopsies the standard error of P_o or unanimity is about 0.01 (P_e a
-# little more), so 0.02 is about two standard errors.
-PANEL_TOLERANCE = 0.02
 
 PANEL_SIZES = (2, 4, 6, 16, 32)
 
@@ -77,12 +72,21 @@ PAGE = {
               2:  (".9005", ".1814", ".8010", ".8867")},
     "sweep_call_rate_at_2": "0.065",
     "biopsies_2raters": {"p_o": "0.820", "p_e": "0.7048", "kappa": "0.390"},
-    # raters: (P_o, P_e, kappa_F, all agree)
-    "panel": {2:  ("0.820", "0.7048", "0.390", "0.820"),
-              4:  ("0.820", "0.7048", "0.390", "0.656"),
-              6:  ("0.820", "0.7048", "0.390", "0.531"),
-              16: ("0.820", "0.7048", "0.390", "0.185"),
-              32: ("0.820", "0.7048", "0.390", "0.034")},
+    # raters: theoretical (P_o, P_e, kappa_F, all agree %),
+    #         observed (kappa_F, lower, upper, all agree %)
+    "panel_theory": {2:  ("0.820", "0.7048", "0.390", "82.0"),
+                     4:  ("0.820", "0.7048", "0.390", "65.6"),
+                     6:  ("0.820", "0.7048", "0.390", "53.1"),
+                     16: ("0.820", "0.7048", "0.390", "18.5"),
+                     32: ("0.820", "0.7048", "0.390", "3.4")},
+    "panel_observed": {2:  ("0.375", "0.299", "0.444", "82.6"),
+                       4:  ("0.376", "0.315", "0.427", "65.6"),
+                       6:  ("0.387", "0.337", "0.435", "54.6"),
+                       16: ("0.382", "0.336", "0.422", "19.1"),
+                       32: ("0.383", "0.336", "0.422", "3.8")},
+    # the sentence after the table: observed ranges over the five panels
+    "panel_ranges": {"kappa": ("0.375", "0.387"), "p_o": ("0.821", "0.826"),
+                     "p_e": ("0.714", "0.722")},
     "abstracts": {"rated_once": 500, "rated_twice": 400, "rated_three": 100,
                   "A_B": 400, "A_C": 200, "B_C": 100},
 }
@@ -110,17 +114,11 @@ class PageChecks:
         ok = abs(got - float(page_value)) <= 0.5 * 10 ** -decimals + 1e-12
         self._record(label, ok, f"{got:.{decimals + 2}f}", f"page {page_value}")
 
-    def check_within(self, label: str, got: float, page_value: str,
-                     tolerance: float) -> None:
-        """``got`` is within ``tolerance`` of ``page_value``."""
-        ok = abs(got - float(page_value)) <= tolerance
-        self._record(label, ok, f"{got:.4f}", f"page {page_value} +/- {tolerance}")
-
-    def check_inside(self, label: str, page_value: str,
+    def check_inside(self, label: str, value: float,
                      lower: float, upper: float) -> None:
-        """``page_value`` lies inside [lower, upper]."""
-        ok = lower <= float(page_value) <= upper
-        self._record(label, ok, f"[{lower:.3f}, {upper:.3f}]", f"page {page_value}")
+        """``value`` lies inside [lower, upper]."""
+        ok = lower <= value <= upper
+        self._record(label, ok, f"{value:.4f}", f"in [{lower:.3f}, {upper:.3f}]")
 
     def check_equal(self, label: str, got: object, want: object) -> None:
         """``got == want`` exactly."""
@@ -264,10 +262,41 @@ def check_biopsies(checks: PageChecks) -> None:
     checks.check_rounded("biopsies, 2 raters: Scott's pi", scott.point, page["kappa"])
 
 
+def load_generator():
+    """``generate_tables.py`` from this folder, for the panel's design."""
+    spec = importlib.util.spec_from_file_location("generate_tables",
+                                                  HERE / "generate_tables.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def compute_panel_theory(k: int) -> tuple[float, float, float, float]:
+    """
+    Expected P_o, P_e, Fleiss' kappa and unanimity for k readers who are
+    independent given the truth, from the panel's design.
+    """
+    design = load_generator()
+    p = design.PANEL_PREVALENCE
+    sens, spec = design.PANEL_SENSITIVITY, design.PANEL_SPECIFICITY
+    positive_rate = p * sens + (1 - p) * (1 - spec)
+    p_o = p * (sens ** 2 + (1 - sens) ** 2) + (1 - p) * (spec ** 2 + (1 - spec) ** 2)
+    p_e = positive_rate ** 2 + (1 - positive_rate) ** 2
+    unanimity = p * (sens ** k + (1 - sens) ** k) + (1 - p) * (spec ** k + (1 - spec) ** k)
+    return p_o, p_e, (p_o - p_e) / (1 - p_e), unanimity
+
+
 def check_panel(checks: PageChecks) -> None:
     full = RatingsSemantics.build_from_yaml(HERE / "biopsy_panel_semantics.yaml")
+    observed = {"kappa": [], "p_o": [], "p_e": []}
     for k in PANEL_SIZES:
-        p_o, p_e, kappa, unanimity = PAGE["panel"][k]
+        theory = compute_panel_theory(k)
+        for name, got, page_value in zip(("P_o", "P_e", "kappa_F", "all agree %"),
+                                         theory, PAGE["panel_theory"][k]):
+            scale = 100 if name.endswith("%") else 1
+            checks.check_rounded(f"panel k={k}: theoretical {name}",
+                                 scale * got, page_value)
+
         readers = list(full.raters[:k])
         semantics = RatingsSemantics(raters=readers, categories=full.categories,
                                      n_subjects=full.n_subjects)
@@ -277,20 +306,27 @@ def check_panel(checks: PageChecks) -> None:
         interval = fleiss.confidence_interval
         counts = ratings.to_nij_matrix().matrix
         agree_all = float(np.mean(counts.max(axis=1) == k))
-        checks.check_within(f"panel k={k}: P_o", fleiss.parts.observed, p_o,
-                            PANEL_TOLERANCE)
-        checks.check_within(f"panel k={k}: P_e", fleiss.parts.chance, p_e,
-                            PANEL_TOLERANCE)
-        checks.check_inside(f"panel k={k}: page kappa in 95% CI", kappa,
-                            interval.lower, interval.upper)
-        checks.check_within(f"panel k={k}: all agree", agree_all, unanimity,
-                            PANEL_TOLERANCE)
+        kappa, lower, upper, unanimity = PAGE["panel_observed"][k]
+        checks.check_rounded(f"panel k={k}: observed kappa_F", fleiss.point, kappa)
+        checks.check_rounded(f"panel k={k}: observed CI lower", interval.lower, lower)
+        checks.check_rounded(f"panel k={k}: observed CI upper", interval.upper, upper)
+        checks.check_rounded(f"panel k={k}: observed all agree %", 100 * agree_all,
+                             unanimity)
+        checks.check_inside(f"panel k={k}: theoretical kappa in observed CI",
+                            theory[2], interval.lower, interval.upper)
+        observed["kappa"].append(fleiss.point)
+        observed["p_o"].append(fleiss.parts.observed)
+        observed["p_e"].append(fleiss.parts.chance)
         if k == 2:
             # The page: Fleiss' kappa is Scott's pi for two raters
             scott = estimate(ScottsAnalyzer, ScottsConfig, ratings)
             checks.check_equal("panel k=2: Fleiss equals Scott's pi",
                                bool(np.isclose(fleiss.point, scott.point,
                                                rtol=0, atol=1e-12)), True)
+
+    for name, (low, high) in PAGE["panel_ranges"].items():
+        checks.check_rounded(f"panel: lowest observed {name}", min(observed[name]), low)
+        checks.check_rounded(f"panel: highest observed {name}", max(observed[name]), high)
 
 
 def check_abstracts(checks: PageChecks) -> None:

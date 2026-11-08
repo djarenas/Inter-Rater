@@ -1,50 +1,44 @@
 """Confidence interval computation methods for bootstrap distributions.
 
-Three facts shape everything here.
+Both methods return a :class:`BootstrapCIResult`, which records the method
+asked for, the method that ran, and how many draws failed.
 
-**A resample can fail.** An agreement coefficient of the form
-``(p_o - p_e) / (1 - p_e)`` is undefined when chance agreement reaches 1,
-which happens whenever a resample contains only one category. The agreement
-functions return NaN there, so a bootstrap distribution may arrive with gaps
-in it. Both methods below compute their bounds from the usable draws and
-report how many failed. Neither thresholds on that count: how much the
-failures matter depends on whether failing correlates with the coefficient's
-value, which no count can tell you. Interpreting it belongs upstairs.
+**Failed draws.** A coefficient of the form ``(p_o - p_e) / (1 - p_e)`` is
+undefined when a resample has a single category (p_e = 1). The agreement
+functions return NaN there. Both methods take their bounds from the usable
+draws and count the rest. Neither thresholds on that count: whether failures
+matter depends on whether failing correlates with the coefficient's value.
 
-**Acceleration needs the data, not just the resamples.** The percentile
-method assumes a coefficient's standard error is the same whatever the
-coefficient's value happens to be. Often it is not: agreement near 1.0 varies
-less between samples than agreement near 0.5, because there is less room to
-move. BCa's ``a`` corrects for that, and it measures how fast the standard
-error changes as the coefficient changes -- which cannot be read off a
-bootstrap distribution, since that describes the spread at the single value
-the data actually produced. Measuring it means disturbing the data and
-watching the coefficient move: drop one subject, recompute, repeat.
+**Acceleration needs the data.** BCa's ``a`` measures how the coefficient's
+standard error changes with its value (agreement near 1 varies less than
+agreement near 0.5). A bootstrap distribution describes the spread at one
+value only, so ``a`` comes from the leave-one-subject-out estimates instead
+(Efron & Tibshirani 1986, eq. 8.5). These functions never see the ratings, so
+:func:`bca_ci` takes those estimates as a required argument and raises
+without them. (Versions before 2.0.1 took the skewness of the draws, which is
+not the acceleration.)
 
-Nothing here can do that. These functions receive an array of numbers and
-never see the ratings or the estimator. So :func:`bca_ci` takes the
-leave-one-out estimates as a **required** argument: asking for BCa without
-the means to compute it is a mistake in the calling analyzer rather than a
-property of the data, and it raises.
+**When BCa steps down:**
 
-**BCa can decline.** When either correction cannot be computed, it falls all
-the way back to the percentile interval -- ``z0`` discarded along with ``a``,
-so a reported method of 'percentile' is literally what was computed and not a
-relabelled half-corrected interval. When no draw is usable at all, nothing
-runs and the method is ``None``.
+- ``a`` undefined (fewer than two jackknife values, or all identical):
+  percentile.
+- ``1 - a(z0 + z)`` not positive at either end, which would send a bound
+  to infinity or to the wrong side: percentile.
+- no draw usable: nothing runs, and the method is None.
 
-Every one of those outcomes is recorded on the :class:`BootstrapCIResult`:
-which method was asked for, which one ran, and how many draws failed. A
-caller never has to infer from the numbers what happened to produce them.
+A fallback to percentile drops ``z0`` as well as ``a``, so ``method_used``
+'percentile' means plain quantiles. Each method in Efron & Tibshirani's
+Table 6 is correct under weaker assumptions than the one above it, so the
+fallback costs accuracy, not validity. ``method_used`` of None is an absence:
+there are no bounds.
 
 References
 ----------
 Efron, B., & Tibshirani, R. (1986). "Bootstrap Methods for Standard Errors,
 Confidence Intervals, and Other Measures of Statistical Accuracy."
-*Statistical Science*, 1(1), 54-77. Table 6 (p. 68) defines the percentile
-and BCa intervals as a nested sequence, each correct under weaker assumptions
-than the one before it; eq. (8.5) (p. 71) gives the acceleration; section 9
-(p. 72) gives the resample counts each method needs.
+*Statistical Science*, 1(1), 54-77. Table 6 (p. 68) for the nested sequence
+of intervals; eq. (8.5) (p. 71) for the acceleration; section 9 (p. 72) for
+the resample counts each method needs.
 
 Efron, B. (1987). "Better Bootstrap Confidence Intervals." *Journal of the
 American Statistical Association*, 82(397), 171-185.
@@ -129,25 +123,17 @@ def _acceleration(jackknife_estimates: np.ndarray) -> float | None:
 
     Notes
     -----
-    The identical-values case is gated on the spread of the values, not on
-    the deviations from their mean, because the mean of identical floats is
-    not reliably one of them: summing twenty copies of 0.6 and dividing by
-    twenty lands an ulp away, leaving deviations around 1e-17 and a sum of
-    squares around 1e-31 rather than the exact zero one would expect. That
-    is not a harmless rounding error here. ``a`` is a *standardised*
-    skewness, so dividing noise by noise of the same order returns a value
-    in the ordinary range for a real acceleration -- a coefficient that no
-    single subject moves would get a fabricated correction, and the interval
-    would report ``method_used='bca'`` as though it meant something. Whether
-    it happened at all depended on the bit pattern of the value: 0.5 and
-    0.75 are exact in binary and came out clean, 0.6 did not.
+    Identical values are detected by their range, not by their deviations
+    from the mean. The mean of identical floats is not always one of them:
+    twenty copies of 0.6 average to a value one ulp away, leaving deviations
+    near 1e-17. Because ``a`` is a standardised skewness, that noise divided
+    by noise of the same order gives an ordinary-looking acceleration, and
+    BCa would apply a correction to a coefficient no subject moves (0.5 and
+    0.75 are exact in binary and did not show it; 0.6 did).
 
-    Identical values have a range of exactly zero whatever the value is,
-    since the noise enters through the mean rather than the values, so the
-    range is what this tests. The tolerance is a few ulps of the values'
-    own magnitude. Real leave-one-out spread is on the order of the
-    coefficient divided by the number of subjects -- around 1e-3 against a
-    floor near 1e-15 -- so nothing legitimate comes close to the gate.
+    The range of identical values is exactly zero. The tolerance is a few
+    ulps of the values' magnitude; real leave-one-out spread is around 1e-3
+    (the coefficient over the number of subjects), far above it.
     """
     values, _ = _usable(np.asarray(jackknife_estimates, dtype=np.float64))
     if values.size < 2:
@@ -250,10 +236,9 @@ def bca_ci(
     itself changes, and lets the interval lean when it does; it is read from
     how much each individual subject moves the estimate.
 
-    When either correction cannot be computed I fall all the way back to the
-    percentile interval -- ``z0`` discarded, not merely ``a`` -- so that
-    ``method_used`` of 'percentile' is literally true rather than a
-    convenient relabelling of a half-corrected interval.
+    When either correction cannot be computed I fall back to the percentile
+    interval, dropping ``z0`` as well as ``a``, so ``method_used`` of
+    'percentile' means plain quantiles.
 
     Parameters
     ----------
@@ -344,16 +329,20 @@ def bca_ci(
     z_lower = float(norm.ppf(alpha / 2))
     z_upper = float(norm.ppf(1 - alpha / 2))
 
-    z_lower_adj = z0 + (z0 + z_lower) / (1 - acceleration * (z0 + z_lower))
-    z_upper_adj = z0 + (z0 + z_upper) / (1 - acceleration * (z0 + z_upper))
-
-    # When 1 - a*(z0 + z) crosses zero the adjusted quantile runs off to
-    # infinity: the data are fine, the correction is not. Table 6 makes
-    # stepping down the right answer -- each method there is correct under
-    # weaker assumptions than the one below it, so the fallback costs
-    # accuracy, not validity.
-    if not (np.isfinite(z_lower_adj) and np.isfinite(z_upper_adj)):
+    # The correction needs 1 - a*(z0 + z) > 0 at both ends. At zero the
+    # adjusted quantile runs off to infinity; below zero it lands on the wrong
+    # side and the bounds come out inverted (possible when the point lies
+    # outside nearly all the draws, so z0 sits at its clip, and |a| is large).
+    # The data are fine, the correction is not. Table 6 makes stepping down
+    # the right answer: each method there is correct under weaker assumptions
+    # than the one below it, so the fallback costs accuracy, not validity.
+    denom_lower = 1 - acceleration * (z0 + z_lower)
+    denom_upper = 1 - acceleration * (z0 + z_upper)
+    if not (denom_lower > 0 and denom_upper > 0):
         return _fall_back_to_percentile()
+
+    z_lower_adj = z0 + (z0 + z_lower) / denom_lower
+    z_upper_adj = z0 + (z0 + z_upper) / denom_upper
 
     p_lower = float(np.clip(norm.cdf(z_lower_adj), 0.0, 1.0))
     p_upper = float(np.clip(norm.cdf(z_upper_adj), 0.0, 1.0))

@@ -1,14 +1,29 @@
 # Analyzer Configurations
 
-Every analyzer is configured via a frozen dataclass that declares all analytical decisions upfront: bootstrap resamples, confidence level, CI method, random seed, hypothesis testing, injection pipeline, and optional convergence diagnostics. Configurations load from YAML via `build_from_yaml` or from plain dicts via `build_from_dict`, and are fully auditable via `summary()`.
+Every analyzer is configured by a frozen dataclass that declares its
+decisions up front. One of their utilities is that they can be built from
+a YAML file that can be easily archived, modified, and/or shown to collaborators (or your future self).
 
-## Philosophy
+The decisions are such as: number of bootstrap resamples, confidence level, CI method, random
+seed, hypothesis testing, injection, and convergence diagnostics.
 
-**Configuration enforces constraints at the boundary.** Each coefficient has mathematical requirements -- balance, weighting support, closed-form null variance. Rather than letting the analyzer discover these at runtime, the config hierarchy encodes them as type constraints that reject invalid combinations at instantiation time with clear error messages.
+Configurations were designed to load from YAML (`build_from_yaml`), but the plain dicts
+(`build_from_dict`) option is also availble. `summary()` reports them.
 
-**Validation flows upward.** Leaf class → intermediate → parent → grandparent. Each class calls `super().__post_init__()` to inherit parent validation, wrapping it in `try/except` to prefix its own class name on errors.
+## Principles taking advantage of the OOP
 
-**Version for audit.** Every config's `summary()` includes `_package_version` so every analysis knows which version of interrater created it.
+**Refuse nonsensical choices at construction.** A setting a coefficient cannot use (e.g.
+`parametric_null` for a coefficient with no null variance) is refused when
+the config is built, with a message saying why. Requirements that depend on
+the data, such as weights from the semantics, are checked by the analyzer. More obvious mistakes
+such as strings in numbers, or negative numbers of bootstraps, are also refused this early
+with easily traceable errors. The object is not built if mistakes are found.
+
+**Validation flows upward in the inheritance** Leaf, then intermediate, then base: each class
+calls `super().__post_init__()` and wraps it so its own name prefixes any
+error.
+
+**Versioned.** Every `summary()` includes `_package_version`.
 
 ## Hierarchy
 
@@ -32,7 +47,7 @@ AnalyzerConfig (base)
   │   └── WeightableIndividualConfig
   │       └── CohenKappaConfig
   │
-  └── PermutationConfig (holds nested AnalyzerConfig)
+  └── PermutationConfig (holds a nested AnalyzerConfig)
       ├── PairwisePermutationConfig
       └── SubsetPermutationConfig
 
@@ -44,152 +59,121 @@ Supporting types:
 Weights are not configured here. They are declared in the semantics of the
 ratings (categories of kind `ordered` with a `weighting`, or kind `weighted`
 with a matrix), and the analyzer reads them from there. `weights_type` and
-`custom_weights_path` were removed in 2.1.0; a YAML config that still has them
-is refused with a message saying so.
+`custom_weights_path` were removed in 2.1.0; a config that still has them is
+refused with a message saying so.
 
-## Base: AnalyzerConfig
+## AnalyzerConfig
 
-All analyzers share these fields:
+Fields every analyzer shares:
 
-- `n_resamples` (int, default 1000) -- number of bootstrap draws
-- `alpha` (float, default 0.05) -- significance level; 0.05 gives 95% CI via [0.025, 0.975]
-- `random_state` (int | None, default 42) -- random seed for reproducibility; None for unseeded
-- `ci_method` (str, default "percentile") -- "percentile", "bca", or "parametric_null"
-- `convergence_test` (ConvergenceTest | None, default None) -- optional diagnostics verifying n_resamples is large enough for stable CI bounds
-- `hypothesis_test_config` (HypothesisTestConfig | None, default None) -- optional hypothesis testing against H₀: coefficient = 0
-- `injection` (tuple[InjectorConfig, ...] | None, default None) -- optional pipeline of injection steps applied to ratings before analysis; accepts a single config, list, or tuple (normalized to tuple in `__post_init__`)
-
-Validates all fields in `__post_init__`. Provides `build_from_dict`, `build_from_yaml`, and `summary`.
+- `n_resamples` (int, default 1000): bootstrap draws
+- `alpha` (float, default 0.05): 0.05 gives a 95% interval
+- `random_state` (int | None, default 42): seed; None for unseeded
+- `ci_method` (str, default "percentile"): "percentile", "bca", or "parametric_null"
+- `convergence_test` (ConvergenceTest | None, default None): not implemented yet
+- `hypothesis_test_config` (HypothesisTestConfig | None, default None): test against H₀: coefficient = 0
+- `injection` (tuple[InjectorConfig, ...] | None, default None): injection steps applied to the ratings before analysis; a single config or a list is normalised to a tuple
 
 ## GroupCoefficientConfig
 
-Base for coefficients that read counts matrices (discard rater identity). Adds:
+Coefficients that read a counts matrix. Adds:
 
-- `balanced_data_only` (bool, default False) -- whether to enforce constant raters per subject
-- `rater_jackknife` (bool, default False) -- leave-one-rater-out diagnostics; not supported in this version yet, so `true` is refused
+- `balanced_data_only` (bool, default False): require the same number of raters on every subject
+- `rater_jackknife` (bool, default False): leave-one-rater-out; not supported yet, so `true` is refused
 
-Both are validated as strict `bool` (rejects `int` to catch `balanced_data_only=1`).
+Both must be a real `bool` (`balanced_data_only=1` is refused).
 
-### NoWeightGroupConfig
-
-For coefficients whose chance terms are defined independently of how raters use categories. Weighting would create an inconsistency: weighted observed agreement but unweighted chance term.
-
-Adds no fields. The analyzers for these coefficients refuse ratings whose semantics declares ordered or weighted categories.
-
-Leaf configs: **GwetAC1Config**, **ScottsConfig**.
-
-### WeightableGroupConfig
-
-For coefficients that support distance-based weighting. Adds no fields: the weights come from the semantics of the ratings, and these are the coefficients whose analyzers accept them.
-
-Leaf configs: **FleissKappaConfig**, **BrennanPredigerConfig**, **KrippendorffAlphaConfig**.
+- **NoWeightGroupConfig** (Gwet's AC1, Scott's pi): no weighted form. Adds
+  no fields; the analyzers refuse ordered or weighted semantics.
+- **WeightableGroupConfig** (Fleiss, Brennan-Prediger, Krippendorff): adds
+  no fields; these analyzers use the semantics' weights.
 
 ## IndividualMarginalConfig
 
-Base for coefficients that keep rater identity (pairwise or per-rater marginals). Adds:
+Coefficients that keep rater identity and read an `EstimatorInput`. Adds
+`rater_jackknife` (default False; `true` is refused).
 
-- `rater_jackknife` (bool, default False) -- not supported in this version yet, so `true` is refused
+- **NoWeightIndividualConfig** (Conger, Light): no weighted form.
+- **WeightableIndividualConfig** (Cohen): uses the semantics' weights.
 
-These coefficients read EstimatorInput (not NijMatrix) and maintain which rater said what.
+## Leaf configs: parametric null and balance
 
-### NoWeightIndividualConfig
+Only coefficients with a published null variance accept `parametric_null`,
+as `ci_method` or as the hypothesis test's method. The others refuse it when
+the config is built.
 
-For individual-marginal coefficients with no weighted forms. Same validation as NoWeightGroupConfig.
+| Config | Weights | parametric_null | balanced_data_only |
+|---|---|---|---|
+| FleissKappaConfig | yes | yes (Fleiss, Nee & Landis 1979, Eq. 12) | default **True** |
+| ScottsConfig | no | yes (= Fleiss at n = 2) | default False |
+| GwetAC1Config | no | no | default False |
+| BrennanPredigerConfig | yes | no | default False |
+| KrippendorffAlphaConfig | yes | no | default False |
+| CohenKappaConfig | yes | yes (Fleiss, Cohen & Everitt 1969) | **True**; `false` refused |
+| CongerKappaConfig | no | no | **True**; `false` refused |
+| LightKappaConfig | no | no | **True**; `false` refused |
 
-Leaf configs: **CongerKappaConfig**, **LightKappaConfig**.
+Cohen is always computed on the subjects both raters rated, and Conger and
+Light need complete data, so `balanced_data_only: false` does not apply to
+them and is refused with a message saying why.
 
-### WeightableIndividualConfig
+## Permutation configs
 
-For individual-marginal coefficients that support weighting. Same fields and validation as WeightableGroupConfig; `rater_jackknife: true` is refused, as everywhere.
+`PermutationConfig` wraps a nested coefficient config to compute that
+coefficient over rater combinations. Fields:
 
-Leaf configs: **CohenKappaConfig**.
+- `coefficient_to_compute` (str): e.g. "cohen_kappa", "fleiss_kappa"
+- `config_of_coefficient` (AnalyzerConfig): the nested config
+- `subset_k` (int | list[int] | str | None, default None): subset size(s), for subset permutation
+- `bootstrap_mean_config` (PermutationBootstrapMeanConfig | None, default None): bootstrap of the mean
+- `balanced_data_only` (bool, default False): `true` refuses an unbalanced panel before anything runs
+- `keep_draws` (bool, default True): keep each pair's or subset's draws; `false` discards them after use, with the same values and intervals
+- `max_evaluations` (int, default `GUARD_MAX_EVALUATIONS`, 2,000,000): the most coefficient evaluations a run may make; a larger run is refused before it starts
 
-## Leaf Configs: Parametric Null and Balance
+`ci_method: parametric_null` in `config_of_coefficient` is refused:
+combinations sharing a rater are correlated, so no closed-form variance
+describes them.
 
-Not every coefficient has a closed-form null variance. Only those with a derivable null distribution support `ci_method="parametric_null"` and `hypothesis_test_config.method="parametric_null"`. All others reject these at instantiation.
+- **PairwisePermutationConfig**: `subset_k` must be None. The coefficient
+  must be one of `PAIRWISE_PERMUTATION_COEFFICIENTS`, with a matching config.
+- **SubsetPermutationConfig**: `subset_k` is required: an int >= 2, a
+  non-empty list of distinct ints >= 2, or "all". The coefficient must be
+  one of `SUBSET_PERMUTATION_COEFFICIENTS` (Scott's pi is not), with a
+  matching config.
 
-| Coefficient | Parent | Weights | parametric_null | balanced_data_only default |
-|---|---|---|---|---|
-| FleissKappaConfig | WeightableGroup | identity, linear, quadratic, custom | yes (Fleiss 1979, Eq. 12) | **True** |
-| ScottsConfig | NoWeightGroup | identity only | yes (= Fleiss at n=2) | False |
-| GwetAC1Config | NoWeightGroup | identity only | no | False |
-| BrennanPredigerConfig | WeightableGroup | identity, linear, quadratic, custom | no | False |
-| KrippendorffAlphaConfig | WeightableGroup | identity, linear, quadratic, custom | no | False |
-| CohenKappaConfig | WeightableIndividual | identity, linear, quadratic, custom | yes (Fleiss, Cohen & Everitt 1969) | **True** |
-| CongerKappaConfig | NoWeightIndividual | identity only | no | **True** |
-| LightKappaConfig | NoWeightIndividual | identity only | no | False |
+Both check that the independent mean has at least 2 draws per combination
+and `ci_method: percentile`.
 
-**Auto-correction with warning:** CohenKappaConfig and CongerKappaConfig both require balanced data. If `balanced_data_only=False` is passed, they auto-correct to `True` with a `warnings.warn()` explaining why.
-
-## Permutation Configs
-
-PermutationConfig is a separate hierarchy (not a child of GroupCoefficientConfig or IndividualMarginalConfig). It wraps a nested AnalyzerConfig to compute a coefficient across multiple rater combinations.
-
-### PermutationConfig (base)
-
-- `coefficient_to_compute` (str) -- the coefficient name ("cohen_kappa", "fleiss_kappa", etc.)
-- `config_of_coefficient` (AnalyzerConfig) -- the nested config for that coefficient
-- `subset_k` (int | list[int] | str | None, default None) -- subset size(s) for subset permutation
-- `bootstrap_mean_config` (PermutationBootstrapMeanConfig | None, default None) -- mean-level bootstrap configuration
-- `keep_draws` (bool, default True) -- keep each pair's or subset's bootstrap draws in the result; False tosses them after use, so memory does not grow with the number of units. Values and intervals are the same either way.
-- `max_evaluations` (int, default `GUARD_MAX_EVALUATIONS` in `contracts`, 2,000,000) -- the most times the run may compute the coefficient; a larger run is refused before it starts, with the count. Raise it to run larger analyses on purpose.
-
-Refuses `ci_method='parametric_null'` in `config_of_coefficient`: combinations sharing a rater are correlated, so no closed-form variance describes them.
-
-### PairwisePermutationConfig
-
-For all C(n, 2) pairwise analyses. Validates:
-- `subset_k` must be None (pairwise is always k=2)
-- `coefficient_to_compute` must be in PAIRWISE_PERMUTATION_COEFFICIENTS
-- `config_of_coefficient` must be the correct type for the coefficient
-- Cross-validates: the "independent" mean needs at least 2 per-pair draws (n_resamples >= 2)
-
-### SubsetPermutationConfig
-
-For all C(n, k) subset analyses. Validates:
-- `subset_k` is required (not None)
-- Accepts int (>= 2), list[int] (non-empty, all >= 2, no duplicates), or "all"
-- `coefficient_to_compute` must be in SUBSET_PERMUTATION_COEFFICIENTS
-- `config_of_coefficient` must match the coefficient
-- Cross-validates bootstrap method against n_resamples
-
-## Supporting Types
+## Supporting types
 
 ### HypothesisTestConfig
 
-Configuration for hypothesis testing against H₀: coefficient = 0.
+- `method` (str, default "permutation"): "permutation" or "parametric_null"
+- `scheme` (str, default "within_rater_shuffle"): "within_rater_shuffle" or "pool_and_redistribute". Both keep the missing-data structure: answers move only between rated cells. `"column_shuffle"` (renamed) and `"within_subject"` (cannot test coefficient = 0) are refused with a message saying so
+- `alternative` (str, default "two-sided"): "two-sided", "greater" or "less". Two-sided by default because below-chance agreement (a scale read backwards, two labels swapped) is a real finding a one-sided test misses
+- `n_permutations` (int, default 5000)
+- `alpha` (float, default 0.05)
+- `random_state` (int | None, default 42)
 
-- `method` (str, default "permutation") -- "permutation" or "parametric_null"
-- `scheme` (str, default "within_rater_shuffle") -- "within_rater_shuffle" or "pool_and_redistribute". Both keep the missing-data structure: answers move only between cells that were rated. `"column_shuffle"` (renamed) and `"within_subject"` (cannot test coefficient = 0) were removed in 2.1.0 and are refused with a message saying so
-- `alternative` (str, default "two-sided") -- "two-sided", "greater" or "less", for both methods. Two-sided by default because below-chance agreement (raters who read a scale backwards, or swap two labels) is a real finding a one-sided test cannot see
-- `n_permutations` (int, default 5000) -- number of permutation draws
-- `alpha` (float, default 0.05) -- significance level
-- `random_state` (int | None, default 42) -- random seed
-
-All numeric fields have bool-first type guards (bool subclasses int in Python, so `True` must be caught before `isinstance(x, int)`).
+Numeric fields check for `bool` first, since `True` is an `int` in Python.
 
 ### PermutationBootstrapMeanConfig
 
-Chooses how the mean coefficient across combinations is bootstrapped.
+- `method` (str): "correlated" (resample subjects, recompute every
+  combination) or "independent" (one value from each combination's draws)
 
-- `method` (str) -- "correlated" (resample subjects, recompute all combinations) or "independent" (assemble mean from independently-drawn per-combination values)
+Its only setting. The draw count, interval method, level and seed are those
+in `config_of_coefficient`. Any other key is refused.
 
-That is its only setting. The draw count, interval method, level and seed are
-the ones in `config_of_coefficient`, so one run has one of each. The
-independent mean needs `ci_method: percentile` there: BCa's acceleration
-comes from a jackknife over the units the bootstrap resamples, and no
-jackknife matches the independent mean. Any key other than `method` is
-refused.
-
-## Using Configurations
-
-### From YAML
+## Using configurations
 
 ```python
 config = FleissKappaConfig.build_from_yaml("fleiss_config.yaml")
+config = FleissKappaConfig.build_from_dict({"n_resamples": 2000, "alpha": 0.05})
+config = FleissKappaConfig(n_resamples=2000, alpha=0.05)
 ```
 
-YAML structure:
+YAML:
 
 ```yaml
 n_resamples: 2000
@@ -204,61 +188,38 @@ hypothesis_test:                     # alias for hypothesis_test_config
   n_permutations: 5000
 ```
 
-Unknown keys are rejected with a clear error listing valid keys (aliases included).
+`build_from_dict` resolves key aliases and turns nested dicts into config
+objects. Unknown keys are refused, with the valid keys listed.
 
-### From dict
-
-```python
-config = FleissKappaConfig.build_from_dict({
-    "n_resamples": 2000,
-    "alpha": 0.05,
-})
-```
-
-`build_from_dict` normalizes YAML key aliases and hydrates nested objects (sub-dicts become typed config objects).
-
-### Programmatically
+`summary()`:
 
 ```python
-config = FleissKappaConfig(
-    n_resamples=2000,
-    alpha=0.05,
-)
+FleissKappaConfig().summary()
+# {'n_resamples': 1000, 'alpha': 0.05, 'random_state': 42,
+#  'ci_method': 'percentile', '_package_version': '2.1.0',
+#  'balanced_data_only': True, 'rater_jackknife': False}
 ```
 
-### Audit trail
+## Design notes
 
-Every config's `summary()` returns a dict with all fields plus `_package_version`:
+- **Frozen dataclasses.** A config cannot change after validation.
+  `__post_init__` uses `object.__setattr__` only to normalise `injection` to
+  a tuple.
+- **`_ERROR_PREFIX`** in every module (e.g. `"[CohenKappaConfig] Error"`)
+  starts every error message.
+- **TypeError vs ValueError.** Wrong type raises TypeError; a wrong value of
+  the right type raises ValueError.
+- **Warnings.** The only warning is for `parametric_null`, raised with
+  `warnings.warn(..., UserWarning, stacklevel=2)` so it can be caught or
+  silenced.
 
-```python
-config.summary()
-# {
-#     "n_resamples": 2000,
-#     "alpha": 0.05,
-#     "random_state": 42,
-#     "ci_method": "percentile",
-#     "balanced_data_only": True,
-#     "rater_jackknife": False,
-#     "_package_version": "2.1.3",
-# }
-```
+## Krippendorff's interval alpha
 
-## Design Notes
+Krippendorff's papers name versions of alpha by scale: nominal, interval,
+ratio, ordinal. Here they are chosen through the semantics instead. Interval
+alpha is alpha with `kind: ordered, weighting: quadratic` (for equally
+spaced categories); nominal alpha is alpha with `kind: unordered`. Ratio and
+ordinal distances can be given as a `weighted` matrix.
 
-**Frozen dataclasses.** All configs are `@dataclass(frozen=True)`. Immutability guarantees that a config cannot be modified after validation. When auto-correction is needed (e.g., forcing `balanced_data_only=True`), the class uses `object.__setattr__` to bypass the frozen guard in `__post_init__`.
-
-**`_ERROR_PREFIX` at module level.** Every config module defines a module-level `_ERROR_PREFIX` string (e.g., `"[CohenKappaConfig] Error"`) used in all error messages for grep-friendly traceability.
-
-**TypeError vs ValueError separation.** Wrong type → TypeError. Wrong value of the right type → ValueError. Bool-first guards catch `True`/`False` before `isinstance(x, int)` since bool subclasses int.
-
-**`warnings.warn()` not `print()`.** Library code uses `warnings.warn(..., UserWarning, stacklevel=2)` for auto-corrections so users can catch or silence them.
-
-## Future: Extended Weight Types
-
-Several coefficients (Gwet's AC2, Krippendorff's alpha) support ordinal, interval, and ratio weighting schemes beyond what the semantics can declare today (unordered, ordered linear or quadratic, or a weighted matrix):
-
-- Ordinal weights (Krippendorff-style distance-based)
-- Interval weights (continuous measurement distances)
-- Ratio weights (ratio-scaled measurement distances)
-
-When AC2 is implemented, it will inherit from WeightableGroupConfig. The categories in the semantics, and the Weights class built from them, will be extended to support these additional schemes. See Gwet (2014) for the AC2 formulation.
+Gwet's AC2, the weighted AC1, is not implemented. When it is, it will
+inherit from `WeightableGroupConfig`. See Gwet (2014).
