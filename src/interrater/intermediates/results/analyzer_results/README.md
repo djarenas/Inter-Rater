@@ -1,13 +1,20 @@
 # Analyzer Results
 
 These classes are organized so that each coefficient gets its own result.
-Every class descends from
-`PointEstimateResult`, which is the shape an analyzer returns when it has
-estimated a single coefficient: a point estimate, an optional confidence
-interval, the bootstrap distribution behind it, the observed and chance
-terms it was built from (`parts`), its ceiling (`kappa_max`, if appropriate), and three
-profiles of the data (balance, rater(what is this), agreement). The parts must rebuild
-the point; a result whose parts do not (do not what) is refused.
+Every class descends from `PointEstimateResult`, which is the shape an
+analyzer returns when it has estimated a single coefficient. It holds:
+
+- `point`: the estimate.
+- `confidence_interval`: optional, and `bootstrap_distribution`: the draws
+  behind it.
+- `parts`: the observed and chance terms the point was built from. They must
+  rebuild it: `(Po - Pe) / (1 - Pe)` must equal `point`, and a result whose
+  parts give a different number is refused at construction.
+- `kappa_max`: the ceiling the raters' marginals allow, where that applies.
+- `balance_profile`: ratings per subject.
+- `rater_profile`: rater names, subjects rated by each, and their overlap.
+  `NotComputed` when the result was built from counts.
+- `agreement_profile`: prevalence and per-category agreement.
 
 ```
 PointEstimateResult
@@ -37,20 +44,24 @@ PointEstimateResult
 
 ## Why the fields differ by coefficient
 
-The information that is printed, or visualized, has context that 
-depends on the coefficient. For example:
+The coefficients have meaningful differences between them and, from
+experience, it is easy to mix them up. Having the objects in the chain of
+analysis enforce each coefficient's rules helps when extending the package:
+a result refuses a field its coefficient cannot have. For example:
 
 **`is_exact`.** A boolean on whether the data is balanced. This is
 relevant because for balanced data different literature references
 give the same formula; unbalanced data is not as straightforward. Therefore,
 in interrater Fleiss kappa uses an approximation (each subject weighted equally) out
-of other other options. Interrater philosophy is that this choice should live in the 
-result object, and it therefore prints the approximation information. Contrast, 
-Gwet's AC1 and Brennan-Prediger print Gwet's (2014) formula for missing ratings. Contrast, Scott is two raters with every subject rated twice, so it is always balanced. Krippendorff is 
-originally built to always handle incomplete and unbalanced data so it 
-it works in pairs of ratings; missing data does not change the formula.
-Other coefficients, Cohen, Conger and Light carry no `is_exact`. As they refuse
-incomplete data, the result objects should know not to take is_exact false. 
+of the options. Interrater philosophy is that this choice should live in the
+result object, and it therefore prints the approximation information. In contrast,
+Gwet's AC1 and Brennan-Prediger print Gwet's (2014) formula for missing ratings.
+Scott is two raters with every subject rated twice, so it is always balanced.
+Krippendorff was built to handle incomplete and unbalanced data: it works in
+pairs of ratings, so missing data does not change the formula.
+Cohen, Conger and Light carry no `is_exact`. Conger and Light refuse
+incomplete data, and Cohen runs on the subjects both raters rated, so the
+question does not arise.
 
 **`ci_method` allowed values.** The result objects should have the logic
 of what ci methods they can report. For example, Fleiss, Scott and Cohen accept
@@ -58,7 +69,7 @@ of what ci methods they can report. For example, Fleiss, Scott and Cohen accept
 Gwet and Conger reject it explicitly, not implemented, and not available,
 respectively. Brennan-Prediger, Krippendorff and Light allow only
 `"percentile"` or `"bca"`. Clean result objects prevent future implementations or extended
-features of feeding the wrong parameters to a result cconcept. 
+features from feeding the wrong parameters to a result.
 
 **`weights_type` and `weight_matrix` are on the result.** Weighted Cohen's
 kappa and unweighted Cohen's kappa are different statistics, and a result
