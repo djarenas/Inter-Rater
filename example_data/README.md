@@ -2,7 +2,7 @@
 
 Validation and test datasets for the interrater v2 package.
 
-**All V2 bootstrap results use:** `n_resamples=4000`, `random_state=42`, `ci_method="bca"` unless otherwise noted. These are reference runs, not the settings the test suite uses -- `tests/test_example_data/` runs percentile at B=250 for speed, and asserts point estimates rather than CI bounds.
+**All V2 bootstrap results use:** `n_resamples=4000`, `random_state=42`, `ci_method="bca"` unless otherwise noted.
 
 ## Folder layout
 
@@ -96,8 +96,8 @@ Main screening data from Systematic Review 1 (FIS + Psych combined).
 | V1 published | 0.62 | [0.55, 0.69] | 0.14 | |
 | V2 parametric null | — | — | — | not computed: needs the same number of raters per subject (here 2–3) |
 | V2 bootstrap | 0.619 | [0.553, 0.680] | 0.127 | BCa bootstrap, realistic width |
-| Gwet AC1 | 0.926 | [0.911, 0.939] | 0.028 | BCa bootstrap, approximation (unbalanced) |
-| Brennan-Prediger | 0.898 | [0.879, 0.916] | 0.037 | BCa bootstrap, approximation (unbalanced) |
+| Gwet AC1 | 0.926 | [0.911, 0.939] | 0.028 | BCa bootstrap, Gwet (2014) formula for missing ratings |
+| Brennan-Prediger | 0.898 | [0.879, 0.916] | 0.037 | BCa bootstrap, Gwet (2014) formula for missing ratings |
 | Krippendorff's alpha | 0.618 | [0.553, 0.679] | 0.126 | BCa bootstrap, exact formula (unbalanced data) |
 
 **This is the only shipped dataset where a rater subset's measurable pool and
@@ -118,7 +118,7 @@ Three of the four had nothing to resample at all under the old rule. At k=2
 the two pools coincide on all six pairs, as they must -- "at least two of the
 k" is one rule, and at k=2 it means both.
 
-Fleiss κ, B-P, and AC1 all use the unbalanced-data approximation on this dataset. Krippendorff's α (0.618) handles the unbalanced data exactly via pair-pooling -- no approximation needed. It is nearly identical to Fleiss κ (0.619) because only 3 of 1617 subjects deviate from 2 raters, so the data is barely unbalanced. Under extreme skew (~90% exclude), Fleiss' κ (0.619) and α (0.618) are much lower than B-P (0.898) and AC1 (0.926).
+On this dataset Fleiss' κ is the approximation (each subject weighted equally), and B-P and AC1 compute Gwet's (2014) formula for missing ratings. Krippendorff's α (0.618) handles the unbalanced data exactly via pair-pooling. It is nearly identical to Fleiss κ (0.619) because only 3 of 1617 subjects deviate from 2 raters, so the data is barely unbalanced. Under extreme skew (~90% exclude), Fleiss' κ (0.619) and α (0.618) are much lower than B-P (0.898) and AC1 (0.926).
 
 ---
 
@@ -143,8 +143,8 @@ Screening data from Systematic Review 2.
 | V1 published | 0.42 | [0.34, 0.52] | 0.18 | |
 | V2 parametric null | — | — | — | not computed: needs the same number of raters per subject (here 2–4) |
 | V2 bootstrap | 0.431 | [0.282, 0.607] | 0.325 | BCa bootstrap, realistic width |
-| Gwet AC1 | 0.782 | [0.694, 0.849] | 0.155 | BCa bootstrap, approximation (unbalanced) |
-| Brennan-Prediger | 0.725 | [0.623, 0.802] | 0.179 | BCa bootstrap, approximation (unbalanced) |
+| Gwet AC1 | 0.782 | [0.694, 0.849] | 0.155 | BCa bootstrap, Gwet (2014) formula for missing ratings |
+| Brennan-Prediger | 0.725 | [0.623, 0.802] | 0.179 | BCa bootstrap, Gwet (2014) formula for missing ratings |
 
 Under skew (~80% exclude), Fleiss' κ (0.431) is much lower than B-P (0.725) and AC1 (0.782).
 
@@ -253,11 +253,11 @@ Nij (counts matrix) format of the classic Fleiss (1971) psychiatric diagnosis da
 
 | Method | kappa | 95% CI | CI Width | Notes |
 |---|---|---|---|---|
-| Fleiss (1971) original | 0.430 | | | Variance formula in this paper is known to be wrong |
+| Fleiss (1971) original | 0.430 | | | Its variance formula was corrected by Fleiss, Nee & Landis (1979) |
 | V2 parametric null | 0.430 | [0.382, 0.478] | 0.096 | Fleiss 1979 Eq. 12, but too narrow |
-| V2 bootstrap | 0.430 | [0.335, 0.549] | 0.214 | BCa bootstrap (n_bootstrap=4000), realistic width |
-| Gwet AC1 | 0.448 | [0.349, 0.564] | 0.215 | BCa bootstrap (n_bootstrap=4000) |
-| Brennan-Prediger | 0.444 | [0.344, 0.561] | 0.217 | BCa bootstrap (n_bootstrap=4000), Pe = 1/5 = 0.2 |
+| V2 bootstrap | 0.430 | [0.335, 0.549] | 0.214 | BCa bootstrap, realistic width |
+| Gwet AC1 | 0.448 | [0.349, 0.564] | 0.215 | BCa bootstrap |
+| Brennan-Prediger | 0.444 | [0.344, 0.561] | 0.217 | BCa bootstrap, Pe = 1/5 = 0.2 |
 
 The parametric null CI is ~45% the width of the bootstrap CI. With 5 categories and no extreme skew toward any single category, all three coefficients are remarkably close: Fleiss κ (0.430), B-P (0.444), and AC1 (0.448) -- the chance terms diverge little when prevalence is spread across categories.
 
@@ -302,7 +302,7 @@ Source: Gwet, K. L. (2014). *Handbook of Inter-Rater Reliability* (4th ed.). Adv
 
 These datasets are provided in two formats to validate both analyzer pathways:
 the ratings format (subject x rater) for `estimate()`, and the nij format
-(subject x category counts) for `estimate_from_nij_matrix()`.
+(subject x category counts) for `build_from_nij_matrix()`.
 
 ### Gwet_example/gwet_cont3x3_data.csv
 
@@ -348,12 +348,12 @@ Nij (counts matrix) format of the same dataset.
 
 | Coefficient | Value | 95% CI | CI Width | Notes |
 |---|---|---|---|---|
-| Cohen's kappa | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap (n_bootstrap=4000) |
-| Gwet AC1 | 0.849 | [0.745, 0.919] | 0.174 | BCa bootstrap (n_bootstrap=4000) |
-| Fleiss' kappa | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap (n_bootstrap=4000) |
-| Scott's pi | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap (n_bootstrap=4000) |
-| Brennan-Prediger | 0.835 | [0.715, 0.910] | 0.195 | BCa bootstrap (n_bootstrap=4000) |
-| Krippendorff's alpha | 0.797 | [0.649, 0.894] | 0.245 | BCa bootstrap (n_bootstrap=4000), exact formula |
+| Cohen's kappa | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap |
+| Gwet AC1 | 0.849 | [0.745, 0.919] | 0.174 | BCa bootstrap |
+| Fleiss' kappa | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap |
+| Scott's pi | 0.796 | [0.647, 0.893] | 0.246 | BCa bootstrap |
+| Brennan-Prediger | 0.835 | [0.715, 0.910] | 0.195 | BCa bootstrap |
+| Krippendorff's alpha | 0.797 | [0.649, 0.894] | 0.245 | BCa bootstrap, exact formula |
 
 V2 point estimates match irrCAC: Cohen κ 0.796 vs 0.79641, AC1 0.849 vs 0.84933, Fleiss κ 0.796 vs Scott π 0.79624 (equivalent for 2 balanced raters), B-P 0.835 vs 0.83500. Cohen's κ (0.796) matches Fleiss' κ (0.796) to 3 decimal places -- on this 2-rater data the individual marginals are close, so Pe_Cohen ≈ Pe_Fleiss. Krippendorff's α (0.797) is nearly identical to Fleiss κ (0.796) on this balanced 2-rater data, as expected -- the two use different units and chance models but converge when every subject has the same number of raters and the dataset is large enough. The irrCAC asymptotic CI [0.764, 0.935] (width 0.171) is close to the V2 bootstrap CI [0.745, 0.919] (width 0.174) for AC1.
 
@@ -363,7 +363,7 @@ V2 point estimates match irrCAC: Cohen κ 0.796 vs 0.79641, AC1 0.849 vs 0.84933
 
 Datasets above that ship in a second format, plus one derived file. These
 exist so the two analyzer pathways can be validated against each other: the
-same data through `estimate()` and `estimate_from_nij_matrix()` must give the
+same data through `__init__` and `build_from_nij_matrix()` must give the
 same point estimate.
 
 ### Synthetic_2raters/synthetic_2raters_data_nij.csv
@@ -403,8 +403,9 @@ validated coefficient values, and no test uses it. The `unbalanced_nij`
 fixture in `tests/test_example_data/conftest.py` loads it and nothing
 consumes the fixture.
 
-It covers a real gap -- the nij pathway on unbalanced data, where Fleiss, B-P
-and AC1 all fall back to an approximation and Krippendorff does not. Closing
+It covers a real gap -- the nij pathway on unbalanced data, where Fleiss is
+an approximation, B-P and AC1 compute Gwet's formula for missing ratings, and
+Krippendorff needs neither. Closing
 it means establishing reference values first, which for synthetic data means
 deciding what they should be validated *against*.
 

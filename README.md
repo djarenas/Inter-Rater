@@ -1,8 +1,6 @@
 # interrater
 
-Agreement between raters, for any rating task where there is no ground truth to
-check against. For example: systematic review screening, content coding, annotation
-quality, evaluation panels, etc.
+Agreement between raters, for any rating task where there is no ground truth to check against. For example: systematic review screening, content coding, annotation quality, evaluation panels.
 
 - **Install:** `pip install interrater` · [PyPI: interrater](https://pypi.org/project/interrater/)
 - **Source:** [GitHub: interrater](https://github.com/djarenas/Inter-Rater)
@@ -27,28 +25,19 @@ For example, the original Fleiss' kappa assumes every subject was rated the same
 number of times. If yours were not, the formula does not apply. A package function
 may still run, and nothing afterwards would tell you. Other silent issues may be
 that not all your subjects were rated by all raters (hereafter referred to as
-unbalanced). A category nobody chose changes coefficients whose chance term counts
-categories, and leaves the others untouched. This may not matter for Fleiss' kappa,
-but it matters for Brennan-Prediger, Gwet's AC1, and Bennett's S, where the number
-of categories goes into the kappa. Not knowing how your package function handled
-unchosen categories would be bad.
+unbalanced). A category nobody chose changes coefficients whose chance term counts categories, and leaves the others untouched. This may not matter for Fleiss' kappa, but it matters for Brennan-Prediger, Gwet's AC1, and Bennett's S, where the number of categories goes into the kappa. Not knowing how your package function handled unchosen categories would be bad.
 
 Also what happens when a rating was not something you expected (e.g. '0' instead of
 'o' or 'O'). Even these data cleaning or management issues are hard to handle with
-scripts in a way that is easily reproducible and archivable.
+scripts in a way that is easily reproducible and archivable. Furthermore, a bootstrap interval may rest on fewer draws than were asked for, because some failed, and an interval should at least say how many it rests on. The list goes on.
 
-What is also missing in existing packages is detail beyond two raters, such as
+Also missing in existing packages is detail beyond two raters, such as
 whether one rater disagreed with the others more than usual, along with
 extendability. Dropping a rater who quit halfway changes what your data
 describes. A pair of raters who share eight subjects produces a coefficient
 that is perfectly valid and perfectly useless.
 
-The `interrater` package is built for the case where you want those things checked rather
-than assumed. Every analysis runs through one pipeline: a cleaner that declares
-its decisions in a config file and reports what it did, a validated data object
-that cannot exist in an invalid state, and analysers that refuse data their
-coefficient does not apply to. The intent is that a wrong number is hard to
-produce, and that a right one arrives with an account of how it was reached.
+The `interrater` package is built for the case where you want those things checked rather than assumed. Every analysis runs through one pipeline: a cleaner that declares its decisions in a config file and reports what it did, a validated data object that cannot exist in an invalid state, and analysers that refuse data their coefficient does not apply to. The intent is that a wrong number is hard to produce, and that a right one arrives with an account of how it was reached.
 
 The trade is deliberate. There is no shortcut that takes a bare array and
 returns a coefficient, because a shortcut is exactly where the guarantees are
@@ -80,7 +69,7 @@ reviewers. Clone the repository, or copy
 raters: 4
 categories:
     kind: unordered
-    names: ['1', '0', '-1']      # include / unclear / exclude
+    names: ['1', '0', '-1']      # include / uncertain / exclude
 n_subjects: 199                  # asserted, not assumed
 unique_subjects: true
 ```
@@ -213,9 +202,10 @@ whatever the other four decided, raises this panel's reported reliability by
 can tie, and ties are broken at random.) See
 [What if one of your raters were someone else?](https://djarenas.github.io/packages/interrater/rater_substitution/)
 
-Worked configurations for ten datasets, five of them real systematic reviews,
-are in [`example_data/`](https://github.com/djarenas/Inter-Rater/tree/master/example_data/), each with the reference values it
-should reproduce.
+Worked configurations for eleven datasets, five of them real systematic
+reviews, are in [`example_data/`](https://github.com/djarenas/Inter-Rater/tree/master/example_data/),
+each with the reference values it should reproduce; one folder holds every
+table from the statistical background page as ratings.
 
 ## Background
 
@@ -228,15 +218,12 @@ is a complete rewrite in object-oriented Python, undertaken to fix maintenance
 issues and limitations that emerged from real-world use. Version 1 remains
 available at git tag `v1.5`.
 
-See [Why pairwise?](https://djarenas.github.io/packages/interrater/why_pairwise/) for why the package reports every pair of raters.
-
-See [Why objects?](https://djarenas.github.io/packages/interrater/why_objects/) for why and what of the OOP design choices.
-
-See [Statistical background](https://djarenas.github.io/packages/interrater/statistical_background/) for sections on chance-definitions; resampling choice; correlated and independent errors.
-
-See [What if one of your raters were someone else?](https://djarenas.github.io/packages/interrater/rater_substitution/) for rater injection.
-
-See [roadmap](https://djarenas.github.io/packages/interrater/roadmap/) for info on what V2 added and what is coming in the future.
+Further reading:
+- [Statistical background](https://djarenas.github.io/packages/interrater/statistical_background/): chance terms, rare conditions, more than two raters, incomplete data, with every number reproducible.
+- [Why objects?](https://djarenas.github.io/packages/interrater/why_objects/): the design choices behind the objects.
+- [Why pairwise?](https://djarenas.github.io/packages/interrater/why_pairwise/): why the package reports every pair of raters.
+- [What if one of your raters were someone else?](https://djarenas.github.io/packages/interrater/rater_substitution/): rater injection.
+- [Roadmap](https://djarenas.github.io/packages/interrater/roadmap/): what version 2 added and what is coming.
 
 
 ## How to cite
