@@ -14,7 +14,8 @@ version does not warn you, so this section does.
   `.upper`. `summary()` still emits `ci_lower` and `ci_upper`.
 - `bca_ci()` takes a fourth argument, `jackknife_estimates`.
 - `percentile_ci()` and `bca_ci()` return a `BootstrapCIResult`, not a tuple.
-- `scipy_bca_ci()` is removed. See `analyzers/README.md`.
+- `scipy_bca_ci()` is removed; `bca_ci()` is the one implementation, checked
+  against Efron & Tibshirani (1986) in `tests/test_analyzers/test_ci_methods.py`.
 - `interrater.intermediates.analysis_results` is now
   `interrater.intermediates.results`. Top-level imports are unchanged.
 - `intermediates/ci_methods.py` is removed; the module is
@@ -29,6 +30,16 @@ version does not warn you, so this section does.
   config, is refused with a message saying so. For a
   weighted coefficient, declare categories `kind: ordered` with `weighting`,
   or `kind: weighted` with `weights` or `weights_file`.
+- `rater_jackknife()` and `rater_subset()` are removed from
+  `resampling_functions`. Nothing in the package called them: subset
+  permutation builds its combinations in `agreement_functions` and takes
+  columns with `EstimatorInput.select_raters()`.
+- `Weights.build_from_type()` is removed. It read the `weights_type` key,
+  which 2.1.0 also removes; use `Weights.build_from_categories()`, or
+  `Weights.linear()` / `Weights.quadratic()` directly.
+- `PairedRatings` is removed. No analyzer took it: Cohen and Scott check
+  for two raters themselves, and `Ratings` already requires every subject
+  rated at least twice, so two raters can have no gaps. Use `Ratings`.
 - Fleiss' kappa, Brennan-Prediger, Krippendorff's alpha and Cohen's kappa
   now use the weights a semantics declares. In 2.0.0 an ordered or weighted
   semantics was silently ignored, so results on such data change.
@@ -74,7 +85,7 @@ version does not warn you, so this section does.
 - `unused_categories: drop` is removed. The cleaner no longer changes the
   declared categories; use `keep`, or remove the category from the
   semantics file.
-- `RatingsSemantics.from_dict` rejects unknown keys, with a did-you-mean
+- `RatingsSemantics.build_from_dict` rejects unknown keys, with a did-you-mean
   hint. A misspelt key such as `unique_subject` used to be ignored.
 - `scheme="within_subject"` is removed from hypothesis tests. Shuffling the
   raters within a subject keeps the agreement the test is meant to break, so
@@ -102,7 +113,7 @@ version does not warn you, so this section does.
   both tails, as in `scipy.stats.permutation_test`.
 - `HypothesisTestResult` requires `coefficient`, the name of the
   coefficient tested (e.g. `"fleiss_kappa"`). Its printed form reads
-  `H₀: fleiss_kappa = 0` instead of `H₀: point estimate = 0`.
+  `H₀: Fleiss' κ = 0` instead of `H₀: point estimate = 0`.
 - Category names, or `value_map` keys mapping to different categories, that
   differ only in case or surrounding spaces are refused. With the default
   case-insensitive matching they were silently merged: every answer for one
@@ -121,6 +132,9 @@ version does not warn you, so this section does.
 - Each injection step is seeded with `[random_state, step_position]`.
   Chained steps with the same seed used to produce identical raters;
   injected raters now differ from 2.0, single steps included.
+- Injector configs default to `random_state=42`, as every other config
+  does; it was `None`, so an analysis with injection was unseeded unless
+  each step set a seed. Pass `random_state=None` for fresh randomness.
 - `summary()` replaces `bootstrap_n`, `bootstrap_mean` and `bootstrap_std`
   with `bootstrap_draws_mean` and `bootstrap_se`, over the usable draws; the
   counts are in the interval's summary. Results refuse draws that disagree
@@ -151,6 +165,48 @@ version does not warn you, so this section does.
   runs, from one value picked from each unit's draws in unit order. The
   method is unchanged, but the picks come in a different order, so
   independent intervals differ slightly from 2.0.0 at the same seed.
+- Each pair or subset is its coefficient's own result (a pair under Cohen's
+  kappa is a `CohenKappaResult`, with its interval, draws, parts and
+  profiles), or `NotComputed` with the reason. `pair_results` and
+  `subset_results` replace `pairwise_values`, `subjects_per_pair`,
+  `bootstrap_cis_per_pair` and `bootstrap_distributions_per_pair` (and the
+  `subset_*` and `*_per_subset` fields). The container checks its units
+  against its own settings and its mean.
+- One rule for which pairs and subsets have a coefficient: at least two
+  usable subjects (rated by at least two of its raters), and every rater
+  rating at least one of them. A subset with an idle rater used to report
+  the smaller subset's number; it is now `NotComputed`, and a bootstrap
+  draw or jackknife value that leaves a rater idle counts as failed.
+- Scott's pi is refused for subset permutation; it is a two-rater
+  coefficient. Use pairs.
+- `hypothesis_test()` takes no `method` argument; the method comes from
+  `hypothesis_test_config`. The argument was declared but raised
+  `TypeError` when passed.
+- Constructors are verbs: `from_*` is now `build_from_*` on
+  `BalanceProfile`, `AgreementProfile`, `PrevalenceBiasIndex`, `Weights`,
+  `RatingsSemantics`, `CleanerConfig`, `FrameLayout`,
+  `InsufficientDataPolicy` and `PermutationBootstrapMeanConfig` (14 in
+  all). The old names are removed.
+- `BalanceProfile` describes subjects only. `n_raters`, `n_raters_exact`,
+  `n_per_rater`, `fill_rate` and `n_raters_display` are removed; the raters
+  are in the new `RaterProfile`, as `result.rater_profile`. In `summary()`
+  those keys move from `"balance"` to a new `"raters"` section.
+- Results carry `rater_profile`, a `RaterProfile` built from ratings or
+  `NotComputed` on the counts path. `PointEstimateResult` requires a
+  `balance_profile`; `None` is refused. Code that builds results by hand
+  must pass both.
+- Pairwise and subset results carry `weights_type` and `weight_matrix`,
+  checked against every pair or subset, and both are in `summary()`. Code
+  that builds these results by hand must pass them.
+- `plot_pairwise_permutation`, `plot_subset_sorted` and
+  `plot_subset_strip` take no `rater_names` argument; names come from the
+  result.
+- `Ratings` is read-only: setting or deleting an attribute raises. Build a
+  new `Ratings` to change the data.
+- `DropReport` requires `passes` and refuses a report whose last pass
+  dropped something.
+- Printed coefficient names come from the result classes and use Greek
+  symbols, e.g. `Fleiss' κ`, `Scott's π`, `Gwet's AC1`.
 
 ### Added
 
@@ -173,7 +229,7 @@ version does not warn you, so this section does.
   exactly, in the same order.
 - `weight_matrix` on Fleiss, Brennan-Prediger, Krippendorff and Cohen
   results and in their `summary()`: the matrix used, or `None` when unweighted.
-- `Weights.from_categories()`: the weights a semantics declares.
+- `Weights.build_from_categories()`: the weights a semantics declares.
 - Weighted SR1 examples in `example_data/SR1_OSF2018/`: ordered (linear)
   and custom weights, file and inline, with reference values.
 - Tests run on GitHub on every push: Python 3.10 with the minimum supported
@@ -182,7 +238,7 @@ version does not warn you, so this section does.
   and `n_at_or_below`, and refuses a p-value that does not follow from
   them. Permutations whose coefficient is undefined are skipped and
   counted.
-- `CleanerConfig.to_dict()`, in the shape `from_dict` reads.
+- `CleanerConfig.to_dict()`, in the shape `build_from_dict` reads.
 - `plot_bootstrap_distribution(result)`: the bootstrap draws with the point
   estimate and interval. For BCa it also draws the percentile interval for
   comparison and states z0 and a in words.
@@ -192,6 +248,25 @@ version does not warn you, so this section does.
 - `balanced_data_only` on pairwise and subset permutation configs, default
   `false`: whether the whole panel must be balanced. `true` refuses an
   unbalanced panel before anything runs.
+- `RaterProfile`: rater names, how many subjects each rated, and their
+  overlap (`rater_overlap`, a `RaterSharedMatrix`), with `n_raters` and
+  `fill_rate` derived. `RaterSharedMatrix.build_from_ratings()`.
+- `RaterProfilePlotter` (`draw_overlap()`, `draw_counts()`) and
+  `BalanceProfilePlotter` (`draw()`), each built from ratings or a result
+  (`BalanceProfilePlotter` also from a nij matrix). See
+  `visualizers/README.md`.
+- `to_frame()` on pairwise and subset results: one row per pair or subset
+  (raters, estimate, interval, `point_outside_interval`, method used,
+  failed draws, subjects, reason if not computed), readable back from CSV.
+- `COEFFICIENT`, `NAME` and `SYMBOL` on every result class, and
+  `result_class_for(coefficient)`.
+- Tests build their data through the cleaner (`tests/fixtures/through_cleaner.py`),
+  and `test_scruffy.py` checks the cleaner against a damaged file's record
+  of its damage.
+- `example_data/Statistical_background/`: every table on
+  `guide/statistical_background.md` as ratings, `generate_tables.py` to
+  build them (seed 42 for the simulated ones), and `reproduce_page.py` to
+  run interrater on them and check the page's numbers. A test runs both.
 
 ### Changed
 
@@ -217,15 +292,42 @@ version does not warn you, so this section does.
   `POINT OUTSIDE INTERVAL` in the printed form. Pairwise and subset tables
   show it on the pair's row, and `to_frame()` has a `point_outside_interval`
   column.
+- Pairwise and subset tables, `to_frame()`, summaries and plots name raters
+  by the names in the semantics instead of their positions.
+- Pairwise and subset printouts state the weighting (`quadratic weights`,
+  `unweighted`) for coefficients that have one.
+- On unbalanced data, Gwet's AC1 and Brennan-Prediger print `unbalanced
+  data: Gwet (2014) formula for missing ratings` instead of `approximation
+  (unbalanced data)`: they compute Gwet's formula, as irrCAC does. Fleiss'
+  kappa prints `approximation (unbalanced data: each subject weighted
+  equally)`.
+- `example_data/Fleiss1971/Fleiss1971_psychiatric_data_nij.txt` is
+  removed; it duplicated the CSV, which is what the tests load.
+- `guide/statistical_background.md`: the more-than-two-raters table shows
+  theoretical and observed columns, the incomplete-data section ends with
+  Krippendorff's alpha, and a closing section shows how to reproduce the
+  page. `guide/statistical_background_numbers.py` is removed;
+  `reproduce_page.py` replaces it.
 
 ### Fixed
 
+- Analyzer, permutation and injector configs refuse unknown keys in
+  `build_from_dict`, naming the class, the nearest match and the valid
+  keys; before, only `build_from_yaml` checked, and a dict, a nested
+  `config_of_coefficient` or `hypothesis_test`, or an injection step failed
+  with Python's bare "unexpected keyword argument".
+  `hydrate_injection_step` no longer removes `type` from the caller's dict.
+- Semantics declaring `n_subjects` no longer fail when the cleaner drops
+  subjects. `n_subjects` is checked against the file before any drop; the
+  cleaned semantics now clears it whenever a subject was dropped, as it
+  already did when a rater or category was. The report no longer counts
+  that as a change of semantics.
 - Subset permutation checks every k before running any: `subset_k: "all"`
   on 20 raters used to run k = 2, 3 and 4 in full before k = 5 hit the
   10,000-subset cap. The cap is now `GUARD_MAX_SUBSETS` in `contracts`
   (it was `MAX_SUBSETS` in `rater_combinations`).
-- A subset with fewer than two measurable subjects returns
-  `method_used = None` rather than a tuple of NaNs.
+- A subset with fewer than two measurable subjects holds `NotComputed`
+  with the reason, rather than a tuple of NaNs.
 - `hypothesis_test()` with `method="parametric_null"` raised `TypeError`
   for Fleiss' kappa, Scott's pi and Cohen's kappa.
 - Custom weights raised `AttributeError` on every group coefficient.
@@ -254,10 +356,11 @@ version does not warn you, so this section does.
 - The drop report gave each removed rater and subject its count before any
   dropping, not when it was removed, so a casualty of a cascade could appear
   to meet the minimum.
-- `bootstrap_mean` and `bootstrap_std` were NaN if any draw was undefined.
-  The standard error now divides by n − 1.
+- The draws' mean and standard error in `summary()` (now `bootstrap_draws_mean`
+  and `bootstrap_se`) were NaN if any draw was undefined. They are computed
+  over the usable draws, and the standard error divides by n − 1.
 - Pairwise and subset results said "bootstrap was not performed" when draws
-  were not stored above the limit; they now name the limit.
+  were not stored; they now say why (`draws not kept: keep_draws false`).
 - A scale with more than 127 categories is refused when declared. It used
   to crash the cleaner with a numpy `OverflowError`.
 - The mean's interval was not reproducible by default (its seed defaulted to
@@ -271,12 +374,21 @@ version does not warn you, so this section does.
   counted as an ordinary draw. It is now counted as failed, as for a single
   coefficient; the jackknife for BCa follows the same rule. Example values
   are unchanged.
+- BCa crashed with inverted bounds when `1 - a(z0 + z)` went below zero
+  (the point outside nearly all the draws, with a large acceleration). It
+  now falls back to percentile, as it did when the quantile was infinite.
+- `Ratings` checked category codes after casting to int8, so an
+  out-of-range code could wrap into a valid one. Codes are checked first.
+- `light_kappa` emitted a numpy "Mean of empty slice" warning when no pair
+  was defined; it returns NaN quietly.
+- `NijMatrix` refused unsigned integer arrays. Any integer type is
+  accepted, and it keeps its own copy.
 
 ## [2.0.0] - 2026-10-11
 
 Complete rewrite in object-oriented Python. This changelog begins at 2.1.0;
 for what 2.0.0 contained, see
-[What version 2 adds](README.md#what-version-2-adds).
+[What version 2 adds](https://djarenas.github.io/packages/interrater/roadmap/).
 
 ## [1.5]
 

@@ -74,7 +74,7 @@ Resample *subjects* with replacement from the nij_matrix (the category-counts ma
 
 These generate null distributions by shuffling without replacement. Conceptually different from bootstrap: they destroy chosen structure rather than resample it.
 
-All three keep the missing-data structure exactly: they move only answers that were given, and put them back only into cells that were rated. No answer lands on a subject its rater was not shown, every rater keeps their workload, and every subject keeps its number of ratings.
+All three keep the missing-data structure exactly: they move only answers that were given, and put them back only into cells that were rated. No answer lands on a subject its rater was not shown, every rater keeps their workload, and every subject keeps its number of ratings. Which cells are empty is the design of the study; a generic routine that fills the gaps, or drops incomplete rows, tests a different study from yours, and nothing in its output says so.
 
 `within_rater_shuffle` and `pool_and_redistribute` are the schemes for testing H₀: coefficient = 0 (`HypothesisTestConfig.scheme`). `within_subject_shuffle` is not: it keeps the agreement, so it cannot test that.
 

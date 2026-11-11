@@ -117,11 +117,30 @@ what that buys.
 - This allows an injected rater, a subset of raters, and any analyzer to chain
   together without a function written for that combination.
 
+### Why it goes this deep
+
+A package that allows incomplete data, bootstraps, pairs and subsets has to
+decide, at every step, which subjects a number is computed on, and keep the
+point and its interval on the same ones. Some of the decisions in 2.1:
+
+- A subject with one rating joins no comparison, so the data objects refuse
+  it at the door.
+- Inside the package, pairs and subsets create such subjects all the time (a
+  subject rated by two of four raters has one rating in some pairs), so every
+  pair and subset skips them, in the point and in every resample.
+- Conger's and Light's kappas are defined only for complete data, so they
+  refuse the rest and name the coefficients that do not.
+- A setting that does not apply to a coefficient is refused with a reason,
+  never silently ignored.
+
+Many packages assume complete data and never meet these questions. This one
+answers them, and the objects are where the answers are kept.
+
 ### Where this comes from
 
 Version 1 of this package was 745 lines of functions. It read two text files,
 printed a report, drew a figure, and was used in published systematic reviews.
-It also only had five error messages, each a `print` followed by `return False`; a
+It had only five error messages, each a `print` followed by `return False`; a
 pair of raters that failed its check kept the `0.0` in its cell and entered the
 per-rater mean; one chance term, the pooled Σ p̄_j², served every coefficient,
 so the two-rater result the code called Cohen's kappa was Scott's pi; and the
