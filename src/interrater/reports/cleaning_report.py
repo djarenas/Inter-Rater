@@ -104,9 +104,14 @@ class CleaningReport:
 
         True when a rater or a category did not survive. Subjects never count:
         they are not declared, so removing them narrows the data without
-        narrowing the task.
+        narrowing the task. That includes ``n_subjects``, an expectation about
+        the frame that the cleaner clears once subjects are dropped.
         """
-        return self.declared_semantics != self.effective_semantics
+        declared, effective = self.declared_semantics, self.effective_semantics
+        return (
+            list(declared.raters) != list(effective.raters)
+            or declared.categories != effective.categories
+        )
 
     @property
     def k_changed(self) -> bool:

@@ -31,8 +31,9 @@ class TestInjectorConfigDefaults:
         assert cfg.n_new_raters == 1
 
     def test_default_random_state(self):
+        """Seeded by default, as every other config is."""
         cfg = InjectorConfig()
-        assert cfg.random_state is None
+        assert cfg.random_state == 42
 
     def test_explicit_values(self, base_config):
         assert base_config.n_new_raters == 2
@@ -104,7 +105,24 @@ class TestInjectorConfigBuildFromDict:
     def test_empty_dict_uses_defaults(self):
         cfg = InjectorConfig.build_from_dict({})
         assert cfg.n_new_raters == 1
-        assert cfg.random_state is None
+        assert cfg.random_state == 42
+
+    def test_unknown_key_rejected_with_valid_keys(self):
+        """build_from_dict names the class, the valid keys and the near miss."""
+        with pytest.raises(TypeError) as err:
+            ExtremalInjectorConfig.build_from_dict({"stratgy": "majority"})
+        message = str(err.value)
+        assert message.startswith("[ExtremalInjectorConfig] Error: unknown key(s) ['stratgy']")
+        assert "did you mean 'strategy'?" in message
+        assert "'n_new_raters'" in message and "'random_state'" in message
+
+    def test_misspelt_injection_step_in_analyzer_config(self):
+        """A step written inside an analyzer config gets the same message."""
+        from interrater import FleissKappaConfig
+        with pytest.raises(TypeError, match=r"\[ExtremalInjectorConfig\] Error: unknown key"):
+            FleissKappaConfig.build_from_dict(
+                {"injection": {"type": "extremal", "stratgy": "majority"}}
+            )
 
     def test_none_rejected(self):
         with pytest.raises(ValueError, match="data_dict"):
@@ -128,7 +146,7 @@ class TestInjectorConfigBuildFromYaml:
     def test_unknown_key_rejected(self, tmp_path):
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text("n_new_raters: 1\nbogus: 42\n")
-        with pytest.raises(TypeError, match="Unknown YAML"):
+        with pytest.raises(TypeError, match=r"\[InjectorConfig\] Error: unknown key\(s\) \['bogus'\]"):
             InjectorConfig.build_from_yaml(str(yaml_file))
 
     def test_missing_file_rejected(self):
@@ -167,7 +185,7 @@ class TestDistributionInjectorConfigDefaults:
     def test_inherits_base_defaults(self):
         cfg = DistributionInjectorConfig()
         assert cfg.n_new_raters == 1
-        assert cfg.random_state is None
+        assert cfg.random_state == 42
 
 
 class TestDistributionInjectorConfigValidation:

@@ -630,6 +630,51 @@ class TestColumnMatching:
         with pytest.raises(ValueError, match="row"):
             RatingsCleaner(df, sem)
 
+    def test_n_subjects_is_checked_before_drops(self, two_cat):
+        """
+        A wrong row count is refused even when drops would have made it right.
+
+        Three rows, n_subjects 2: dropping sub2 (rated once) would leave 2,
+        but the expectation is about the file, so the frame is refused.
+        """
+        df = pd.DataFrame({
+            "ann": ["include", "exclude", "include"],
+            "bob": ["exclude", "include", None],
+        })
+        sem = RatingsSemantics(raters=["ann", "bob"], categories=two_cat, n_subjects=2)
+        with pytest.raises(ValueError, match="the frame has 3 row"):
+            RatingsCleaner(df, sem)
+
+    def test_n_subjects_survives_a_subject_drop(self, two_cat):
+        """
+        Declaring the file's row count and dropping a subject cleans.
+
+        Before 2.1.0 the declared semantics, n_subjects included, was reused
+        whenever the raters and categories survived, so Ratings refused the
+        2 surviving subjects against an expectation of 3.
+        """
+        df = pd.DataFrame({
+            "ann": ["include", "exclude", "include"],
+            "bob": ["exclude", "include", None],
+        })
+        sem = RatingsSemantics(raters=["ann", "bob"], categories=two_cat, n_subjects=3)
+        rc = RatingsCleaner(df, sem)
+        assert rc.ratings.n_subjects == 2
+        assert rc.ratings.semantics.n_subjects is None
+        assert rc.report.declared_semantics.n_subjects == 3
+        assert rc.report.n_subjects_lost == 1
+
+    def test_subject_drop_does_not_change_the_semantics(self, two_cat):
+        """Clearing n_subjects narrows the data, not the rating task."""
+        df = pd.DataFrame({
+            "ann": ["include", "exclude", "include"],
+            "bob": ["exclude", "include", None],
+        })
+        sem = RatingsSemantics(raters=["ann", "bob"], categories=two_cat, n_subjects=3)
+        report = RatingsCleaner(df, sem).report
+        assert report.semantics_changed is False
+        assert "Semantics" not in report.render()
+
 
 class TestDecimalColumns:
     """A rater column read as decimals is refused before anything is matched.

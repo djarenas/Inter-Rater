@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 
+from ...yaml_utils import refuse_unknown_keys
+
 _ERROR_PREFIX = "[InjectorConfig] Error"
 
 
@@ -26,13 +28,14 @@ class InjectorConfig:
     ----------
     n_new_raters : int
         How many synthetic raters to inject. Each draws independently.
-    random_state : int or None
-        Seed for reproducibility. None means unseeded (non-reproducible).
-        Every injector uses this to initialise its RNG.
+    random_state : int or None, default 42
+        Seed for reproducibility, as in every other config. None means
+        unseeded (non-reproducible). Every injector uses this, mixed with
+        its position in the pipeline, to initialise its RNG.
     """
 
     n_new_raters: int = 1
-    random_state: int | None = None
+    random_state: int | None = 42
 
     # Constructor ------------------------------------------------------------ #
 
@@ -114,6 +117,10 @@ class InjectorConfig:
                 f"a dictionary. Got {type(data_dict).__name__}"
             )
 
+        # Checked here, not only in build_from_yaml, so that an injection
+        # step inside an analyzer config gets the same message.
+        refuse_unknown_keys(data_dict, {f.name for f in fields(cls)}, cls.__name__)
+
         return cls(**data_dict)
 
     @classmethod
@@ -121,8 +128,8 @@ class InjectorConfig:
         """
         Load configuration from a YAML file.
 
-        I read the file, validate that all keys are recognized, and
-        delegate to ``build_from_dict`` for hydration.
+        I read the file and delegate to ``build_from_dict``, which
+        refuses unknown keys and hydrates the rest.
 
         Parameters
         ----------
@@ -153,17 +160,6 @@ class InjectorConfig:
 
         with open(path) as f:
             data_dict = yaml.safe_load(f)
-
-        # Check for unknown YAML keys
-        valid_fields = {f.name for f in fields(cls)}
-        unknown = set(data_dict) - valid_fields
-        if unknown:
-            raise TypeError(
-                f"{_ERROR_PREFIX}: build_from_yaml: Unknown YAML "
-                f"key(s): {unknown}. Valid keys are: "
-                f"{sorted(valid_fields)}. "
-                f"Check your YAML configuration file."
-            )
 
         return cls.build_from_dict(data_dict)
 

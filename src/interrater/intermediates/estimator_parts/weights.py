@@ -173,48 +173,6 @@ class Weights:
             return cls(categories.weight_matrix(), kind="custom")
         return None
 
-    @classmethod
-    def build_from_type(cls, weights_type: str, n_categories: int) -> Weights | None:
-        """
-        Factory method to build Weights from a type string.
-
-        Parameters
-        ----------
-        weights_type : str
-            The type of weights: "identity", "linear", "quadratic", or "custom".
-        n_categories : int
-            Number of categories (not used for "custom").
-
-        Returns
-        -------
-        Weights | None
-            The constructed Weights object, or None if weights_type is "identity"
-            (since identity weights are the default and don't need an object).
-
-        Raises
-        ------
-        ValueError
-            If weights_type is "custom" (pass the matrix to Weights() directly).
-            If weights_type is unknown.
-        """
-        if weights_type == "identity":
-            return None  # Identity is the default; no Weights needed
-        elif weights_type == "linear":
-            return cls.linear(n_categories)
-        elif weights_type == "quadratic":
-            return cls.quadratic(n_categories)
-        elif weights_type == "custom":
-            raise ValueError(
-                f"{_WEIGHTS_ERROR}: build_from_type does not support 'custom'. "
-                "Pass the matrix directly to Weights(), or declare it in the "
-                "semantics (categories kind 'weighted')."
-            )
-        else:
-            raise ValueError(
-                f"{_WEIGHTS_ERROR}: unknown weights_type '{weights_type}'. "
-                f"Expected one of: 'identity', 'linear', 'quadratic', 'custom'."
-            )
-
     # Public API ---------------------------------------------------------  #
 
     @property

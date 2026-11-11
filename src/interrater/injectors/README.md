@@ -24,7 +24,14 @@ Injectors are ordered by how much real structure they preserve:
 
 The further down the table, the less the injected rater "knows" about
 the real subjects -- until the extremal strategies, which know everything
-but act deterministically.
+and follow a fixed rule. Only their ties are broken at random (seeded), so
+several injected raters can differ at a tied subject.
+
+## Every subject is rated
+
+An injected rater rates every subject, also on partially crossed data. The
+panel's missing-data structure is not copied: an injected column has no
+gaps.
 
 ## Contrarian vs Dissenter
 
@@ -48,14 +55,18 @@ Every injector has a paired config:
 - **Config** validates its own fields (probabilities sum to 1, indices
   are non-negative, strategy is a valid string).
 - **Injector** validates compatibility with the `Ratings` at generate
-  time (indices in bounds, enough raters to compute a mode, etc.).
+  time (rater indices in bounds, at least one rater left after
+  `exclude_raters`, one prevalence per category).
 
 Configs are frozen dataclasses. Injectors are stateless beyond their
-`ratings` and `config` -- call `inject()` and get a new `Ratings` back.
+`ratings`, `config` and position in a pipeline -- call `inject()` and get a
+new `Ratings` back.
 
 ## Chaining
 
-Injections can be chained. Each call returns a new `Ratings`, and
+Injections can be chained. In an analysis, the steps are the config's
+`injection` (one injector config or a list), applied in order before
+anything is computed. Each step returns a new `Ratings`, and
 injected raters are named `injected_rater0`, `injected_rater1`, etc.
 When chaining, naming picks up where the previous injection left off,
 so names never collide.

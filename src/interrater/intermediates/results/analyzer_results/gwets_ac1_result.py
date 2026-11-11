@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[GwetsAC1Result] Error"
 _TOL = 1e-9
+# Printed on unbalanced data: the formula is Gwet's own, not an approximation
+UNBALANCED_DATA_LABEL = "unbalanced data: Gwet (2014) formula for missing ratings"
 
 # Why kappa_max is not computed for me. The analyzer passes it in.
 KAPPA_MAX_NOT_COMPUTED = (
@@ -31,16 +33,18 @@ KAPPA_MAX_NOT_COMPUTED = (
 @dataclass(frozen=True)
 class GwetsAC1Result(PointEstimateResult):
     """
-    I am Gwet's AC1, exact or approximate, with data context.
+    I am Gwet's AC1, with data context.
 
     I inherit point, confidence_interval, bootstrap_distribution, and
     balance_profile from PointEstimateResult. balance_profile tells users
-    and visualizers whether this is the exact coefficient or a generalization
-    applied to unbalanced data.
+    and visualizers whether the data was balanced.
 
-    When is_exact is True, I am the exact formula (balanced data, constant
-    raters per subject). When False, I am a valid generalization using
-    per-subject averaging of p_j, but not the original coefficient.
+    When is_exact is True, the data was balanced (constant raters per
+    subject), where every reference gives the same formula. When False, I
+    am Gwet's formula for missing ratings: Po and p_j averaged per subject,
+    each subject divided by its own rater count (Gwet, K. L. (2014).
+    Handbook of Inter-Rater Reliability, 4th ed., as implemented in irrCAC's
+    ``gwet.ac1.raw``). Not an approximation; my printed form names the source.
 
     I exist as a separate class (rather than just using PointEstimateResult)
     for type clarity. This is especially useful for error chaining.
@@ -164,7 +168,7 @@ class GwetsAC1Result(PointEstimateResult):
         return "κ_max not computed (pooled shares)"
 
     def _data_line(self) -> str:
-        exact = "exact formula" if self.is_exact else "approximation (unbalanced data)"
+        exact = "exact formula" if self.is_exact else UNBALANCED_DATA_LABEL
         return f"{self._subjects_phrase()}; {self._raters_phrase()}; {exact}"
 
     def summary(self) -> dict:
@@ -186,9 +190,10 @@ class GwetsAC1Result(PointEstimateResult):
     @property
     def is_exact(self) -> bool:
         """
-        Whether this is the exact AC1 formula or an approximation.
+        Whether the data was balanced, where every reference agrees on AC1.
 
         Returns True if data was balanced (constant raters per subject).
-        Returns False if an approximation was used for unbalanced data.
+        Returns False on unbalanced data, where I am Gwet's (2014) formula
+        for missing ratings.
         """
         return self.balance_profile.is_balanced

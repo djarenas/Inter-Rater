@@ -1,22 +1,23 @@
 # Intermediates
 
-The internal data structures that sit between validated input (`Ratings`)
-and final output (reports, visualizations). Nothing here is user-facing
-API -- callers import from `interrater`, not from `interrater.intermediates`.
+The data structures that sit between validated input (`Ratings`) and final
+output (reports, visualizations). Every analysis hands some of them back. Some of them
+can be useful for reading results with summarized important information, or for feeding
+into visualizers. They are rarely built by users. 
+(They import what they need from `interrater`, what does this mean).
 
 ## Sub-packages
 
 | Sub-package        | What It Holds                                           | README                        |
 |--------------------|---------------------------------------------------------|-------------------------------|
 | `estimator_parts/` | Weights, NijMatrix, EstimatorInput -- bare arrays and integers for the hot path | [estimator_parts/README.md](estimator_parts/README.md) |
-| `data_profiles/`   | BalanceProfile, RaterSharedMatrix -- structural metadata about the data shape   | [data_profiles/README.md](data_profiles/README.md)     |
+| `data_profiles/`   | BalanceProfile, RaterProfile, RaterSharedMatrix, AgreementProfile, PrevalenceBiasIndex -- what the data looks like, beside the coefficient | [data_profiles/README.md](data_profiles/README.md)     |
 | `results/`         | Point estimates, CIs, permutation results, hypothesis tests -- everything an analysis produces | [results/README.md](results/README.md) |
 
 ## Modules
 
 | Module             | What It Does                                            |
 |--------------------|---------------------------------------------------------|
-| `_profile_utils.py`| Prevalence, observed/expected agreement, category arithmetic. Free functions: numpy in, numpy out. Private to this package. |
 | `not_computed.py`  | `NotComputed(reason)`: stands in for a value that does not apply here, with the reason. Keeps three states apart: a number (computed), NaN (computed but undefined for this data), and NotComputed (not applicable). It has no truth value; check `isinstance`. Exported as `interrater.NotComputed`. |
 
 Confidence intervals are computed in `analyzers/ci_methods.py`, not here.
@@ -26,17 +27,24 @@ that produces one belongs with the analyzers that call it.
 ## Data flow
 
 ```
-Ratings (validated input)
+Ratings (validated input)          Weights (from the semantics)
+    │                                  │
+    ├──► EstimatorInput ◄──────────────┘
+    │         │
+    │         ├──► NijMatrix (group coefficients)
+    │         ▼
+    │    estimator ──► point ─────────────────────┐
+    │         │                                   │
+    │    resampling ──► analyzers/ci_methods ──► CIResult
+    │                                             ▼
+    ├──► BalanceProfile, RaterProfile,      PointEstimateResult
+    │    AgreementProfile ───────────────────────► (carries all of them)
     │
-    ├──► EstimatorInput ──► coefficient estimator ──► PointEstimateResult
-    │         │                                              │
-    │         ├──► NijMatrix (group coefficients)            ├──► analyzers/ci_methods (bootstrap CI)
-    │         └──► Weights                                   └──► HypothesisTestResult
-    │
-    ├──► BalanceProfile ──► attached to every result
-    │
-    └──► _profile_utils ──► prevalence, agreement arithmetic
+    └──► analyzer.hypothesis_test() ──► HypothesisTestResult (separate)
 ```
+
+A result built from counts (`build_from_nij_matrix`) has no rater identity,
+so its `rater_profile` is `NotComputed`.
 
 ## Dependencies
 

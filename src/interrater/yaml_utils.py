@@ -11,6 +11,9 @@ Adding a new alias is a one-line edit to YAML_KEY_ALIASES.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from difflib import get_close_matches
+
 # ------------------------------------------------- YAML Key Aliases #
 
 YAML_KEY_ALIASES: dict[str, list[str]] = {
@@ -71,3 +74,37 @@ def normalize_yaml_key(data_dict: dict, canonical_key: str) -> None:
 
     if len(present) == 1 and present[0] != canonical_key:
         data_dict[canonical_key] = data_dict.pop(present[0])
+
+
+# --------------------------------------------------- Unknown keys #
+
+def refuse_unknown_keys(
+    data_dict: dict, valid_keys: Iterable[str], owner: str
+) -> None:
+    """
+    Refuse any key of ``data_dict`` that is not in ``valid_keys``.
+
+    A misspelt key would otherwise reach the dataclass constructor, which
+    raises Python's bare "unexpected keyword argument", without the
+    config's name or what it accepts. I name the config (``owner``), the
+    unknown keys, the nearest valid key for each, and every valid key.
+
+    Raises
+    ------
+    TypeError
+        If any key is not valid.
+    """
+    valid = set(valid_keys)
+    unknown = sorted(str(key) for key in set(data_dict) - valid)
+    if not unknown:
+        return
+    hints = []
+    for key in unknown:
+        close = get_close_matches(key, valid, n=1)
+        if close:
+            hints.append(f"{key!r} -> did you mean {close[0]!r}?")
+    hint = f" ({'; '.join(hints)})" if hints else ""
+    raise TypeError(
+        f"[{owner}] Error: unknown key(s) {unknown}{hint}. "
+        f"Valid keys are: {sorted(valid)}."
+    )

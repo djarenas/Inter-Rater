@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[BrennanPredigerResult] Error"
 _TOL = 1e-9
+# Printed on unbalanced data: the formula is Gwet's, not an approximation
+UNBALANCED_DATA_LABEL = "unbalanced data: Gwet (2014) formula for missing ratings"
 
 # Why kappa_max is not computed for me. The analyzer passes it in.
 KAPPA_MAX_NOT_COMPUTED = (
@@ -35,13 +37,14 @@ class BrennanPredigerResult(PointEstimateResult):
 
     I inherit point, confidence_interval, bootstrap_distribution, and
     balance_profile from PointEstimateResult. balance_profile tells users
-    and visualizers whether this is the exact coefficient or a generalization
-    applied to unbalanced data.
+    and visualizers whether the data was balanced.
 
     When is_exact is True, the data was balanced and the formula is the
-    standard Brennan-Prediger with Pe = 1/K. When False, the per-subject
-    averaging generalization was used -- a reasonable number, but not the
-    original coefficient.
+    standard Brennan-Prediger with Pe = 1/K. When False, I am Gwet's formula
+    for missing ratings: Po averaged per subject, each subject divided by its
+    own rater count, over the same Pe (Gwet, K. L. (2014). Handbook of
+    Inter-Rater Reliability, 4th ed., as implemented in irrCAC's
+    ``bp.coeff.raw``). Not an approximation; my printed form names the source.
 
     weights_type is on me (not just on the config) because weighted and
     unweighted Brennan-Prediger are different statistics with different
@@ -207,7 +210,7 @@ class BrennanPredigerResult(PointEstimateResult):
         return "κ_max not computed (fixed chance term)"
 
     def _data_line(self) -> str:
-        exact = "exact formula" if self.is_exact else "approximation (unbalanced data)"
+        exact = "exact formula" if self.is_exact else UNBALANCED_DATA_LABEL
         return (
             f"{self._subjects_phrase()}; {self._raters_phrase()}; "
             f"{self._weights_phrase(self.weights_type)}; {exact}"
@@ -235,9 +238,11 @@ class BrennanPredigerResult(PointEstimateResult):
     @property
     def is_exact(self) -> bool:
         """
-        Whether this is the exact formula or an approximation.
+        Whether the data was balanced, where every reference agrees on the
+        formula.
 
         Returns True if data was balanced (constant raters per subject).
-        Returns False if an approximation was used for unbalanced data.
+        Returns False on unbalanced data, where I am Gwet's (2014) formula
+        for missing ratings.
         """
         return self.balance_profile.is_balanced

@@ -25,14 +25,14 @@ class FleissKappaConfig(WeightableGroupConfig):
     averaging of marginals.
 
     I default balanced_data_only=True (prefer exact formula), but the user can
-    set it to False to allow approximations. The analyzer then reports what
-    was used and warns if approximation occurred.
+    set it to False to allow the approximation. The result then says which
+    was used.
 
     Attributes
     ----------
     balanced_data_only : bool, default True
         If True, the analyzer will throw an error on unbalanced data (exact formula only).
-        If False, the analyzer will allow unbalanced data (use approximation + warning).
+        If False, the analyzer will allow unbalanced data (use the approximation).
     Fleiss' kappa supports weighting for ordinal data. Weights are declared
     in the semantics of the ratings (categories kind 'ordered' or 'weighted'),
     not here.

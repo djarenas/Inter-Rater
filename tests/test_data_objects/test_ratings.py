@@ -116,10 +116,10 @@ class TestCannotBeChanged:
             del simple_ratings.category_index
 
     def test_subclass_names_itself(self, simple_semantics):
-        from interrater.data_objects.paired_ratings import PairedRatings
+        from interrater.data_objects.balanced_ratings import BalancedRatings
 
-        r = PairedRatings(SIMPLE_INDEX.copy(), simple_semantics)
-        with pytest.raises(AttributeError, match=r"\[PairedRatings\] Error: PairedRatings is read-only"):
+        r = BalancedRatings(SIMPLE_INDEX.copy(), simple_semantics)
+        with pytest.raises(AttributeError, match=r"\[BalancedRatings\] Error: BalancedRatings is read-only"):
             r.category_index = None
 
 

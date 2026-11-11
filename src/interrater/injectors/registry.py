@@ -75,7 +75,7 @@ def hydrate_injection_step(step_dict: dict) -> InjectorConfig:
     step_dict : dict
         A single injection step from YAML, e.g.
         ``{"type": "rater_bootstrap", "source_raters": [0, 1], ...}``.
-        Mutated in place (``type`` key is popped).
+        Not changed: I work on a copy.
 
     Returns
     -------
@@ -102,6 +102,7 @@ def hydrate_injection_step(step_dict: dict) -> InjectorConfig:
         )
 
     registry = get_registry()
+    step_dict = dict(step_dict)          # the caller's dict keeps its "type"
     step_type = step_dict.pop("type")
 
     if step_type not in registry:

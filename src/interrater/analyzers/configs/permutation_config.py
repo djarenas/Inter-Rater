@@ -265,10 +265,13 @@ class PermutationConfig:
                 f"a dictionary. Got {type(data_dict).__name__}"
             )
 
-        from ...yaml_utils import normalize_yaml_key
+        from ...yaml_utils import normalize_yaml_key, refuse_unknown_keys
 
         # Normalize alias → canonical key
         normalize_yaml_key(data_dict, "bootstrap_mean_config")
+
+        # After the aliases, so 'bootstrap_mean' is accepted
+        refuse_unknown_keys(data_dict, {f.name for f in fields(cls)}, cls.__name__)
 
         # Hydrate: convert sub-dict to typed config object
         if "bootstrap_mean_config" in data_dict:
@@ -320,9 +323,9 @@ class PermutationConfig:
         """
         Load configuration from a YAML file.
 
-        I read the file, validate that all keys are recognized, and
-        delegate to ``build_from_dict`` for alias normalization and
-        hydration. Children that override ``build_from_dict`` get
+        I read the file and delegate to ``build_from_dict``, which
+        normalizes aliases, refuses unknown keys and hydrates the rest.
+        Children that override ``build_from_dict`` get
         correct dispatch via ``cls`` without overriding this method.
 
         Parameters
@@ -346,23 +349,8 @@ class PermutationConfig:
         """
         import yaml
 
-        from ...yaml_utils import YAML_KEY_ALIASES
-
         with open(path) as f:
             data_dict = yaml.safe_load(f)
-
-        # Check for unknown YAML keys (allow aliases too)
-        valid_fields = {f.name for f in fields(cls)}
-        for aliases in YAML_KEY_ALIASES.values():
-            valid_fields.update(aliases)
-        unknown = set(data_dict) - valid_fields
-        if unknown:
-            raise TypeError(
-                f"{_ERROR_PREFIX}: build_from_yaml: Unknown YAML "
-                f"key(s): {unknown}. Valid keys are: "
-                f"{sorted(valid_fields)}. "
-                f"Check your YAML configuration file."
-            )
 
         return cls.build_from_dict(data_dict)
 

@@ -21,8 +21,8 @@ def _prefix(cls_name: str) -> str:
     """
     Name the class the caller asked for, not the one defining the check.
 
-    A PairedRatings that fails a base check -- a bad dtype, a value outside the
-    declared categories -- should say PairedRatings. It is what the user named,
+    A BalancedRatings that fails a base check -- a bad dtype, a value outside
+    the declared categories -- should say BalancedRatings. It is what the user named,
     and the check happening to live on the parent is an implementation detail
     they have no reason to know.
     """
@@ -181,9 +181,9 @@ def validate_subjects_rated_twice(
 
 # What the narrower types add -------------------------------------------------  #
 #
-# These take the concrete class name, because a PairedRatings that fails the
-# balance check should say PairedRatings rather than the class that happens to
-# define the check.
+# These take the concrete class name, so that a subclass of BalancedRatings
+# that fails the balance check says its own name rather than the class that
+# happens to define the check.
 
 
 def validate_balanced(category_index: np.ndarray, cls_name: str) -> None:
@@ -198,27 +198,4 @@ def validate_balanced(category_index: np.ndarray, cls_name: str) -> None:
             f"{distinct[:5].tolist()} (e.g. rows {offenders.tolist()}). Hold "
             f"this as Ratings and accept the approximated Fleiss' kappa, or "
             f"drop the odd subjects first."
-        )
-
-
-def validate_crossed(category_index: np.ndarray, cls_name: str) -> None:
-    """Every rater rated every subject."""
-    gaps = np.flatnonzero((category_index == EMPTY).any(axis=1))
-    if gaps.size:
-        raise ValueError(
-            f"{_prefix(cls_name)}: every rater must have rated every subject, "
-            f"but {gaps.size:,} subject(s) have at least one empty (e.g. rows "
-            f"{gaps[:3].tolist()}). Hold this as BalancedRatings if the rater "
-            f"count is constant, or as Ratings otherwise."
-        )
-
-
-def validate_exactly_two_raters(category_index: np.ndarray, cls_name: str) -> None:
-    """Exactly two rater columns."""
-    found = category_index.shape[1]
-    if found != 2:
-        raise ValueError(
-            f"{_prefix(cls_name)}: exactly 2 raters are needed, got {found}. "
-            f"A paired comparison is defined on two raters and the subjects "
-            f"they share."
         )

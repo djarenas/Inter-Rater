@@ -44,7 +44,7 @@ class ExtremalInjectorConfig(InjectorConfig):
         ``"contrarian"``. Default is ``"majority"``.
     n_new_raters : int
         Inherited from InjectorConfig.
-    random_state : int or None
+    random_state : int or None, default 42
         Inherited from InjectorConfig. Used for tie-breaking.
     """
 

@@ -167,7 +167,9 @@ class RatingsCleaner:
         codes, subject_ids, raters, drops = self._drop(codes, subject_ids)
         codes, cats, categories           = self._resolve_unused_categories(codes)
 
-        self._effective_semantics = self._effective_semantics_for(raters, cats)
+        self._effective_semantics = self._effective_semantics_for(
+            raters, cats, n_subjects=codes.shape[0],
+        )
 
         # Ratings names itself, but not that the array it rejected was one I
         # produced. That is the part worth knowing: the failure is in what the
@@ -519,7 +521,7 @@ class RatingsCleaner:
         return codes, cats, report
 
     def _effective_semantics_for(
-        self, raters: list[str], categories: Categories
+        self, raters: list[str], categories: Categories, n_subjects: int,
     ) -> RatingsSemantics:
         """
         The declaration the surviving data actually describes.
@@ -534,14 +536,18 @@ class RatingsCleaner:
         ``n_subjects`` is deliberately dropped. It was an expectation about
         the frame handed in, already checked before any row was touched, and
         carrying it forward would make it an assertion about what survived --
-        which it never was.
+        which it never was. So the declaration handed in is reused only when
+        it still describes what survived: same raters, same categories, and,
+        if it states ``n_subjects``, every subject.
 
         Built once, here, so there is a single answer to what the effective
         rating task is.
         """
+        declared = self._declared_semantics
         if (
-            list(raters) == list(self._declared_semantics.raters)
-            and categories == self._declared_semantics.categories
+            list(raters) == list(declared.raters)
+            and categories == declared.categories
+            and (declared.n_subjects is None or declared.n_subjects == n_subjects)
         ):
             return self._declared_semantics
 

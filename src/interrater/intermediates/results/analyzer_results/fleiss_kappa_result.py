@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[FleissKappaResult] Error"
 _TOL = 1e-9
+# Printed on unbalanced data: Fleiss (1971) assumed a constant rater count
+UNBALANCED_DATA_LABEL = "approximation (unbalanced data: each subject weighted equally)"
 
 # Why kappa_max is not computed for me. The analyzer passes it in.
 KAPPA_MAX_NOT_COMPUTED = (
@@ -196,7 +198,7 @@ class FleissKappaResult(PointEstimateResult):
         return "κ_max not computed (pooled shares)"
 
     def _data_line(self) -> str:
-        exact = "exact formula" if self.is_exact else "approximation (unbalanced data)"
+        exact = "exact formula" if self.is_exact else UNBALANCED_DATA_LABEL
         return (
             f"{self._subjects_phrase()}; {self._raters_phrase()}; "
             f"{self._weights_phrase(self.weights_type)}; {exact}"

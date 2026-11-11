@@ -1018,3 +1018,56 @@ class TestConfigsCarryNoWeights:
         assert not hasattr(Weights, "from_file")
         assert not hasattr(Weights, "build_from_file")
 
+
+
+class TestUnknownKeysRefused:
+    """
+    build_from_dict refuses a misspelt key itself, naming the config, the
+    nearest valid key and every valid key. Before, only build_from_yaml
+    checked, and a dict -- or a config nested in a permutation config --
+    reached the constructor and failed with Python's bare
+    "unexpected keyword argument".
+    """
+
+    def test_coefficient_config(self):
+        with pytest.raises(TypeError) as err:
+            FleissKappaConfig.build_from_dict({"n_resample": 2000})
+        message = str(err.value)
+        assert message.startswith("[FleissKappaConfig] Error: unknown key(s) ['n_resample']")
+        assert "did you mean 'n_resamples'?" in message
+        assert "'balanced_data_only'" in message
+
+    def test_nested_config_of_coefficient(self):
+        with pytest.raises(TypeError, match=r"\[CohenKappaConfig\] Error: unknown key\(s\) \['ci_metod'\]"):
+            PairwisePermutationConfig.build_from_dict({
+                "coefficient_to_compute": "cohen_kappa",
+                "config_of_coefficient": {"ci_metod": "bca"},
+            })
+
+    def test_permutation_config(self):
+        with pytest.raises(TypeError, match=r"\[SubsetPermutationConfig\] Error: unknown key\(s\) \['subset_kk'\]"):
+            SubsetPermutationConfig.build_from_dict({
+                "coefficient_to_compute": "fleiss_kappa",
+                "config_of_coefficient": {},
+                "subset_kk": 3,
+            })
+
+    def test_hypothesis_test(self):
+        with pytest.raises(TypeError, match=r"\[HypothesisTestConfig\] Error: unknown key\(s\) \['n_permutation'\]"):
+            CohenKappaConfig.build_from_dict({"hypothesis_test": {"n_permutation": 100}})
+
+    def test_aliases_still_accepted(self):
+        cfg = CohenKappaConfig.build_from_dict({"hypothesis_test": {"n_permutations": 100}})
+        assert cfg.hypothesis_test_config.n_permutations == 100
+        perm = PairwisePermutationConfig.build_from_dict({
+            "coefficient_to_compute": "cohen_kappa",
+            "config_of_coefficient": {},
+            "bootstrap_mean": {"method": "correlated"},
+        })
+        assert perm.bootstrap_mean_config.method == "correlated"
+
+    def test_yaml_gives_the_same_message(self, tmp_path):
+        path = tmp_path / "fleiss.yaml"
+        path.write_text("n_resample: 2000\n")
+        with pytest.raises(TypeError, match=r"\[FleissKappaConfig\] Error: unknown key\(s\) \['n_resample'\]"):
+            FleissKappaConfig.build_from_yaml(path)

@@ -560,10 +560,11 @@ class TestHydrateInjectionStep:
         assert isinstance(cfg, DistributionInjectorConfig)
         assert cfg.n_new_raters == 3
 
-    def test_type_key_popped(self):
+    def test_caller_dict_unchanged(self):
+        """The step dict handed in keeps its type key."""
         step = {"type": "extremal", "strategy": "minority"}
         hydrate_injection_step(step)
-        assert "type" not in step
+        assert step == {"type": "extremal", "strategy": "minority"}
 
     def test_missing_type_rejected(self):
         with pytest.raises(ValueError, match="type"):

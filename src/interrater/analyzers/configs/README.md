@@ -189,7 +189,9 @@ hypothesis_test:                     # alias for hypothesis_test_config
 ```
 
 `build_from_dict` resolves key aliases and turns nested dicts into config
-objects. Unknown keys are refused, with the valid keys listed.
+objects. Unknown keys are refused, with the nearest match and the valid keys
+listed, from a dict or YAML alike and at every level (a nested
+`config_of_coefficient` or `hypothesis_test` too).
 
 `summary()`:
 

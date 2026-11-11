@@ -34,7 +34,7 @@ class GroupAnalyzer(Analyzer, ABC):
     I add validation specific to group analysis:
     - Config must be GroupCoefficientConfig
     - If config.balanced_data_only=True, ratings must have constant raters per subject
-    - If config.balanced_data_only=False, allow unbalanced data (use approximation)
+    - If config.balanced_data_only=False, allow unbalanced data
 
     Attributes
     ----------
@@ -398,6 +398,6 @@ class GroupAnalyzer(Analyzer, ABC):
             raise ValueError(
                 f"{_ERROR_PREFIX}: config.balanced_data_only=True but data is unbalanced. "
                 f"Subjects have varying numbers of raters: {self.balance_profile.subject_counts}. "
-                f"Either set balanced_data_only=False to use the approximation, "
+                f"Either set balanced_data_only=False to accept unbalanced data, "
                 f"or provide balanced data (constant raters per subject)."
             )

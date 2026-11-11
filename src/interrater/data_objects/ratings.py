@@ -137,8 +137,8 @@ class Ratings:
         """
         Every check I make, in order.
 
-        Each is told the concrete class name, so a PairedRatings failing one
-        of these says PairedRatings. The check living on me is an
+        Each is told the concrete class name, so a BalancedRatings failing one
+        of these says BalancedRatings. The check living on me is an
         implementation detail the caller has no reason to know.
         """
         name = type(self).__name__

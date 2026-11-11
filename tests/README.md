@@ -39,7 +39,7 @@ Built bottom-up along the dependency chain:
 Tests for the validated data-object chain that sits between raw data and
 the agreement functions. Built bottom-up along the dependency chain:
 
-    Ratings -> BalancedRatings -> PairedRatings
+    Ratings -> BalancedRatings
 
 Each layer is tested for construction, type guards, validation rejects, public
 API, and equality. The two frozen datasets in conftest (SIMPLE and GAPPY) are
@@ -49,7 +49,6 @@ small enough that every property can be verified by counting on fingers.
 |------|---------------|-------|
 | test_ratings.py | Construction (subject IDs, properties, dtype cast, frozen arrays), validation (dtype, shape, semantics mismatch, value range), subject ID validation (length, duplicates, unique flag), presence checks (idle rater, unrated subject), check methods (balance, crossing, pairing), to_nij_matrix, equality | 33 |
 | test_balanced_ratings.py | Balanced validation (accepted, rejected), public API (raters_per_subject, build_from_ratings, preserves subject IDs), error prefix propagation | 8 |
-| test_paired_ratings.py | Paired validation (accepted, three raters rejected, gaps rejected), error prefix (own checks, inherited checks) | 5 |
 | conftest.py | Shared fixtures: SIMPLE (3x2, fully crossed) and GAPPY (4x3, with empties) datasets, category objects, semantics, Ratings instances | -- |
 
 
@@ -79,7 +78,6 @@ Built bottom-up along the dependency chain:
 
     NijMatrix -> Weights -> EstimatorInput
     BalanceProfile -> RaterSharedMatrix
-    _profile_utils (prevalence, prevalence_per_rater, coverage_per_rater)
     CIResult -> BootstrapCIResult / ParametricCIResult
     PointEstimateResult -> 8 coefficient results
     PermutationResult -> PairwisePermutationResult -> SubsetPermutationResult -> MultiKSubsetResult
@@ -97,7 +95,6 @@ appear here only as inputs, built by the `_ci()` helper at the top of
 |------|---------------|-------|
 | test_estimator_parts.py | NijMatrix (construction, validation, properties, build_from_ratings, equality, error prefix), Weights (identity/linear/quadratic/custom, validation, equality, error prefix), EstimatorInput (construction, validation, properties, subsetting, equality, error prefix) | 104 |
 | test_data_profiles.py | BalanceProfile (build_from_nij_matrix, n_subjects/n_categories/n_raters, is_balanced, rater_counts, summary, equality, error prefix), RaterSharedMatrix (build_from_nij_matrix, shape, values, symmetry, self-counts, equality, error prefix) | 59 |
-| test_profile_utils.py | prevalence (shape, values, sums-to-1), prevalence_per_rater (shape, values, row-sums), coverage_per_rater (shape, values, range) | 11 |
 | test_analysis_results.py | PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 287 |
 | conftest.py | Shared fixtures: BALANCED_NIJ (4x3x3, all rows sum to 3), UNBALANCED_NIJ (4x2, variable row sums), SIMPLE_INDEX (2x3, for index-based tests), SIMPLE_SHARED (3x3 symmetric, for shared-matrix tests) | -- |
 
@@ -112,7 +109,7 @@ classes that use them.
 
 | File | What it tests | Tests |
 |------|---------------|-------|
-| test_injector_configs.py | InjectorConfig (defaults, validation, build_from_dict, build_from_yaml, summary), DistributionInjectorConfig (prevalences validation, uniform/custom modes), WithinSubjectInjectorConfig (copy_prob validation, noise_mode validation) | 80 |
+| test_injector_configs.py | InjectorConfig (defaults, validation, build_from_dict, build_from_yaml, summary), DistributionInjectorConfig (prevalences validation, uniform/custom modes), WithinSubjectInjectorConfig (noise_rate validation) | 80 |
 | test_injectors.py | RaterInjector (input validation, name building, inject output shape/columns/subject IDs), DistributionInjector (config type, prevalences mismatch, uniform/custom generation, reproducibility), WithinSubjectInjector (config type, pure copy, unanimous rows, noise fallback, reproducibility) | 61 |
 | conftest.py | Shared fixtures: simple Ratings, category objects, injector configs | -- |
 
@@ -253,7 +250,7 @@ shapes, provenance and reference values, and are not repeated here.
 - **Frozen arrays**: module-level constants in conftest, copied into fixtures so
   no test can mutate what another test sees.
 - **Error prefix**: every validation error names the concrete class the caller
-  asked for (`[PairedRatings] Error`, not `[Ratings] Error`), and the tests
+  asked for (`[BalancedRatings] Error`, not `[Ratings] Error`), and the tests
   verify this.
 - **One file per sub-package**: test_intermediates/ groups tests by sub-package
   (estimator_parts, data_profiles, analysis_results) rather than one file per

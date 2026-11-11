@@ -10,7 +10,7 @@ properties, DataFrame round-trip, frozen.
 
 Weights is a K x K symmetric matrix of credits in [0, 1] with 1.0 on the
 diagonal. Key behaviours: construction validation, factory methods (identity,
-linear, quadratic, build_from_type), is_identity property, equality.
+linear, quadratic), is_identity property, equality.
 
 EstimatorInput carries category_index + K + optional weights + optional
 subject_ids. Key behaviours: O(1) validation, properties, nij computation,
@@ -331,33 +331,6 @@ class TestWeightsFactories:
         w = Weights.quadratic(2)
         expected = np.array([[1.0, 0.0], [0.0, 1.0]])
         np.testing.assert_allclose(w.matrix, expected, atol=1e-12)
-
-    def test_from_type_identity_returns_none(self):
-        """build_from_type('identity', k) returns None -- identity is the default."""
-        assert Weights.build_from_type("identity", 3) is None
-
-    def test_from_type_linear(self):
-        """build_from_type('linear', k) returns the same as linear(k)."""
-        w = Weights.build_from_type("linear", 3)
-        expected = Weights.linear(3)
-        np.testing.assert_allclose(w.matrix, expected.matrix, atol=1e-12)
-
-    def test_from_type_quadratic(self):
-        """build_from_type('quadratic', k) returns the same as quadratic(k)."""
-        w = Weights.build_from_type("quadratic", 3)
-        expected = Weights.quadratic(3)
-        np.testing.assert_allclose(w.matrix, expected.matrix, atol=1e-12)
-
-    def test_from_type_custom_raises(self):
-        """build_from_type('custom', k) raises -- pass a matrix to Weights() instead."""
-        with pytest.raises(ValueError, match=r"does not support 'custom'"):
-            Weights.build_from_type("custom", 3)
-
-    def test_from_type_unknown_raises(self):
-        """build_from_type with an unknown string raises."""
-        with pytest.raises(ValueError, match=r"unknown weights_type"):
-            Weights.build_from_type("banana", 3)
-
 
 class TestWeightsBuildFromCategories:
     """The semantics is the one place weights are declared; I read them from there."""

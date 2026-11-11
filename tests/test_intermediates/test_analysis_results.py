@@ -2763,7 +2763,7 @@ class TestFleissKappaResult:
             **_pooled(0.523, weighted=True),
         ))
         assert "linear weights" in s
-        assert "approximation (unbalanced data)" in s
+        assert "approximation (unbalanced data: each subject weighted equally)" in s
 
     def test_summary_keys(self):
         d = FleissKappaResult(
@@ -2975,6 +2975,14 @@ class TestGwetsAC1Result:
         assert "Gwet's AC1" in s
         assert "exact formula" in s
 
+    def test_str_unbalanced_names_gwets_formula(self):
+        """Unbalanced AC1 is Gwet's own formula for missing ratings, not an approximation."""
+        s = str(GwetsAC1Result(
+            0.7, None, None, _unbalanced_bp(), ci_method="bca", **_gwet(0.7),
+        ))
+        assert "unbalanced data: Gwet (2014) formula for missing ratings" in s
+        assert "approximation" not in s
+
     def test_summary_keys(self):
         d = GwetsAC1Result(0.7, None, None, _bp(), ci_method="bca", **_gwet(0.7)).summary()
         assert d["is_exact"] is True
@@ -3102,6 +3110,16 @@ class TestBrennanPredigerResult:
         assert "Brennan-Prediger" in s
         assert "unweighted" in s
         assert "exact formula" in s
+
+    def test_str_unbalanced_names_gwets_formula(self):
+        """Unbalanced Brennan-Prediger is Gwet's formula for missing ratings."""
+        s = str(BrennanPredigerResult(
+            0.835, None, None, _unbalanced_bp(),
+            ci_method="bca", weights_type="identity",
+            **_uniform(0.835),
+        ))
+        assert "unbalanced data: Gwet (2014) formula for missing ratings" in s
+        assert "approximation" not in s
 
     def test_summary_keys(self):
         d = BrennanPredigerResult(
