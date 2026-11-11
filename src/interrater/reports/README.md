@@ -1,12 +1,13 @@
 # Reports
 
 What a run of the package did, written for a person to read. Reports are
-terminal -- nothing downstream consumes one. They are a presentation layer,
-a sibling of `visualizers` in the medium of prose.
+meant to be terminal: nothing downstream should consume one. 
+They are a presentation layer, a sibling of `visualizers` in the medium of prose.
 
 Every report holds everything it computed and offers two views of it:
-`summary()` in plain types for writing to disk, and `render(verbosity)`
-built from that summary so the two cannot drift.
+`summary()` in plain types for writing to disk, and `render(verbosity)` as
+text. Both read the same fields. `_wording.py`
+holds `counted(n, "rater")`, which spells "1 rater" and "1,617 rows".
 
 ## Report classes
 
@@ -24,8 +25,9 @@ The top-level receipt. It holds:
 
 - **declared_semantics** -- the rating task as written, before any row was read.
 - **effective_semantics** -- the rating task the surviving data actually
-  describes. Identical to the declared one unless a rater or a category
-  was dropped.
+  describes. The declared one unless something was dropped: a rater or a
+  category changes the task (`semantics_changed`); a subject only clears a
+  declared `n_subjects`, which was an expectation about the file.
 - **config** -- the `CleanerConfig` that was applied (imported under
   `TYPE_CHECKING` to avoid a circular dependency with `cleaners/`).
 - **matching, drops, categories** -- the three sub-reports.
@@ -48,3 +50,8 @@ extra section names what moved and why it matters for the arithmetic.
 - `semantics` -- `RatingsSemantics`, `DistanceCategories` (for the
   weight-shift warning when K changes on an ordinal scale)
 - `cleaners` -- `CleanerConfig` (annotation only, under `TYPE_CHECKING`)
+
+## Future
+
+- As of 2.1.0, a coefficient's result is read from its own printed form
+  (`print(result)`). Reports may take over some of that in a later version.

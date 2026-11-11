@@ -1,4 +1,4 @@
-# Why objects?
+## Why objects
 
 *Part of the [interrater docs](https://djarenas.github.io/packages/interrater/interrater/) · `pip install interrater` · [Source on GitHub](https://github.com/djarenas/Inter-Rater)*
 
@@ -7,7 +7,36 @@ packages, where a coefficient is usually a function that takes an array and
 returns a number. `interrater` is built from objects instead. This page lists
 what that buys.
 
-## Objects that cannot be wrong
+### Containers hold data; semantics give it meaning
+
+- NumPy arrays and pandas DataFrames are awesome because they are so
+  flexible, and the same flexibility means they cannot carry meaning. A column
+  of integers does not know whether it is a rater, a subject, or a score; a 3
+  does not know whether it is a category, a count, or a third rater. That is
+  what makes them good containers, and it is why they cannot be the thing an
+  analysis validates.
+- `RatingsSemantics` is the object that gives a container meaning. It says
+  which raters there are, which categories they could choose from, how many
+  subjects there should be, and whether a subject may appear twice. With it, a
+  `Ratings` is a record of a rating task rather than a table of small
+  integers.
+- The idea has names in software engineering (value objects, typed wrappers)
+  and partial forms in data tools (categorical dtypes, named dimensions), but
+  it is uncommon in statistics code, where the function takes an array and the
+  meaning stays in the analyst's head. Here the object records what the raters
+  were told, which is the same fact the statistical background page says the
+  chance term depends on.
+- Meaning is where the facts the data cannot show are kept. A category that no
+  rater used still exists, because the declaration says so, and a coefficient
+  whose chance term depends on the number of categories (Bennett's S,
+  Brennan-Prediger) sees the scale the raters had rather than the subset they
+  used. How far apart two categories are, nominal, ordinal with linear or
+  quadratic distances, or a custom matrix, is declared with the categories,
+  and the analyzer configs declare no weights at all.
+- It is written before the data is seen and loads from YAML, so a reviewer can
+  be shown what the raters were asked to do.
+
+### Objects that cannot be wrong
 
 - A `Ratings` is validated once, when it is built. Nothing downstream re-checks
   that a value is in the declared categories, that no rater is idle, or that
@@ -22,7 +51,7 @@ what that buys.
 - Validation runs before the loop, so the formulas inside ten thousand
   bootstrap draws do no checking at all.
 
-## Inheritance, so each rule is written once
+### Inheritance, so each rule is written once
 
 - Checks shared by several configurations live on parent classes. A leaf adds
   only its own and calls `super()`; no function has to remember to call
@@ -47,7 +76,7 @@ what that buys.
   `Analyzer`. A coefficient supplies one formula, and the bootstrap calls the
   same function as the point estimate, so the two cannot drift apart.
 
-## Parallel hierarchies, so the pieces fit
+### Parallel hierarchies, so the pieces fit
 
 - The analyzer tree and the config tree have the same shape, so an analyzer can
   only receive the config built for it.
@@ -58,7 +87,7 @@ what that buys.
   the right input; inheriting from the right parent class already takes care
   of it.
 
-## Results that remember how they were made
+### Results that remember how they were made
 
 - An agreement statistic is more than a point estimate. It matters how many
   subjects and raters there were, how complete the ratings were, whether some
@@ -68,6 +97,12 @@ what that buys.
 - The result objects also carry the confidence level, the method requested,
   the method that actually ran, and how many bootstrap draws were usable. A
   confidence interval is more than a low and a high.
+- Results also check themselves. A bootstrap result stores both the resampled
+  values and the interval built from them, and it is refused at construction
+  if the interval is not the one those values give. A permutation test stores
+  the number of shuffles that matched or beat the observed value, and its
+  p-value is recomputed from that count at construction; if the two disagree
+  the object is refused. A result that contradicts itself cannot be built.
 - Some runs fail: a choice that is incompatible with a statistic, a bootstrap
   draw in which only one category appears, a pair of raters with too few
   shared subjects. Instead of a zero or a silent NaN, the result records what
@@ -76,19 +111,19 @@ what that buys.
   its weight matrix, and every result carries the package version that produced
   it.
 
-## Frozen data, so operations compose
+### Frozen data, so operations compose
 
 - A `Ratings` never changes. Anything that would change it returns a new one.
 - This allows an injected rater, a subset of raters, and any analyzer to chain
   together without a function written for that combination.
 
-## Where this comes from
+### Where this comes from
 
 Version 1 of this package was 745 lines of functions. It read two text files,
 printed a report, drew a figure, and was used in published systematic reviews.
-It also had only five error messages: four were a `print` followed by `return False`,
-and the fifth printed and carried on, so a pair of raters that failed its check
-kept the `0.0` in its cell and entered the per-rater mean; one chance term, the pooled Σ p̄_j², served every coefficient,
+It also only had five error messages, each a `print` followed by `return False`; a
+pair of raters that failed its check kept the `0.0` in its cell and entered the
+per-rater mean; one chance term, the pooled Σ p̄_j², served every coefficient,
 so the two-rater result the code called Cohen's kappa was Scott's pi; and the
 standard error of a rater's mean kappa treated pairs sharing that rater as
 independent. Every function computed what it was asked to. Nothing recorded
