@@ -4,7 +4,19 @@
 
 - **Confidence intervals that estimate what they claim to.** Bootstrap
   intervals from resampled subjects, with the null test kept separate and
-  separately named. See above for why.
+  separately named. 
+
+- **Intervals that account for shared subjects.** The mean over rater pairs is
+  bootstrapped by resampling subjects once and recomputing every pair, because
+  the pairs are not independent of each other. Treating them as independent
+  narrows the interval.
+
+- **A declaration of the task, apart from the data.** Raters, categories,
+  expected subject count and the measurement scale are declared in a semantics
+  file before the data is read, and a `Ratings` is validated against that
+  declaration. Weights for ordered or custom scales are declared there too,
+  not in the analysis, because how far apart two categories are is a fact
+  about the task. See [Why objects](why_objects.md).
 
 - **An auditable cleaning layer.** Which strings meant nothing, which were
   repaired and into what, how thin the data was allowed to get: declared in a
@@ -14,126 +26,149 @@
   corrected declaration.
 
 - **Preconditions in the type system.** Exact Fleiss' kappa requires a constant
-  number of raters per subject; that is a property of the data, so it is
-  checked before the coefficient is computed rather than assumed by it.
+  number of raters per subject; Conger's and Light's kappas require every rater
+  to rate every subject, as their definitions say. Those are properties of the
+  data, so they are checked before the coefficient is computed rather than
+  assumed by it. See [Why objects](why_objects.md).
+
+- **Results that cannot contradict themselves.** A bootstrap result is refused
+  if its interval does not follow from its draws; a permutation test is
+  refused if its p-value does not follow from its counts. Every result records
+  the method requested, the method that ran, how many draws were usable, the
+  weight matrix if any, and the package version.
+
+- **Support for unbalanced designs.** Where each subject is rated by a subset
+  of the rater pool rather than all of them, which is the usual case outside a
+  designed reliability study.
+
+- **Pairwise and subset permutation, with visualization.** Compute a
+  coefficient for every pair of raters, or every subset of a given size,
+  bootstrap each unit and the mean, and plot the agreement structure: which
+  pairs agree, which do not, and how much of the spread one rater accounts
+  for. Seven coefficients are available pairwise (Cohen's kappa, Scott's pi,
+  Conger's kappa, Gwet's AC1, Fleiss' kappa, Brennan-Prediger, Krippendorff's
+  alpha), so the same data can be viewed under different chance models side
+  by side. See [Why every pair](why_pairwise.md).
 
 - **Synthetic raters, in eight declared kinds.** Add a reviewer who does not
   exist (a conformist, a contrarian, an echo of the panel with tunable noise, a
   guesser drawing from prevalences you declare) and see what your coefficient
   would have been. The original data is never modified and injected columns are
-  named as such. This does not appear to be available in other agreement
-  packages, and it is the clearest way to ask how much a reported kappa depends
-  on the particular people who produced it. See above.
+  named as such. See
+  [What if one of your raters were someone else?](rater_substitution.md).
 
-- **Intervals that account for shared subjects.** The mean over rater pairs is
-  bootstrapped by resampling subjects once and recomputing every pair, because
-  the pairs are not independent of each other. Treating them as independent
-  understates the interval by 23 to 47% on real screening data.
+- **Hypothesis tests with a declared alternative.** Permutation tests take
+  `two-sided`, `greater` or `less`, the same for every coefficient, and report
+  p-values as (count + 1)/(B + 1), so a p-value is never zero.
 
-- **Support for unbalanced designs.** Where each subject is rated by a subset
-  of the rater pool rather than all of them, which is what most rating tasks
-  can actually afford.
+- **Everything declarable in YAML.** Semantics, cleaning, every coefficient
+  config, and the pairwise and subset configs with their nested injections
+  load from files, so an analysis is recoverable from what it declared.
+  Plotting is the exception, below.
 
-- **Pairwise permutation with visualization.** Compute any agreement
-  coefficient for every pair of raters, bootstrap each pair and the mean, and
-  plot the full agreement structure: which pairs agree, which do not, and
-  how much of the spread one rater accounts for. The plot supports seven
-  coefficients (Cohen's kappa, Scott's pi, Conger's kappa, Gwet's AC1,
-  Fleiss' kappa, Brennan-Prediger, Krippendorff's alpha), so the same data
-  can be viewed under different chance models side by side.
+The changes between 2.0 and 2.1, several of which alter numbers on the same
+data, are listed in the
+[changelog](https://github.com/djarenas/Inter-Rater/blob/main/CHANGELOG.md).
 
 ## What is coming next
 
-Version 2.0 is the pipeline: cleaning, validated data objects, eight
+Version 2 is the pipeline: cleaning, validated data objects, eight
 coefficients, bootstrap intervals, permutation tests, pairwise and subset
 analyses, simulated raters. What follows is mostly about driving that pipeline
-with less ceremony, and widening what it can compute. This is a statement of
+with less ceremony and widening what it can compute. This is a statement of
 direction, not a schedule.
 
-- **Declarative configuration for plots.** Version 2.0 ships plotting as
-  standalone functions: pass a result, get a figure. That is fine once and
-  awkward for a figure in a paper, because the choices that shape it (sort
-  order, which intervals are drawn, labels) live in the call rather than in a
-  file. Plotting moves to the config-plus-plotter pattern already used here for
+- **Declarative configuration for plots.** Plotting ships as standalone
+  functions: pass a result, get a figure. That is fine once and awkward for a
+  figure in a paper, because the choices that shape it (sort order, which
+  intervals are drawn, labels) live in the call rather than in a file.
+  Plotting will move to the config-plus-plotter pattern already used for
   cleaning and analysis, and used throughout
   [eventus](https://github.com/djarenas/eventus), so that a figure is
   reproducible from a declared file. The standalone functions stay, with the
   config objects built on top.
 
-- **One YAML story for every config.** A prerequisite for the above, and worth
-  having on its own. Cleaning, semantics and the top-level analyzer config load
-  from YAML today; the leaf configs do not. When they all do, an entire
-  analysis (cleaning, coefficient, resampling, plotting) is declarable in
-  files and recoverable from them.
+- **Gwet's AC2 and extended weighting schemes.** AC2 is AC1 with weights, so
+  it waits on extending the weight set beyond identity, linear and quadratic
+  to ordinal, interval and ratio, which also widens Krippendorff's alpha to
+  the variants its literature defines. Further coefficients follow once that
+  foundation is in place.
 
-- **Gwet's AC2 and extended weighting schemes.** AC2 is AC1 with weights, so it
-  waits on extending the weight set beyond identity, linear and quadratic to
-  ordinal, interval and ratio, which also widens Krippendorff's alpha to the
-  variants its literature defines. Loading a custom weight matrix from file
-  arrives with it. Further coefficients follow once that foundation is in
-  place.
-
-- **Subset permutation, properly visualised.** Version 2.0 plots subsets sorted
-  by value and as a strip. Neither yet shows what the analysis is for: how
-  agreement degrades as raters are removed, and whose absence accounts for it.
-  A panel across subset sizes is planned, along with a smaller fix that is
-  overdue: results carry rater indices, so plots read `(0, 1)` where they
-  should read `(Smith, Jones)`.
+- **Subset permutation, properly visualised.** The current plots show subsets
+  sorted by value and as a strip. Neither yet shows what the analysis is for:
+  how agreement degrades as raters are removed, and whose absence accounts
+  for it. A panel across subset sizes is planned.
 
 - **Orchestrators, for computing every coefficient at once.** Eight
   coefficients today means eight analyzers and eight configs, with the
-  bookkeeping left to you. An orchestrator takes one dataset and one resampling
-  budget and returns the set, computed on the same resampled subjects so the
-  numbers are comparable.
+  bookkeeping left to you. An orchestrator takes one dataset and one
+  resampling budget and returns the set, computed on the same resampled
+  subjects so the numbers are comparable.
+    - *A warning to my future self.* An analyzer that returns eight
+      coefficients makes it easy to report the largest one, and the gap
+      between Fleiss' kappa and AC1 on skewed data is information only if
+      both numbers are shown. So the orchestrator will ask for a primary
+      coefficient in the config before anything is computed and record it in
+      the result; it will return the set in a fixed order, with no ranking and
+      no sort by value; and it will label each coefficient with the chance
+      model it assumes, so a reader can see why two of them differ.
 
-  A function that hands back eight coefficients is also a function that invites
-  reporting the largest one, and the position of this package is that the
-  comparison across chance models is informative only if the set is reported as
-  a set: the gap between Fleiss' kappa and AC1 on skewed data is a fact about
-  the data, not a menu. So the design is meant to make that the easy path: a
-  primary coefficient declared in the config before anything is computed and
-  recorded in the result, output in a fixed order with no ranking and no
-  sort-by-value convenience, and each coefficient labelled with the chance
-  model it assumes so a reader can see why two numbers differ. Alongside it, a
-  utility for bootstrapping the difference between two estimates directly,
-  because the tempting shortcut, reading non-overlapping 95% intervals as a
-  significant difference, is closer to a p < 0.005 test than a p < 0.05 one
-  (Schenker & Gentleman, 2001).
+- **Testing a difference.** Whether one pair of raters agrees more than
+  another within a pairwise result, where the two share subjects and the test
+  must be paired; and whether two estimates from two different sets of
+  ratings differ, where they do not. In both cases the tempting shortcut,
+  reading non-overlapping 95% intervals as a significant difference, is
+  closer to a test at p < 0.005 than at p < 0.05 (Schenker & Gentleman,
+  2001), so the difference will be bootstrapped directly.
+
+- **The floor of the standard error.** Inject raters with the panel's own
+  error rate, one at a time, and bootstrap at each panel size. The interval
+  narrows as raters are added and stops narrowing at a floor set by the
+  number of subjects, which no panel size can get below. Reading that floor
+  off the curve tells a study whether to recruit raters or subjects. This
+  needs an injector calibrated to the panel's observed disagreement, which
+  the current eight are not.
 
 - **Rater influence by replacement.** For each rater: drop them, inject a
   synthetic replacement (a contrarian, a draw from a declared distribution, a
   resample of the rest of the panel) and re-run. One coefficient per "what if
   this rater were someone else" scenario, which distinguishes a rater who was
-  already noise from one who was holding the panel together. The injectors ship
-  in 2.0; the loop around them does not.
+  already noise from one who was holding the panel together. The injectors
+  ship now; the loop around them does not.
 
-- **Fewer lines, without losing the account of what was decided.** Building an
-  analysis today means naming every config explicitly. That is deliberate where
-  the choice matters, and it is more ceremony than it should be where the choice
-  is obvious: a first coefficient on clean balanced data does not need four
-  objects. 2.1 will explore defaults for config values, under two conditions:
-  anything assumed rather than declared says so in a warning, and the result
-  records which defaults it used, so a figure remains reproducible from what the
-  run reports. Where no default can be chosen safely, it stays an error rather
-  than a guess. Note that this reduces the ceremony around the pipeline, not the
-  pipeline itself: there is still no path that takes a bare array and hands back
-  a coefficient, because that is the interface where the guarantees are lost.
-  More to come.
+- **Fewer lines, without losing the account of what was decided.** Building
+  an analysis today means naming every config explicitly. That is deliberate
+  where the choice matters, and more ceremony than it should be where the
+  choice is obvious: a first coefficient on clean balanced data does not need
+  four objects. A later version will explore defaults for config values, under
+  two conditions: anything assumed rather than declared says so in a warning,
+  and the result records which defaults it used, so a figure remains
+  reproducible from what the run reports. Where no default can be chosen
+  safely, it stays an error rather than a guess. This reduces the ceremony
+  around the pipeline, not the pipeline itself: there is still no path that
+  takes a bare array and hands back a coefficient, because that is the
+  interface where the guarantees are lost.
+
+None of this is scheduled for 2.1.x. Version 2.1.0 is large enough already,
+and already does several things no other agreement package does; the next
+release can be allowed to be small.
 
 Also planned, less immediately: diagnostics for agreement by category and rater
-confusion, a visualiser for the balance profile, convergence checking cheap
-enough to leave on by default, pairwise variants of the individual-marginal
-coefficients, a clustered bootstrap for subjects that are not independent
-draws, and generating ratings from a declared true coefficient, so that an
-estimator can be checked against an answer known in advance, an interval can be
-checked for actually covering it, and a review can be powered before it starts
-rather than regretted after.
+confusion, convergence checking cheap enough to leave on by default,
+leave-one-rater-out as a diagnostic (the `rater_jackknife` flag is refused
+today rather than silently ignored, as it was in 2.0), pairwise variants of
+the individual-marginal coefficients, a clustered bootstrap for subjects that
+are not independent draws, and generating ratings from a declared true
+coefficient, so that an estimator can be checked against an answer known in
+advance, an interval checked for covering it, and a review powered before it
+starts.
 
-One thing is deliberately **not** planned: rater bootstrap will not be offered
-as a confidence interval method, for the reason given above. It remains
-available as an *injector*, where duplicating a rater is the declared intent
-rather than an accident of the procedure.
+One thing is deliberately not planned: rater bootstrap will not be offered as
+a confidence interval method, because a rater drawn twice agrees perfectly
+with themselves and the interval narrows around agreement that was never
+observed. It remains available as an injector, where duplicating a rater is
+the declared intent.
 
 Suggestions and bug reports are welcome at
-[the issue tracker](https://github.com/djarenas/Inter-Rater/issues). If you are
-waiting on something above, saying so is the most useful way to move it up.
+[the issue tracker](https://github.com/djarenas/Inter-Rater/issues). If you
+are waiting on something above, say so there.

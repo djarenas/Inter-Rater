@@ -6,32 +6,28 @@ point estimates against the validated reference values in `example_data/README.m
 These sit above the unit test suite: a unit test checks that `FleissKappaAnalyzer`
 handles a 4x3 NijMatrix correctly; an integration test checks that the full
 pipeline -- load file, clean, build Ratings/NijMatrix, configure analyzer,
-estimate -- reproduces a published result end-to-end.
+estimate-- reproduces a published result end-to-end.
 
 
 ## Design decisions
 
 **Point estimates only (deterministic).** Each test asserts the point estimate
-to 3 decimal places. This is deterministic -- no bootstrap needed, runs in
-milliseconds. CI structure (lower < point < upper) is checked as a sanity
-guard.
+to 3 decimal places. This is deterministic, no bootstrap needed, and runs in
+milliseconds. CI structure (lower < point < upper) is also asserted, not to
+test the interval but as a guard on the resampling: it fails only when the
+bootstrap drew from different subjects than the point was computed from (next
+item).
 
 **The guard uses percentile at B=250, and the method is not incidental.**
-Under percentile the point estimate always falls inside its own interval, so
-asserting it is a real check -- a failure means the bootstrap drew from a
+- Under percentile the point estimate always falls inside its own interval, so
+asserting it is a real check. A failure means the bootstrap drew from a
 different set of subjects than the point estimate was computed from, which is
-exactly the bug `test_subset_permutation.py` exists for. Under BCa it is not
-an invariant at all: strong bias correction can place the interval entirely to
+exactly the bug `test_subset_permutation.py` exists for. 
+- Under BCa, strong bias correction can place the interval entirely to
 one side of the point, legitimately, which is why `PointEstimateResult` stopped
 requiring it. B=250 is Efron & Tibshirani (1986) section 9's minimum for a
 useful percentile interval; below it every interval these tests build would
 report `below_recommended_resamples` and say so when printed.
-
-These tests previously used BCa at B=50, which was under the published minimum
-of 1000 for *that* method and paid for a jackknife besides -- BCa needs one
-estimator call per subject regardless of B, so on the larger fixtures the
-jackknife cost far more than the bootstrap. Percentile at 250 runs the four
-largest fixtures in 0.2s against 1.8s.
 
 **BCa is still covered end-to-end**, once, in `test_reference_data.py` at
 B=1000 on the 30-subject Fleiss fixture. See `bca_fleiss_config`.
@@ -41,8 +37,8 @@ fixtures. Each test file covers one logical group (reference data, research
 data, permutations).
 
 **Tolerance.** `pytest.approx(expected, abs=5e-4)` for 3-decimal-place
-agreement. This is looser than the unit test tolerance (1e-12) because these
-are end-to-end checks, not formula-level assertions.
+agreement. They are looser than the unit test tolerance (1e-12) because these
+are end-to-end checks.
 
 **No slow marks for now.** Everything uses low `n_resamples`. A future
 `@pytest.mark.slow` tier could run full `n_resamples=4000` assertions against
@@ -73,8 +69,8 @@ the README's CI bounds.
 | ScottsAnalyzer | Synthetic 2-rater | — (not weightable) | 1 |
 | CongerKappaAnalyzer | SR1 prelim | — (not weightable) | 1 |
 | LightKappaAnalyzer | SR1 prelim | — (not weightable) | 1 |
-| PairwisePermutationAnalysis | SR1 prelim (corr. + indep.) | — | 2 |
-| SubsetPermutationAnalysis | SR1 main (k=2 and k=3) | — | 5 |
+| PairwisePermutationAnalysis | SR1 prelim (corr. + indep.) | SR1 prelim (semantics weights) | 3 |
+| SubsetPermutationAnalysis | SR1 main (k=2 and k=3) | SR1 prelim (semantics weights) | 6 |
 
 
 ## Files
@@ -82,14 +78,16 @@ the README's CI bounds.
 | File | What it tests | Tests |
 |------|---------------|-------|
 | test_reference_data.py | Datasets with published reference values, plus the one end-to-end BCa test | 11 |
-| test_research_data.py | Original systematic review datasets (internal validation against README) | 9 |
+| test_research_data.py | Original systematic review datasets (internal validation against README) | 10 |
 | test_subset_permutation.py | Subset permutation on partially crossed data -- the measurable-pool regression | 5 |
-| test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches | 4 |
+| test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches, and weights declared in the semantics | 13 |
 | test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | 4 |
 | test_missing_structure.py | The three shuffles keep SR1 main's missing-data design | 5 |
+| test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 43 |
+| test_statistical_background.py | `example_data/Statistical_background/`: the committed tables reproduce, interrater gives the page's numbers, and a wrong page value fails | 3 |
 | conftest.py | Dataset-loading fixtures, shared analyzer config builders | -- |
 
-**Total: 33 tests.** Counts here are from `pytest --collect-only`; if you
+**Total: 94 tests.** Counts here are from `pytest --collect-only`; if you
 change a file, re-derive rather than adjust by hand.
 
 
@@ -121,7 +119,7 @@ Tests against datasets with externally published reference values.
 | test_scotts_pi | ScottsAnalyzer | 0.641 | V2 validated, = Fleiss at n=2 |
 
 
-## test_research_data.py (9 tests)
+## test_research_data.py (10 tests)
 
 Tests against the original systematic review datasets. Each SR gets one
 coefficient chosen to exercise a different analyzer and avoid redundancy.
@@ -133,6 +131,7 @@ coefficient chosen to exercise a different analyzer and avoid redundancy.
 | test_fleiss_kappa | FleissKappaAnalyzer | 0.493 | Group coefficient on balanced |
 | test_conger_kappa | CongerKappaAnalyzer | 0.494 | Group-level, individual marginals |
 | test_light_kappa | LightKappaAnalyzer | 0.496 | Mean of C(4,2)=6 pairwise Cohens; n_pairs=6 |
+| test_unquoted_category_names | FleissKappaAnalyzer | 0.493 | `names: [1, 0, -1]` unquoted in YAML gives the same ratings and kappa |
 
 Conger's group-level estimate (0.494) differs from the pairwise-mean Cohen
 kappa (0.496) because it uses each rater's full marginal distribution, not
@@ -225,7 +224,7 @@ place by establishing that the two pools diverge here at all -- without that,
 the other two would prove nothing.
 
 
-## test_weighted.py (4 tests)
+## test_weighted.py (13 tests)
 
 Weighted analysis across multiple datasets. Tests that distance-based weighting
 changes the point estimate (weighted != unweighted) and exercises both
@@ -253,6 +252,16 @@ collapse to identity (there is only one distance). All datasets below have K=3.
 | Test | Analyzer | Weights | Expected | Notes |
 |------|----------|---------|----------|-------|
 | test_brennan_prediger_linear | BrennanPredigerAnalyzer | linear | 0.651 | Second WeightableGroup analyzer with weights |
+
+### Weights from the semantics (SR1 prelim)
+
+| Test | What it pins |
+|------|--------------|
+| test_file_and_inline_give_identical_results (x3: Fleiss, B-P, Krippendorff) | `weights_file` and an inline matrix give the same ratings and results |
+| test_quadratic_matrix_in_a_file_reproduces_ordered_quadratic (x3) | A weighted matrix equal to quadratic reproduces `ordered, quadratic` exactly |
+| test_loads_from_any_working_directory | A relative `weights_file` is read from the semantics file's folder |
+| test_pairs_use_the_semantics_weights | Pairwise permutation computes every pair with the semantics' weights |
+| test_subsets_use_the_semantics_weights | Subset permutation does the same |
 
 *Weighted values established by discovery run (V2 validated). Unweighted
 references for comparison: Fleiss 0.493, Krippendorff 0.493, Cohen 0.796,
@@ -338,6 +347,7 @@ positional, not named).
 | gwet_nij | NijMatrix from gwet_cont3x3_data_nij.csv |
 | synthetic_ratings | Ratings from synthetic_2raters_data.txt (via cleaner) |
 | sr1_prelim_ratings | Ratings from SR1_prelim_data.csv (via cleaner) |
+| sr1_prelim_with_semantics | Callable: the SR1 prelim data read under another semantics file, for checking that two declarations of the same thing agree |
 | sr1_main_ratings | Ratings from SR1_main_data.txt (via cleaner) |
 | sr2_ratings | Ratings from SR2_data.txt (via cleaner) |
 | sr3_ratings | Ratings from SR_FIS_Psych_data.txt (via cleaner) |
@@ -393,12 +403,14 @@ they are.
 | Fleiss 1971 | Fleiss (1971) | nij (csv) | 6 | 5 | Balanced | 3 |
 | Gwet cont3x3 | Gwet (2014) Table 4.1 | ratings (csv) + nij (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
 | Synthetic 2-rater | Synthetic | ratings (txt) | 2 | 3 | Balanced | 2 + 1 weighted |
-| SR1 prelim | OSF 2018 | ratings (csv) | 4 | 3 | Balanced | 3 + 2 weighted + 4 pairwise |
+| SR1 prelim | OSF 2018 | ratings (csv) | 4 | 3 | Balanced | 4 + 11 weighted + 4 pairwise |
 | SR1 main | OSF 2018 | ratings (txt) | 4 | 3 | Partially crossed | 2 + 5 subset |
 | SR2 | JSRC 2019 | ratings (txt) | 4 | 3 | Nearly balanced | 1 |
 | SR3 FIS Psych | JGIM 2019 | ratings (txt) | 3 | 2 | Balanced | 1 |
 | SR4 FIS CVD | -- | ratings (txt) | 4 | 2 | Balanced | 1 |
 | SR5 CocCardio | -- | ratings (txt) | 3 | 2 | Balanced | 1 |
 | Unbalanced nij | Synthetic | nij (txt) | variable | 3 | Unbalanced | **0 -- fixture unused** |
+| Statistical background | Synthetic, from the page's tables | ratings (csv) | 2 to 32 | 2 | Balanced and unbalanced | 3 |
 
-**Total: 33 tests** (11 reference + 9 research + 5 subset + 4 weighted + 4 pairwise)
+**Total: 94 tests** (11 reference + 10 research + 5 subset + 13 weighted + 4
+pairwise + 5 missing structure + 43 example configs + 3 statistical background)

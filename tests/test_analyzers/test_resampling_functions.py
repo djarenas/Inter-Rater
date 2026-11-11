@@ -1,9 +1,8 @@
 """Tests for the resampling_functions sub-package.
 
-One test file covering all 8 exported functions across the three modules:
+One test file covering the exported functions across the two modules:
   - subject_resampling: subject_bootstrap, subject_jackknife,
-    subject_bootstrap_from_nij_matrix
-  - rater_resampling: rater_jackknife, rater_subset
+    subject_bootstrap_from_nij_matrix, subject_jackknife_from_nij_matrix
   - permutation_resampling: within_rater_shuffle, within_subject_shuffle,
     pool_and_redistribute
 
@@ -13,7 +12,6 @@ not at function-call time.
 
 from __future__ import annotations
 
-from math import comb
 
 import numpy as np
 import pytest
@@ -22,10 +20,6 @@ from interrater.analyzers.resampling_functions.subject_resampling import (
     subject_bootstrap,
     subject_bootstrap_from_nij_matrix,
     subject_jackknife,
-)
-from interrater.analyzers.resampling_functions.rater_resampling import (
-    rater_jackknife,
-    rater_subset,
 )
 from interrater.analyzers.resampling_functions.permutation_resampling import (
     within_rater_shuffle,
@@ -279,120 +273,6 @@ class TestSubjectBootstrapNijBehavior:
         ))
         for a, b in zip(draws_default, draws_42):
             np.testing.assert_array_equal(a, b)
-
-
-# ================================================================== #
-#                                                                      #
-#   rater_jackknife                                                    #
-#                                                                      #
-# ================================================================== #
-
-
-class TestRaterJackknifeValidation:
-    """Type and value checks for rater_jackknife."""
-
-    def test_category_index_not_ndarray(self):
-        with pytest.raises(TypeError, match="category_index must be np.ndarray"):
-            list(rater_jackknife([[0, 1], [1, 0]]))
-
-    def test_category_index_not_2d(self):
-        with pytest.raises(ValueError, match="category_index must be 2D"):
-            list(rater_jackknife(np.array([0, 1, 2])))
-
-    def test_fewer_than_2_raters(self):
-        with pytest.raises(ValueError, match="requires >= 2 raters"):
-            list(rater_jackknife(np.array([[0], [1]], dtype=np.int8)))
-
-
-class TestRaterJackknifeBehavior:
-    """Functional tests for rater_jackknife."""
-
-    def test_yields_n_raters_draws(self, ratings_4x3):
-        draws = list(rater_jackknife(ratings_4x3))
-        assert len(draws) == 3
-
-    def test_each_draw_has_correct_shape(self, ratings_4x3):
-        for draw in rater_jackknife(ratings_4x3):
-            assert draw.shape == (4, 2)
-
-    def test_each_draw_omits_one_rater(self, ratings_4x3):
-        """Draw i must contain all columns except column i."""
-        for i, draw in enumerate(rater_jackknife(ratings_4x3)):
-            expected = np.delete(ratings_4x3, i, axis=1)
-            np.testing.assert_array_equal(draw, expected)
-
-    def test_exactly_2_raters(self, ratings_3x2):
-        draws = list(rater_jackknife(ratings_3x2))
-        assert len(draws) == 2
-        assert draws[0].shape == (3, 1)
-
-
-# ================================================================== #
-#                                                                      #
-#   rater_subset                                                       #
-#                                                                      #
-# ================================================================== #
-
-
-class TestRaterSubsetValidation:
-    """Type and value checks for rater_subset."""
-
-    def test_category_index_not_ndarray(self):
-        with pytest.raises(TypeError, match="category_index must be np.ndarray"):
-            list(rater_subset([[0, 1, 0]], k=2))
-
-    def test_k_not_int(self, ratings_4x3):
-        with pytest.raises(TypeError, match="k must be int"):
-            list(rater_subset(ratings_4x3, k=2.0))
-
-    def test_category_index_not_2d(self):
-        with pytest.raises(ValueError, match="category_index must be 2D"):
-            list(rater_subset(np.array([0, 1, 2]), k=2))
-
-    def test_k_zero(self, ratings_4x3):
-        with pytest.raises(ValueError, match="k must be between 1 and"):
-            list(rater_subset(ratings_4x3, k=0))
-
-    def test_k_exceeds_n_raters(self, ratings_4x3):
-        with pytest.raises(ValueError, match="k must be between 1 and"):
-            list(rater_subset(ratings_4x3, k=4))
-
-
-class TestRaterSubsetBehavior:
-    """Functional tests for rater_subset."""
-
-    def test_yields_c_n_k_draws(self, ratings_4x3):
-        # C(3, 2) = 3
-        draws = list(rater_subset(ratings_4x3, k=2))
-        assert len(draws) == comb(3, 2)
-
-    def test_each_draw_has_correct_shape(self, ratings_4x3):
-        for draw in rater_subset(ratings_4x3, k=2):
-            assert draw.shape == (4, 2)
-
-    def test_k_equals_1(self, ratings_4x3):
-        # C(3, 1) = 3 -- each draw is a single column
-        draws = list(rater_subset(ratings_4x3, k=1))
-        assert len(draws) == 3
-        for draw in draws:
-            assert draw.shape == (4, 1)
-
-    def test_k_equals_n_raters(self, ratings_4x3):
-        # C(3, 3) = 1 -- the full data
-        draws = list(rater_subset(ratings_4x3, k=3))
-        assert len(draws) == 1
-        np.testing.assert_array_equal(draws[0], ratings_4x3)
-
-    def test_draws_contain_original_columns(self, ratings_4x3):
-        """Each column in a draw must be a column from the original."""
-        for draw in rater_subset(ratings_4x3, k=2):
-            for col_idx in range(draw.shape[1]):
-                col = draw[:, col_idx]
-                found = any(
-                    np.array_equal(col, ratings_4x3[:, j])
-                    for j in range(ratings_4x3.shape[1])
-                )
-                assert found
 
 
 # ================================================================== #

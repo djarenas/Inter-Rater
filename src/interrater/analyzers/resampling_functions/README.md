@@ -6,7 +6,7 @@ Bootstrap, jackknife, and permutation resampling for confidence intervals, null 
 
 Published variance formulas for kappa exist, but they have problems:
 
-- **They answer the wrong question.** Fleiss 1971 Eq. 16 and the 1979 correction are both derived under the hypothesis of no agreement beyond chance. Using them to put an interval around a *non-zero* kappa is a category error, and the interval comes out about 43% too narrow.
+- **They answer the wrong question.** Fleiss 1971 Eq. 16 and the 1979 correction are both derived under the hypothesis of no agreement beyond chance. Using them to put an interval around a *non-zero* kappa is a category error, and the interval comes out too narrow.
 
 - **They assume more than your data holds.** Analytic variances assume multinomial ratings and independent subjects. If your subjects cluster or your subjects are not exchangeable, the formula is wrong and nothing says so.
 
@@ -28,7 +28,7 @@ Stated that plainly it sounds like a tautology. It is not: "the subjects the est
 
 - **The jackknife must leave out from that same pool.** A subject that contributes nothing to the coefficient cannot influence it, so including it in the jackknife contributes a deviation representing no influence at all -- and acceleration is a function of those deviations.
 
-## The nine functions
+## The seven functions
 
 ### Subject-Level Resampling
 
@@ -36,7 +36,9 @@ Stated that plainly it sounds like a tautology. It is not: "the subjects the est
 
 Resample *subjects* with replacement. Yields n_resamples modified arrays, each drawn with replacement from the original subject rows.
 
-**Supports:** All coefficients (group and pairwise).
+**Supports:** All coefficients (group and pairwise). Pairs and subsets of
+raters are taken with `EstimatorInput.select_raters()` before resampling,
+not by a function here.
 
 **Use for:** Confidence intervals around point estimates.
 
@@ -68,24 +70,6 @@ Resample *subjects* with replacement from the nij_matrix (the category-counts ma
 
 **Use for:** Confidence intervals when working directly with nij matrices rather than raw ratings. Same bootstrap logic as `subject_bootstrap`, but on the aggregated representation.
 
-### Rater-Level Resampling
-
-#### `rater_jackknife(category_index)`
-
-Leave-one-rater-out. Yields n_raters modified arrays, each with one rater's column removed.
-
-**Supports:** Pairwise coefficients (Cohen's kappa) and any coefficient that works on subsets.
-
-**Use for:** Rater diagnostics. How critical is each rater to the agreement? Which rater matters most?
-
-#### `rater_subset(category_index, k)`
-
-All combinations of k raters from n. Yields C(n, k) modified arrays, each containing only k raters' columns.
-
-**Supports:** All coefficients.
-
-**Use for:** Scaling analysis. How does agreement change with panel size? What is the smallest panel that still gives stable results?
-
 ### Permutation Resampling
 
 These generate null distributions by shuffling without replacement. Conceptually different from bootstrap: they destroy chosen structure rather than resample it.
@@ -96,7 +80,7 @@ All three keep the missing-data structure exactly: they move only answers that w
 
 #### `within_rater_shuffle(category_index, n_permutations=5000, random_state=42)`
 
-Shuffle each rater's answers across the subjects that rater rated, independently for each rater. Preserves each rater's marginal distribution (how often they use each category) but breaks the subject-rater pairing. Called `column_shuffle` before 2.1.0.
+Shuffle each rater's answers across the subjects that rater rated, independently for each rater. Preserves each rater's marginal distribution (how often they use each category) but breaks the subject-rater pairing. Called `column_shuffle` before 2.1.0; the old name still imports and raises, naming the new one.
 
 **Null hypothesis:** "Raters agree no more than expected given their individual category-usage biases."
 
@@ -120,7 +104,7 @@ Pool all non-missing ratings and redistribute them randomly into the cells that 
 
 ## Generator Design (Iterators)
 
-All eight functions return **generators** (Iterators), not lists. Each time you iterate, the function yields one resampled array.
+All seven functions return **generators** (Iterators), not lists. Each time you iterate, the function yields one resampled array.
 
 **Why generators?**
 
@@ -139,37 +123,18 @@ At 1000+ resamples and large datasets, generators are essential.
 
 **Speed:** Negligible overhead. The coefficient computation (milliseconds) dwarfs the resampling overhead (microseconds).
 
-**Analyzer usage:**
-
-```python
-class FleissKappaAnalyzer:
-    def estimate(self, n_resamples=1000):
-        point = fleiss_kappa(nij)
-        
-        distribution = []
-        for resample in subject_bootstrap(self.ratings.category_index, n_resamples):
-            # Convert resample to NijMatrix
-            nij_resample = category_counts(resample, self.semantics.n_categories)
-            # Compute coefficient
-            distribution.append(fleiss_kappa(nij_resample))
-        
-        ci = percentile_ci(np.array(distribution))
-        return FleissKappaResult(point, ci, balance_profile)
-```
-
-## Rater Resampling at Small N
-
-**Rater bootstrap is degenerate at small n and not implemented.** At three raters, 77% of draws duplicate a rater and 11% return exactly 1.0. It would work at crowdsourcing scale (100+ raters) but not at typical panel sizes.
-
-**Rater jackknife and subset are diagnostic tools**, not inferential about a population of raters. They show how agreement depends on which raters you have, not how it would generalize to a population.
+**Analyzer usage.** An analyzer drives the loop: it draws from the
+function, computes its coefficient on each draw, and hands the point, the
+draws and the interval from `ci_methods` to its result class. The functions
+here never build a result.
 
 ## Module Structure
 
 ```
 resampling_functions/
   __init__.py
-  subject_resampling.py       # subject_bootstrap, subject_jackknife, subject_bootstrap_from_nij_matrix
-  rater_resampling.py         # rater_jackknife, rater_subset
+  subject_resampling.py       # subject_bootstrap, subject_jackknife,
+                              # subject_bootstrap_from_nij_matrix, subject_jackknife_from_nij_matrix
   permutation_resampling.py   # within_rater_shuffle, within_subject_shuffle, pool_and_redistribute
   README.md
 ```
