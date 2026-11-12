@@ -43,9 +43,9 @@ class AnalyzerConfig:
         Method for computing confidence interval: "percentile" or "bca"
         (bias-corrected and accelerated).
     convergence_test : ConvergenceTest | None, default None
-        Optional convergence diagnostics. When set, verifies that n_resamples
-        is large enough for stable CI bounds. None means skip (for speed in
-        exploratory work).
+        Convergence diagnostics are not supported in this version yet, so
+        anything but None is refused when the config is built. The field
+        stays so that configs carrying ``convergence_test: null`` load.
     hypothesis_test_config : HypothesisTestConfig | None, default None
         Optional configuration for hypothesis testing against H₀: coefficient = 0.
         When set, defines the method (permutation or parametric_null), permutation
@@ -135,6 +135,13 @@ class AnalyzerConfig:
                     f"{_ERROR_PREFIX}: convergence_test must be ConvergenceTest or None, "
                     f"got {type(self.convergence_test).__name__}"
                 )
+            # Refused here, not in estimate(): a permutation analysis and
+            # hypothesis_test() never reach that check, so they ran and
+            # ignored the setting.
+            raise ValueError(
+                f"{_ERROR_PREFIX}: convergence_test is not supported in this "
+                f"version yet. Set convergence_test: null."
+            )
 
         # Validate hypothesis_test_config type
         if self.hypothesis_test_config is not None:
@@ -339,10 +346,9 @@ class AnalyzerConfig:
         ------
         FileNotFoundError
             If the YAML file does not exist.
-        TypeError
-            If the YAML contains unknown keys.
         ValueError
-            If configuration values fail validation.
+            If the YAML contains unknown keys, or configuration values fail
+            validation.
 
         Examples
         --------

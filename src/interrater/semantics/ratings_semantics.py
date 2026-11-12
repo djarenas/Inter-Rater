@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from difflib import get_close_matches
 from pathlib import Path
 
 from ..contracts import MIN_RATERS, MIN_SUBJECTS
+from ..yaml_utils import refuse_unknown_keys
 from .categories import Categories, build_categories
 
 _ERROR_PREFIX = "[RatingsSemantics] Error"
@@ -114,19 +114,10 @@ class RatingsSemantics:
         """
         # A misspelt optional key would otherwise be dropped without a word,
         # and the check the user thought they had switched on would never run.
-        known   = {"raters", "categories", "n_subjects", "unique_subjects"}
-        unknown = sorted(set(spec) - known)
-        if unknown:
-            hints = []
-            for key in unknown:
-                close = get_close_matches(str(key), known, n=1)
-                if close:
-                    hints.append(f"{key!r} -> did you mean {close[0]!r}?")
-            hint = f" ({'; '.join(hints)})" if hints else ""
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown key(s) {unknown}{hint}. "
-                f"Known: {sorted(known)}."
-            )
+        refuse_unknown_keys(
+            spec, {"raters", "categories", "n_subjects", "unique_subjects"},
+            cls.__name__,
+        )
 
         missing = {"raters", "categories"} - set(spec)
         if missing:

@@ -241,7 +241,8 @@ It differs from the kappa family in two ways.
 
 ``pairable_ratings(nij)`` counts the ratings on subjects rated more than once,
 which is alpha's sample size. A subject rated once has no pair and takes no
-part.
+part. Do and De both take their n from it, so the two terms cannot disagree
+about the sample size.
 
 **Weights.** The cost of confusing two categories is one minus their weight,
 in both Do and De. Identity weights give the nominal case.
@@ -349,9 +350,13 @@ the data:
 | --- | --- |
 | 81 subjects, one of them with fewer raters | 0.01 |
 | 1,617 subjects, three of them with an extra rater | 0.0004 |
-| constructed: 1,000 subjects x 2 raters, 20 x 50 raters, leaning opposite ways | **0.55** |
+| constructed: 1,000 subjects x 2 raters, 20 x 50 raters, leaning opposite ways | **0.53** |
 
-The constructed case gives 0.80 one way and 0.25 the other. The gap opens only
+The constructed case: of the 1,000 subjects with two raters, 950 got A from
+both and 50 got one A and one B; each of the 20 subjects with fifty raters
+got 5 A and 45 B. Averaging per subject, as this package does, gives 0.35;
+pooling per rating gives 0.88 (pinned in
+`test_agreement_functions.py::TestCategoryProportions`). The gap opens only
 when rater counts vary widely and the thinly and heavily rated subjects were
 rated differently; either alone is harmless.
 

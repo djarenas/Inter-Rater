@@ -145,10 +145,9 @@ class InjectorConfig:
         ------
         FileNotFoundError
             If the YAML file does not exist.
-        TypeError
-            If the YAML contains unknown keys.
         ValueError
-            If configuration values fail validation.
+            If the YAML contains unknown keys, or configuration values fail
+            validation.
 
         Examples
         --------

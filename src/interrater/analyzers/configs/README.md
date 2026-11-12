@@ -70,7 +70,7 @@ Fields every analyzer shares:
 - `alpha` (float, default 0.05): 0.05 gives a 95% interval
 - `random_state` (int | None, default 42): seed; None for unseeded
 - `ci_method` (str, default "percentile"): "percentile", "bca", or "parametric_null"
-- `convergence_test` (ConvergenceTest | None, default None): not implemented yet
+- `convergence_test` (ConvergenceTest | None, default None): not supported yet, so anything but `null` is refused
 - `hypothesis_test_config` (HypothesisTestConfig | None, default None): test against H₀: coefficient = 0
 - `injection` (tuple[InjectorConfig, ...] | None, default None): injection steps applied to the ratings before analysis; a single config or a list is normalised to a tuple
 
@@ -193,7 +193,9 @@ objects. Unknown keys are refused, with the nearest match and the valid keys
 listed, from a dict or YAML alike and at every level (a nested
 `config_of_coefficient` or `hypothesis_test` too).
 
-`summary()`:
+`summary()` is a record of what was decided, for an audit trail. It is not
+an input: it carries `_package_version`, which `build_from_dict` refuses as
+an unknown key.
 
 ```python
 FleissKappaConfig().summary()
@@ -210,7 +212,7 @@ FleissKappaConfig().summary()
 - **`_ERROR_PREFIX`** in every module (e.g. `"[CohenKappaConfig] Error"`)
   starts every error message.
 - **TypeError vs ValueError.** Wrong type raises TypeError; a wrong value of
-  the right type raises ValueError.
+  the right type raises ValueError. An unknown key is a ValueError.
 - **Warnings.** The only warning is for `parametric_null`, raised with
   `warnings.warn(..., UserWarning, stacklevel=2)` so it can be caught or
   silenced.

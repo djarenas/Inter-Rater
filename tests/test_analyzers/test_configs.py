@@ -604,7 +604,11 @@ class TestPermutationBootstrapMeanConfig:
             PermutationBootstrapMeanConfig(method="correlated", **{key: value})
 
     def test_other_unknown_key_refused(self):
-        with pytest.raises(ValueError, match="only key is 'method'"):
+        with pytest.raises(
+            ValueError,
+            match=r"\[PermutationBootstrapMeanConfig\] Error: unknown key\(s\) \['n_draws'\]. "
+                  r"Valid keys are: \['method'\]",
+        ):
             PermutationBootstrapMeanConfig.build_from_dict({"method": "correlated", "n_draws": 10})
 
     def test_removed_fields_not_in_summary_or_repr(self):
@@ -1020,6 +1024,49 @@ class TestConfigsCarryNoWeights:
 
 
 
+class TestSummaryReportsBalancedDataOnly:
+    """Every coefficient config's summary carries the same balance key."""
+
+    @pytest.mark.parametrize("config_cls", [
+        FleissKappaConfig, ScottsConfig, GwetAC1Config, BrennanPredigerConfig,
+        KrippendorffAlphaConfig, CohenKappaConfig, CongerKappaConfig, LightKappaConfig,
+    ])
+    def test_key_present_and_equal_to_the_field(self, config_cls):
+        config = config_cls()
+        assert config.summary()["balanced_data_only"] is config.balanced_data_only
+
+    def test_summary_is_a_record_not_an_input(self):
+        """It carries _package_version, which build_from_dict refuses."""
+        with pytest.raises(ValueError, match=r"unknown key\(s\) \['_package_version'\]"):
+            FleissKappaConfig.build_from_dict(FleissKappaConfig().summary())
+
+
+class TestConvergenceTestRefused:
+    """
+    Convergence diagnostics do not exist yet, so a config that asks for them
+    is refused when it is built. Before, only estimate() refused, at run
+    time; a permutation analysis and hypothesis_test() ran and ignored it.
+    """
+
+    @pytest.mark.parametrize("config_cls", [
+        FleissKappaConfig, ScottsConfig, GwetAC1Config, BrennanPredigerConfig,
+        KrippendorffAlphaConfig, CohenKappaConfig, CongerKappaConfig, LightKappaConfig,
+    ])
+    def test_refused_by_every_coefficient_config(self, config_cls):
+        from interrater.analyzers.convergence_test import ConvergenceTest
+        with pytest.raises(ValueError, match="convergence_test is not supported in this version yet"):
+            config_cls(convergence_test=ConvergenceTest())
+
+    def test_wrong_type_is_a_type_error(self):
+        with pytest.raises(TypeError, match="convergence_test must be ConvergenceTest or None"):
+            FleissKappaConfig(convergence_test="yes")
+
+    def test_null_still_loads(self, tmp_path):
+        path = tmp_path / "fleiss.yaml"
+        path.write_text("convergence_test: null\n")
+        assert FleissKappaConfig.build_from_yaml(path).convergence_test is None
+
+
 class TestUnknownKeysRefused:
     """
     build_from_dict refuses a misspelt key itself, naming the config, the
@@ -1030,7 +1077,7 @@ class TestUnknownKeysRefused:
     """
 
     def test_coefficient_config(self):
-        with pytest.raises(TypeError) as err:
+        with pytest.raises(ValueError) as err:
             FleissKappaConfig.build_from_dict({"n_resample": 2000})
         message = str(err.value)
         assert message.startswith("[FleissKappaConfig] Error: unknown key(s) ['n_resample']")
@@ -1038,14 +1085,14 @@ class TestUnknownKeysRefused:
         assert "'balanced_data_only'" in message
 
     def test_nested_config_of_coefficient(self):
-        with pytest.raises(TypeError, match=r"\[CohenKappaConfig\] Error: unknown key\(s\) \['ci_metod'\]"):
+        with pytest.raises(ValueError, match=r"\[CohenKappaConfig\] Error: unknown key\(s\) \['ci_metod'\]"):
             PairwisePermutationConfig.build_from_dict({
                 "coefficient_to_compute": "cohen_kappa",
                 "config_of_coefficient": {"ci_metod": "bca"},
             })
 
     def test_permutation_config(self):
-        with pytest.raises(TypeError, match=r"\[SubsetPermutationConfig\] Error: unknown key\(s\) \['subset_kk'\]"):
+        with pytest.raises(ValueError, match=r"\[SubsetPermutationConfig\] Error: unknown key\(s\) \['subset_kk'\]"):
             SubsetPermutationConfig.build_from_dict({
                 "coefficient_to_compute": "fleiss_kappa",
                 "config_of_coefficient": {},
@@ -1053,7 +1100,7 @@ class TestUnknownKeysRefused:
             })
 
     def test_hypothesis_test(self):
-        with pytest.raises(TypeError, match=r"\[HypothesisTestConfig\] Error: unknown key\(s\) \['n_permutation'\]"):
+        with pytest.raises(ValueError, match=r"\[HypothesisTestConfig\] Error: unknown key\(s\) \['n_permutation'\]"):
             CohenKappaConfig.build_from_dict({"hypothesis_test": {"n_permutation": 100}})
 
     def test_aliases_still_accepted(self):
@@ -1069,5 +1116,5 @@ class TestUnknownKeysRefused:
     def test_yaml_gives_the_same_message(self, tmp_path):
         path = tmp_path / "fleiss.yaml"
         path.write_text("n_resample: 2000\n")
-        with pytest.raises(TypeError, match=r"\[FleissKappaConfig\] Error: unknown key\(s\) \['n_resample'\]"):
+        with pytest.raises(ValueError, match=r"\[FleissKappaConfig\] Error: unknown key\(s\) \['n_resample'\]"):
             FleissKappaConfig.build_from_yaml(path)

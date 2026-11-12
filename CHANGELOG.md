@@ -3,7 +3,7 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [semver](https://semver.org/).
 
-## [Unreleased]
+## [2.1.0] - 2026-11-12
 
 ### Breaking
 
@@ -75,6 +75,10 @@ version does not warn you, so this section does.
   including subjects rated once. What iterating leaves is the largest data
   meeting both minimums, the same whichever axis is swept first.
   `MAX_DROP_PASSES` and `DropReport.method` and `.converged` are removed.
+- A `convergence_test` other than `null` is refused when the config is
+  built: convergence diagnostics are not supported in this version yet.
+  `estimate()` used to refuse it at run time, but pairwise and subset
+  permutation and `hypothesis_test()` ran and ignored it.
 - `rater_jackknife: true` is refused by every coefficient config: leave-one-rater-out
   is not supported in this version yet. 2.0.0's group configs (Fleiss, Scott,
   Gwet, Brennan-Prediger, Krippendorff) accepted it and silently did nothing.
@@ -258,6 +262,13 @@ version does not warn you, so this section does.
 - `to_frame()` on pairwise and subset results: one row per pair or subset
   (raters, estimate, interval, `point_outside_interval`, method used,
   failed draws, subjects, reason if not computed), readable back from CSV.
+- Everything an analysis hands back is importable from the top level:
+  the nine result classes, the three permutation results, `CIResult`,
+  `BootstrapCIResult`, `ParametricCIResult`, `HypothesisTestResult`,
+  `AgreementParts`, the profiles (`BalanceProfile`, `RaterProfile`,
+  `RaterSharedMatrix`, `AgreementProfile`, `PrevalenceBiasIndex`),
+  `BalancedRatings` and `DropPass`. They used to need
+  `interrater.intermediates...` paths.
 - `COEFFICIENT`, `NAME` and `SYMBOL` on every result class, and
   `result_class_for(coefficient)`.
 - Tests build their data through the cleaner (`tests/fixtures/through_cleaner.py`),
@@ -296,6 +307,8 @@ version does not warn you, so this section does.
   by the names in the semantics instead of their positions.
 - Pairwise and subset printouts state the weighting (`quadratic weights`,
   `unweighted`) for coefficients that have one.
+- Cohen's, Conger's and Light's `summary()` include `balanced_data_only`, as
+  the group configs' do.
 - On unbalanced data, Gwet's AC1 and Brennan-Prediger print `unbalanced
   data: Gwet (2014) formula for missing ratings` instead of `approximation
   (unbalanced data)`: they compute Gwet's formula, as irrCAC does. Fleiss'
@@ -316,6 +329,11 @@ version does not warn you, so this section does.
   keys; before, only `build_from_yaml` checked, and a dict, a nested
   `config_of_coefficient` or `hypothesis_test`, or an injection step failed
   with Python's bare "unexpected keyword argument".
+- A misspelt key is refused the same way everywhere: a `ValueError` naming
+  the class, the nearest match and the valid keys. Analyzer, permutation and
+  injector configs raised `TypeError`; the cleaner config, `frame_layout`,
+  `insufficient_data_drops` and the categories had their own wording and no
+  hint.
   `hydrate_injection_step` no longer removes `type` from the caller's dict.
 - Semantics declaring `n_subjects` no longer fail when the cleaner drops
   subjects. `n_subjects` is checked against the file before any drop; the

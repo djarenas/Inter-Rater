@@ -15,6 +15,23 @@ Three objects hold those decisions, bottom-up:
 | `InsufficientDataPolicy` | Minimum ratings per rater and per subject for dropping thin data. Sweeps repeat until nothing more falls below them. |
 | `CleanerConfig`          | Everything else -- case sensitivity, whitespace stripping, missing-value markers, value repairs, policies for unknown responses and unused categories, plus the two delegates above. |
 
+The keys, as written in a cleaner YAML:
+
+| Key | Default | What it sets |
+|---|---|---|
+| `frame_layout.use_column_names` | `true` | Column labels must equal the declared rater names; `false` takes raters by position |
+| `frame_layout.subject_id_col` | `null` | The column holding subject ids; `null` numbers the subjects |
+| `case_sensitive` | `false` | Whether matching distinguishes case, for category names, `missing_values` and `value_map` keys alike |
+| `strip_whitespace` | `true` | Trim before matching |
+| `missing_values` | `['']` | Strings that mean no rating. Nulls are always missing |
+| `value_map` | `{}` | Repairs: a string as it appears in the file, mapped to the category it was meant to be |
+| `unknown_policy` | `error` | A value that is still not a category: `error` stops the run, `empty` treats it as no rating and counts it |
+| `unused_categories` | `error` | A declared category nobody chose: `error`, or `keep` to leave it in K |
+| `insufficient_data_drops.min_ratings_per_rater` | 2 | Raters with fewer ratings are dropped |
+| `insufficient_data_drops.min_ratings_per_subject` | 2 | Subjects with fewer ratings are dropped |
+
+`CleanerConfig.to_dict()` writes a config back in this shape.
+
 `CleanerConfig.build_from_dict` and `CleanerConfig.build_from_yaml` build a
 config from a plain dictionary or a YAML file, so that the entire cleaning
 specification can live in a versioned file alongside the analysis.
@@ -55,6 +72,7 @@ column with a blank cell into float64, and `1` arrives as `1.0`. Use
 | `_string_utils.py`| `fold`, `fold_collisions`, `describe_folding`, `build_lookup` -- string normalisation, finding different strings that fold alike, and lookup-table construction. Free functions over plain strings; the config and the cleaner call the same code so matching is guaranteed consistent. |
 | `_drop_utils.py`  | `rating_counts`, `sweep_once`, `sweep_until_settled`, `distribution` -- row/column dropping over the code array. Free functions over numpy; the cleaner supplies thresholds, gets back boolean masks. |
 
+## Data flow
 
 ```
 DataFrame (messy strings)

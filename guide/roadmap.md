@@ -25,11 +25,11 @@
   (a rater dropped, a category removed), the report says so and hands back a
   corrected declaration.
 
-- **Preconditions in the type system.** Exact Fleiss' kappa requires a constant
-  number of raters per subject; Conger's and Light's kappas require every rater
-  to rate every subject, as their definitions say. Those are properties of the
-  data, so they are checked before the coefficient is computed rather than
-  assumed by it. See [Why objects](why_objects.md).
+- **Preconditions checked, not assumed.** Exact Fleiss' kappa requires a
+  constant number of raters per subject; Conger's and Light's kappas require
+  every rater to rate every subject, as their definitions say. Those are
+  properties of the data, so they are checked before the coefficient is
+  computed (by a data object or by the analyzer) rather than assumed by it. See [Why objects](why_objects.md).
 
 - **Results that cannot contradict themselves.** A bootstrap result is refused
   if its interval does not follow from its draws; a permutation test is
@@ -68,7 +68,7 @@
 
 The changes between 2.0 and 2.1, several of which alter numbers on the same
 data, are listed in the
-[changelog](https://github.com/djarenas/Inter-Rater/blob/main/CHANGELOG.md).
+[changelog](https://github.com/djarenas/Inter-Rater/blob/master/CHANGELOG.md).
 
 ## What is coming next
 

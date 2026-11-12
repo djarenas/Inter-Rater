@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 import numpy as np
 
 from ..contracts import INDEX_DTYPE
+from ..yaml_utils import refuse_unknown_keys
 
 _MIN_CATEGORIES = 2
 
@@ -407,6 +409,9 @@ _KINDS = {
 """Built from each class's own token, so ``kind`` has one definition."""
 
 
+_BUILD_ERROR_PREFIX = "[build_categories] Error"
+
+
 def build_categories(
     spec: dict, base_dir: str | Path | None = None
 ) -> Categories:
@@ -435,26 +440,25 @@ def build_categories(
     kind = spec.pop("kind", None)
     if kind not in _KINDS:
         raise ValueError(
-            f"categories.kind must be one of {sorted(_KINDS)}, got {kind!r}. "
+            f"{_BUILD_ERROR_PREFIX}: categories.kind must be one of {sorted(_KINDS)}, got {kind!r}. "
             f"Use 'unordered' for a nominal scheme, 'ordered' for a ranked "
             f"scale, or 'weighted' to supply a similarity matrix directly."
         )
     if "names" not in spec:
         raise KeyError(
-            f"categories of kind {kind!r} needs 'names': the responses a rater "
+            f"{_BUILD_ERROR_PREFIX}: categories of kind {kind!r} needs 'names': the responses a rater "
             f"was allowed to give, in encoding order."
         )
     if "weights_file" in spec:
         spec["weights"] = _load_weights_file(
             spec.pop("weights_file"), spec, kind, base_dir
         )
-    try:
-        return _KINDS[kind](**spec)
-    except TypeError as error:
-        raise TypeError(
-            f"categories of kind {kind!r} got unexpected keys "
-            f"{sorted(set(spec) - {'names'})}. {error}"
-        ) from None
+    # Each kind takes what its constructor takes: names and labels, plus
+    # weighting (ordered) or weights (weighted).
+    category_cls = _KINDS[kind]
+    valid = set(inspect.signature(category_cls.__init__).parameters) - {"self"}
+    refuse_unknown_keys(spec, valid, category_cls.__name__)
+    return category_cls(**spec)
 
 
 def _load_weights_file(
@@ -475,14 +479,15 @@ def _load_weights_file(
 
     if kind != "weighted":
         raise ValueError(
-            f"categories.weights_file is only allowed with kind 'weighted', "
+            f"{_BUILD_ERROR_PREFIX}: categories.weights_file is only allowed with kind 'weighted', "
             f"got kind {kind!r}. An ordered scale derives its weights from "
             f"'weighting'; an unordered one has none."
         )
     if "weights" in spec:
         raise ValueError(
-            "categories gives both 'weights' and 'weights_file'. Give the "
-            "matrix in one place only, so there is one answer to what it is."
+            f"{_BUILD_ERROR_PREFIX}: categories gives both 'weights' and "
+            f"'weights_file'. Give the matrix in one place only, so there is "
+            f"one answer to what it is."
         )
 
     path = Path(file)
@@ -490,7 +495,7 @@ def _load_weights_file(
         path = Path(base_dir if base_dir is not None else ".") / path
     if path.suffix.lower() not in {".yaml", ".yml"}:
         raise ValueError(
-            f"categories.weights_file must be a YAML file (.yaml or .yml), "
+            f"{_BUILD_ERROR_PREFIX}: categories.weights_file must be a YAML file (.yaml or .yml), "
             f"got {path.name!r}."
         )
 
@@ -499,14 +504,14 @@ def _load_weights_file(
             data = yaml.safe_load(handle)
     except FileNotFoundError as error:
         raise FileNotFoundError(
-            f"categories.weights_file not found: {path}. A relative path is "
+            f"{_BUILD_ERROR_PREFIX}: categories.weights_file not found: {path}. A relative path is "
             f"read from the folder of the semantics file."
         ) from error
 
     if not isinstance(data, dict) or set(data) != {"names", "matrix"}:
         found = sorted(data) if isinstance(data, dict) else type(data).__name__
         raise ValueError(
-            f"categories.weights_file {path} must hold exactly 'names' and "
+            f"{_BUILD_ERROR_PREFIX}: categories.weights_file {path} must hold exactly 'names' and "
             f"'matrix', got {found}."
         )
 
@@ -514,7 +519,7 @@ def _load_weights_file(
     declared_names = [str(n) for n in spec["names"]]
     if file_names != declared_names:
         raise ValueError(
-            f"categories.weights_file {path} is written for categories "
+            f"{_BUILD_ERROR_PREFIX}: categories.weights_file {path} is written for categories "
             f"{file_names}, but the semantics declares {declared_names}. "
             f"They must match exactly, in the same order, because row and "
             f"column i of the matrix belong to category i."

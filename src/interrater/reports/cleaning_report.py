@@ -240,7 +240,8 @@ class CleaningReport:
     def render(self, verbosity: str = "summary") -> str:
         if verbosity not in _VERBOSITIES:
             raise ValueError(
-                f"verbosity must be one of {list(_VERBOSITIES)}, got "
+                f"[{type(self).__name__}] Error: verbosity must be one of "
+                f"{list(_VERBOSITIES)}, got "
                 f"{verbosity!r}."
             )
         rows_in, cols_in   = self.shape_in

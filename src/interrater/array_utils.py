@@ -100,20 +100,6 @@ def pairwise_overlap(category_index: np.ndarray) -> np.ndarray:
     return present.T @ present
 
 
-def shared_subject_mask(
-    category_index: np.ndarray, rater_a: int, rater_b: int
-) -> np.ndarray:
-    """
-    True for subjects both raters rated.
-
-    The rows a paired comparison is defined on. Extracting a pair means taking
-    these rows and those two columns, which is what leaves the extracted array
-    with no empties at all.
-    """
-    present = present_mask(category_index)
-    return present[:, rater_a] & present[:, rater_b]
-
-
 # Structure -------------------------------------------------------------------  #
 
 
@@ -164,25 +150,3 @@ def subject_count_distribution(category_index: np.ndarray) -> dict[int, int]:
 
 
 # Repeats ---------------------------------------------------------------------  #
-
-
-def repeated_subject_positions(
-    subject_ids: np.ndarray,
-) -> dict[object, np.ndarray]:
-    """
-    Row indices of every subject id appearing more than once.
-
-    Repeats arise two ways -- a rating task re-showing a subject deliberately,
-    and a bootstrap draw taking the same row twice. This does not distinguish
-    them; it reports the structure.
-    """
-    order      = np.argsort(subject_ids, kind="stable")
-    sorted_ids = subject_ids[order]
-    out: dict[object, np.ndarray] = {}
-    start = 0
-    for i in range(1, len(sorted_ids) + 1):
-        if i == len(sorted_ids) or sorted_ids[i] != sorted_ids[start]:
-            if i - start > 1:
-                out[sorted_ids[start]] = np.sort(order[start:i])
-            start = i
-    return out

@@ -34,7 +34,6 @@ from interrater.analyzers.configs.hypothesis_test_config import HypothesisTestCo
 from interrater.analyzers.configs.pairwise_permutation_config import PairwisePermutationConfig
 from interrater.analyzers.configs.subset_permutation_config import SubsetPermutationConfig
 from interrater.analyzers.configs.permutation_bootstrap_mean_config import PermutationBootstrapMeanConfig
-from interrater.analyzers.convergence_test import ConvergenceTest
 
 from fixtures.through_cleaner import clean_ratings
 
@@ -196,9 +195,6 @@ THREE_RATER_INDEX = np.array([
 
 # A valid HypothesisTestConfig with defaults, used by AnalyzerConfig tests later.
 HYPOTHESIS_TEST_DEFAULTS = HypothesisTestConfig()
-
-# A valid ConvergenceTest stub, used by AnalyzerConfig tests later.
-CONVERGENCE_TEST_STUB = ConvergenceTest()
 
 
 

@@ -123,21 +123,20 @@ print(f"Fleiss' kappa = {result.point:.3f}  95% CI "
 
 ```
 CleaningReport
-    in         : 199 row(s) x 5 column(s)
-    out        : 199 subject(s) x 4 rater(s) (100.0% of rows kept)
+    in         : 199 rows x 5 columns
+    out        : 199 subjects x 4 raters (100.0% of rows kept)
 
 Matching
     cells      : 796
-    no rating  : 0 (0.0%), of which 0 arrived null
+    no rating  : 0
     matched    : 'o' 0
 
 Drops
     rule       : at least 2 ratings per rater and 2 per subject
     no raters or subjects dropped
 
-Categories
-    used       : 1 13%, 0 4%, -1 83%
-
+Categories (cleaned data: 796 ratings)
+    share      : 1 13%, 0 4%, -1 83%
 Fleiss' kappa = 0.493  95% CI [0.383, 0.606]
 ```
 

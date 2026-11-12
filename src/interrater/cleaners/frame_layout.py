@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..yaml_utils import refuse_unknown_keys
+
 
 class FrameLayout:
     """
@@ -79,12 +81,7 @@ class FrameLayout:
 
     @classmethod
     def build_from_dict(cls, spec: dict) -> FrameLayout:
-        unknown = sorted(set(spec) - {"use_column_names", "subject_id_col"})
-        if unknown:
-            raise ValueError(
-                f"frame_layout has unknown key(s) {unknown}. Known: "
-                f"use_column_names, subject_id_col."
-            )
+        refuse_unknown_keys(spec, {"use_column_names", "subject_id_col"}, cls.__name__)
         return cls(**spec)
 
     def __eq__(self, other: object) -> bool:

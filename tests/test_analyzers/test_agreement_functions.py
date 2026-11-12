@@ -236,6 +236,28 @@ class TestCategoryProportions:
         np.testing.assert_allclose(pj, expected, atol=TOL)
 
 
+    def test_per_subject_and_per_rating_can_differ_widely(self):
+        """
+        The constructed case in the agreement_functions README.
+
+        1,000 subjects with two raters (950 A/A, 50 A/B) and 20 subjects with
+        fifty raters (5 A, 45 B). The thin subjects lean A and the thick ones
+        B, so how p_j is averaged decides the chance term: per subject the
+        1,000 thin subjects dominate, per rating the 1,000 thick ratings
+        count as much as the 2,000 thin ones.
+        """
+        counts = np.array([[2, 0]] * 950 + [[1, 1]] * 50 + [[5, 45]] * 20)
+        nij = NijMatrix(counts)
+        per_subject = fleiss_kappa(nij)
+        assert per_subject == pytest.approx(0.348, abs=5e-4)
+
+        pooled_pj = counts.sum(axis=0) / counts.sum()
+        pooled_pe = float((pooled_pj ** 2).sum())
+        pooled = (observed_agreement(nij) - pooled_pe) / (1 - pooled_pe)
+        assert pooled == pytest.approx(0.878, abs=5e-4)
+        assert pooled - per_subject == pytest.approx(0.53, abs=5e-3)
+
+
 class TestGroupChanceTerms:
     """I test chance terms for the group coefficients."""
 

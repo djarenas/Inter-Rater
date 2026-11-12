@@ -1,11 +1,11 @@
 # Tests
 
-2263 tests across nine packages, run with `pytest tests/`.
+2297 tests across nine packages and two top-level files, run with `pytest tests/`.
 
 Every count in this file is a **collected** count -- what `pytest` prints, not
 what you get by counting `def test_` in the source. The two differ because
 `@pytest.mark.parametrize` runs one function once per input and pytest counts
-each run separately; right now 1958 functions expand to 2263 collected tests.
+each run separately; right now 1968 functions expand to 2297 collected tests.
 Collected is the number used throughout because it is the number you can check
 in one command, so it cannot drift unnoticed:
 
@@ -130,7 +130,7 @@ during cleaning and analysis.
 | conftest.py | Shared fixtures: DropPass instances, MatchingReport instances | -- |
 
 
-## test_analyzers/ (857 tests)
+## test_analyzers/ (877 tests)
 
 Tests for the analyzer layer: the classes that wire agreement functions,
 CI methods, bootstrap loops, and hypothesis tests into a single `estimate()`
@@ -152,8 +152,8 @@ call. Built bottom-up along the inheritance tree:
 
 | File | What it tests | Tests |
 |------|---------------|-------|
-| test_configs.py | AnalyzerConfig (defaults, custom, CI methods, random_state, frozen, validation, error prefix, summary, build_from_dict), HypothesisTestConfig (defaults, custom, methods/schemes, frozen, validation, error prefix), GroupCoefficientConfig (defaults, type guards, error prefix), NoWeightGroupConfig / WeightableGroupConfig (validation, error prefix), FleissKappaConfig / ScottsConfig / GwetAC1Config / BrennanPredigerConfig / KrippendorffAlphaConfig (defaults, parametric_null accepted or rejected per coefficient, parametric_null warning, error prefix), IndividualMarginalConfig / NoWeightIndividualConfig / WeightableIndividualConfig (defaults, validation, error prefix), CohenKappaConfig / CongerKappaConfig / LightKappaConfig (defaults, parametric_null, auto-correction, error prefix), PermutationBootstrapMeanConfig (methods, validation, error prefix), PermutationConfig / PairwisePermutationConfig / SubsetPermutationConfig (construction, validation, build_from_dict, cross-validation, error prefix) | 184 |
-| test_agreement_functions.py | Fleiss' kappa (observed agreement, category proportions, chance, kappa value, unweighted/linear/quadratic weights, NijMatrix/EstimatorInput paths), Krippendorff's alpha, Cohen's kappa, Brennan-Prediger, Scott's pi, Gwet's AC1, Conger's kappa (point estimates against hand-computed expected values from Fleiss 1971 and 2-rater datasets) | 130 |
+| test_configs.py | AnalyzerConfig (defaults, custom, CI methods, random_state, frozen, validation, error prefix, summary, build_from_dict), HypothesisTestConfig (defaults, custom, methods/schemes, frozen, validation, error prefix), GroupCoefficientConfig (defaults, type guards, error prefix), NoWeightGroupConfig / WeightableGroupConfig (validation, error prefix), FleissKappaConfig / ScottsConfig / GwetAC1Config / BrennanPredigerConfig / KrippendorffAlphaConfig (defaults, parametric_null accepted or rejected per coefficient, parametric_null warning, error prefix), IndividualMarginalConfig / NoWeightIndividualConfig / WeightableIndividualConfig (defaults, validation, error prefix), CohenKappaConfig / CongerKappaConfig / LightKappaConfig (defaults, parametric_null, auto-correction, error prefix), PermutationBootstrapMeanConfig (methods, validation, error prefix), PermutationConfig / PairwisePermutationConfig / SubsetPermutationConfig (construction, validation, build_from_dict, cross-validation, error prefix) | 203 |
+| test_agreement_functions.py | Fleiss' kappa (observed agreement, category proportions, chance, kappa value, unweighted/linear/quadratic weights, NijMatrix/EstimatorInput paths), Krippendorff's alpha, Cohen's kappa, Brennan-Prediger, Scott's pi, Gwet's AC1, Conger's kappa (point estimates against hand-computed expected values from Fleiss 1971 and 2-rater datasets) | 131 |
 | test_analyzer_classes.py | Error prefixes (all 8 leaf analyzers), class hierarchy (isinstance checks), config type validation (wrong config rejected for each analyzer), constructor paths (from Ratings, from NijMatrix), estimate guards (missing ratings/nij), rater constraints (2-rater enforcement for Scott's/Cohen), hypothesis test guards, smoke estimates (point estimate + CI for all 8), balance profile propagation, CI method in result, ParametricCIResult disclosure (config warning, construction warning, validation-before-warning, bootstrap path stays silent) | 251 |
 | test_ci_methods.py | Error prefixes, percentile_ci (normal, edge alpha, sorted, empty, scalar), _acceleration (formula, sign, degenerate input, noise gate), bca_ci (normal, edge cases, jackknife required, fallback to percentile and its disclosure), TestEfronLawSchool (reproduces the published acceleration, z0, and central 90% interval from Efron & Tibshirani 1986 Example 3), cross-method consistency | 54 |
 | test_permutation_analysis.py | PermutationAnalysis (construction, validation, weights, _compute_ci, all 7 estimators), PairwisePermutationAnalysis (construction, observed values, per-pair bootstrap, mean bootstrap correlated/independent, result fields, Fleiss 1971 15-pair), SubsetPermutationAnalysis (construction, observed values, measurable pool per subset, per-subset bootstrap, mean bootstrap, result fields, distribution threshold), MultiKSubsetResult (construction, validation, container API, __str__, summary) | 129 |
@@ -218,6 +218,22 @@ how it looks.
 | test_balance_profile_plotter.py | One bar per rater count from fewest to most, built from ratings, a nij matrix or a result | 11 |
 
 
+## test_exports.py (3 tests)
+
+At the top of `tests/`, because it tests the package as a whole: every name
+in `interrater.__all__` imports, once; everything an analysis hands back
+(results, intervals, tests, profiles) is exported at the top level; and
+`import interrater` does not load matplotlib.
+
+
+## test_unknown_keys.py (11 tests)
+
+Also at the top, because it crosses packages: a misspelt key in an analyzer,
+permutation, hypothesis-test, injector or cleaner config, in a semantics or
+in its categories is refused the same way. A ValueError naming the class,
+the nearest valid key and every valid key.
+
+
 ## fixtures/ (test-only data, no tests of its own)
 
 Data that is **not** a ratings dataset and therefore does not belong in
@@ -231,7 +247,7 @@ on. These files exist to pin a specific piece of arithmetic.
 | scruffy_ratings_generator.py | A generator for deliberately damaged ratings, with every corruption recorded so a cleaner can be checked against an answer known in advance | test_cleaners/test_scruffy.py |
 | scruffy_ratings_example.csv | One 40x5 output of that generator, checked in so the file can be read without running the generator | -- |
 | scruffy_cleaner_config.yaml | A config permissive enough to clean that file all the way through. The same file raises under the strict defaults, which is the point of the fixture: what is fatal is decided by the config, not by the data | test_cleaners/test_scruffy.py |
-| through_cleaner.py | `clean_ratings(codes, semantics)`: builds test Ratings the way users get them, by writing the codes as a labelled table and running it through `RatingsCleaner`. Fails if the cleaner would change anything. Importable as `fixtures.through_cleaner` because `pyproject.toml` puts `tests/` on pytest's path | most test files outside test_data_objects/ |
+| through_cleaner.py | `clean_ratings(category_index, semantics, subject_ids=None)`: builds test Ratings the way users get them, by writing the codes as a labelled table and running it through `RatingsCleaner`. Fails if the cleaner would change anything. Importable as `fixtures.through_cleaner` because `pyproject.toml` puts `tests/` on pytest's path | most test files outside test_data_objects/ |
 
 `test_cleaners/test_scruffy.py` runs the generator and the config end to
 end: it checks the cleaner's report and output against the recorded damage,

@@ -106,13 +106,12 @@ class PermutationBootstrapMeanConfig:
                 f"{_ERROR_PREFIX}: expected a dict, got {type(data).__name__}"
             )
         # Removed keys go to the constructor, which says where they moved
-        unknown = sorted(set(data) - {"method"} - set(_REMOVED))
-        if unknown:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown key(s) {unknown}; the only key is "
-                f"'method'. The draw count, interval method, level and seed "
-                f"come from config_of_coefficient."
-            )
+        from ...yaml_utils import refuse_unknown_keys
+
+        refuse_unknown_keys(
+            {key: value for key, value in data.items() if key not in _REMOVED},
+            {"method"}, cls.__name__,
+        )
         return cls(**data)
 
     def summary(self) -> dict:

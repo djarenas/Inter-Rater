@@ -128,5 +128,7 @@ class LightKappaConfig(NoWeightIndividualConfig):
     # Public API ------------------------------------------------------------- #
 
     def summary(self) -> dict:
-        """Return configuration (inherits parent's summary)."""
-        return super().summary()
+        """Return configuration, with balanced_data_only as the group configs report it."""
+        result = super().summary()
+        result["balanced_data_only"] = self.balanced_data_only
+        return result

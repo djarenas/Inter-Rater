@@ -105,7 +105,7 @@ def observed_disagreement(nij: NijMatrix, weights: Weights | None = None) -> flo
         return float("nan")
 
     counts, per = counts[usable], per[usable]
-    n = counts.sum()
+    n = float(pairable_ratings(nij))      # one definition of alpha's sample size
 
     if weights is None or weights.is_identity:
         # Disagreeing pairs are all pairs less the agreeing ones.
@@ -146,7 +146,7 @@ def expected_disagreement(nij: NijMatrix, weights: Weights | None = None) -> flo
         return float("nan")
 
     per_category = counts[usable].sum(axis=0)
-    n            = per_category.sum()
+    n            = float(pairable_ratings(nij))   # the same n as the observed term
     if n < 2:
         return float("nan")
 

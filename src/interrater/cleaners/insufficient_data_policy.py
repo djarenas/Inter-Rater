@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..contracts import MIN_RATINGS_PER_RATER, MIN_RATINGS_PER_SUBJECT
+from ..yaml_utils import refuse_unknown_keys
 
 
 class InsufficientDataPolicy:
@@ -84,14 +85,11 @@ class InsufficientDataPolicy:
     @classmethod
     def build_from_dict(cls, spec: dict) -> InsufficientDataPolicy:
         # method is passed on so it gets the removed-in-2.1.0 error.
-        unknown = sorted(set(spec) - {
-            "min_ratings_per_rater", "min_ratings_per_subject", "method"
-        })
-        if unknown:
-            raise ValueError(
-                f"insufficient_data_drops has unknown key(s) {unknown}. Known: "
-                f"min_ratings_per_rater, min_ratings_per_subject."
-            )
+        refuse_unknown_keys(
+            {key: value for key, value in spec.items() if key != "method"},
+            {"min_ratings_per_rater", "min_ratings_per_subject"},
+            cls.__name__,
+        )
         return cls(**spec)
 
     def __eq__(self, other: object) -> bool:

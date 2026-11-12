@@ -154,18 +154,12 @@ class Analyzer(ABC):
         ValueError
             If this analyzer was built from an NijMatrix: use
             ``estimate_from_nij_matrix()``.
-        NotImplementedError
-            If config.convergence_test is set; it is not implemented yet.
         """
         if self.ratings is None:
             raise ValueError(
                 f"[{type(self).__name__}] Error: estimate() needs ratings, but "
                 f"this analyzer was built from an NijMatrix. Use "
                 f"estimate_from_nij_matrix() instead."
-            )
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
             )
 
         point = self._estimate_from_array(self.ratings.category_index)

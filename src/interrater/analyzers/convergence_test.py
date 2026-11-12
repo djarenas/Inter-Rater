@@ -2,9 +2,8 @@
 
 This file exists so that TYPE_CHECKING imports and isinstance checks in
 AnalyzerConfig resolve. The convergence testing feature is not yet
-implemented -- every analyzer raises NotImplementedError if
-convergence_test is not None. Fields and logic will be added when the
-feature is built.
+implemented -- every config refuses a convergence_test that is not None,
+when it is built. Fields and logic will be added when the feature is built.
 """
 
 from __future__ import annotations

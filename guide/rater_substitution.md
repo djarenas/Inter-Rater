@@ -36,9 +36,10 @@ copying a real answer to ignoring the subjects entirely:
 The dissenter picks the road less travelled; the contrarian picks the road no
 one took.
 
-Every injector takes a `random_state`. Pass one: the sampling injectors are
-random by nature, and even the extremal strategies break ties at random when a
-subject has no single majority category.
+Every injector is seeded (`random_state`, 42 by default, as everywhere in the
+package; pass your own, or `None` for fresh randomness). The sampling
+injectors are random by nature, and even the extremal strategies break ties at
+random when a subject has no single majority category.
 
 ```python
 from interrater.injectors import ExtremalInjector
@@ -68,8 +69,9 @@ blind, a noisy follower. What the set does is bound the movement. The
 conformist is the most flattering single rater a panel can gain, the
 contrarian the most damaging, and a real added rater lands between them.
 
-Run the eight on one of the screening rounds here (770 abstracts, three real
-reviewers, Fleiss' kappa 0.675). One injected rater each, `random_state=42`:
+Run the eight on one of the screening rounds shipped with the package
+(`example_data/SR3_JGIM2019`: 770 abstracts, three real reviewers, Fleiss'
+kappa 0.675). One injected rater each, `random_state=42`:
 
 | added rater | Fleiss' κ | change |
 | --- | --- | --- |

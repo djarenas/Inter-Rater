@@ -109,7 +109,7 @@ class TestInjectorConfigBuildFromDict:
 
     def test_unknown_key_rejected_with_valid_keys(self):
         """build_from_dict names the class, the valid keys and the near miss."""
-        with pytest.raises(TypeError) as err:
+        with pytest.raises(ValueError) as err:
             ExtremalInjectorConfig.build_from_dict({"stratgy": "majority"})
         message = str(err.value)
         assert message.startswith("[ExtremalInjectorConfig] Error: unknown key(s) ['stratgy']")
@@ -119,7 +119,7 @@ class TestInjectorConfigBuildFromDict:
     def test_misspelt_injection_step_in_analyzer_config(self):
         """A step written inside an analyzer config gets the same message."""
         from interrater import FleissKappaConfig
-        with pytest.raises(TypeError, match=r"\[ExtremalInjectorConfig\] Error: unknown key"):
+        with pytest.raises(ValueError, match=r"\[ExtremalInjectorConfig\] Error: unknown key"):
             FleissKappaConfig.build_from_dict(
                 {"injection": {"type": "extremal", "stratgy": "majority"}}
             )
@@ -146,7 +146,7 @@ class TestInjectorConfigBuildFromYaml:
     def test_unknown_key_rejected(self, tmp_path):
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text("n_new_raters: 1\nbogus: 42\n")
-        with pytest.raises(TypeError, match=r"\[InjectorConfig\] Error: unknown key\(s\) \['bogus'\]"):
+        with pytest.raises(ValueError, match=r"\[InjectorConfig\] Error: unknown key\(s\) \['bogus'\]"):
             InjectorConfig.build_from_yaml(str(yaml_file))
 
     def test_missing_file_rejected(self):

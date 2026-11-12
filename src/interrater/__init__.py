@@ -16,6 +16,7 @@ from interrater.semantics.categories import (
 )
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.data_objects.ratings import Ratings
+from interrater.data_objects.balanced_ratings import BalancedRatings
 from interrater.cleaners.cleaner_config import CleanerConfig
 from interrater.cleaners.frame_layout import FrameLayout
 from interrater.cleaners.insufficient_data_policy import InsufficientDataPolicy
@@ -23,6 +24,40 @@ from interrater.cleaners.ratings_cleaner import RatingsCleaner
 
 from interrater.intermediates.estimator_parts import (Weights, NijMatrix)
 from interrater.intermediates.not_computed import NotComputed
+from interrater.intermediates.data_profiles import (
+    AgreementProfile,
+    BalanceProfile,
+    PrevalenceBiasIndex,
+    RaterProfile,
+    RaterSharedMatrix,
+)
+from interrater.intermediates.results import AgreementParts
+from interrater.intermediates.results.hypothesis_test_result import HypothesisTestResult
+from interrater.intermediates.results.ci_results import (
+    BootstrapCIResult,
+    CIResult,
+    ParametricCIResult,
+)
+from interrater.intermediates.results.analyzer_results import (
+    BrennanPredigerResult,
+    CohenKappaResult,
+    CongerKappaResult,
+    FleissKappaResult,
+    GwetsAC1Result,
+    KrippendorffAlphaResult,
+    LightKappaResult,
+    PointEstimateResult,
+    ScottsPiResult,
+)
+from interrater.intermediates.results.permutation_results.pairwise_permutation_result import (
+    PairwisePermutationResult,
+)
+from interrater.intermediates.results.permutation_results.subset_permutation_result import (
+    SubsetPermutationResult,
+)
+from interrater.intermediates.results.permutation_results.multi_k_subset_result import (
+    MultiKSubsetResult,
+)
 
 from interrater.analyzers import FleissKappaAnalyzer, ScottsAnalyzer, GwetAC1Analyzer, BrennanPredigerAnalyzer, KrippendorffAlphaAnalyzer, CohenKappaAnalyzer, CongerKappaAnalyzer, LightKappaAnalyzer
 from interrater.analyzers.permutation_analysis import PairwisePermutationAnalysis, SubsetPermutationAnalysis
@@ -33,7 +68,7 @@ from interrater.injectors.configs import InjectorConfig, WithinSubjectInjectorCo
 
 from interrater.reports.cleaning_report import CleaningReport
 from interrater.reports.matching_report import MatchingReport
-from interrater.reports.drop_report import DropReport
+from interrater.reports.drop_report import DropPass, DropReport
 from interrater.reports.category_report import CategoryReport
 
 from importlib.metadata import version as _version, PackageNotFoundError
@@ -102,6 +137,7 @@ __all__ = [
     "build_categories",
     "RatingsSemantics",
     "Ratings",
+    "BalancedRatings",
     "RatingsCleaner",
     "CleanerConfig",
     "FrameLayout",
@@ -109,6 +145,7 @@ __all__ = [
     "CleaningReport",
     "MatchingReport",
     "DropReport",
+    "DropPass",
     "CategoryReport",
     # Analyzer objects
     "FleissKappaAnalyzer",
@@ -137,6 +174,31 @@ __all__ = [
     "NijMatrix",
     # Stands in for a value that does not apply, with the reason
     "NotComputed",
+    # What an analysis hands back: results, their intervals and tests, and
+    # the profiles of the data they carry. Exported so they can be named in
+    # an isinstance check or a type hint.
+    "PointEstimateResult",
+    "FleissKappaResult",
+    "ScottsPiResult",
+    "GwetsAC1Result",
+    "BrennanPredigerResult",
+    "KrippendorffAlphaResult",
+    "CohenKappaResult",
+    "CongerKappaResult",
+    "LightKappaResult",
+    "PairwisePermutationResult",
+    "SubsetPermutationResult",
+    "MultiKSubsetResult",
+    "CIResult",
+    "BootstrapCIResult",
+    "ParametricCIResult",
+    "HypothesisTestResult",
+    "AgreementParts",
+    "BalanceProfile",
+    "RaterProfile",
+    "RaterSharedMatrix",
+    "AgreementProfile",
+    "PrevalenceBiasIndex",
     # Bootstrap of the mean over rater combinations: "correlated"
     # (resamples subjects once per draw) or "independent"
     "PermutationBootstrapMeanConfig",

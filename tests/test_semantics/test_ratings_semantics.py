@@ -225,7 +225,7 @@ class TestUnknownKeys:
             RatingsSemantics.build_from_dict(_spec(**{typo: True}))
 
     def test_unrelated_key_has_no_hint(self):
-        with pytest.raises(ValueError, match=r"unknown key\(s\) \['colour'\]\. Known:") as info:
+        with pytest.raises(ValueError, match=r"unknown key\(s\) \['colour'\]\. Valid keys are:") as info:
             RatingsSemantics.build_from_dict(_spec(colour="blue"))
         assert "did you mean" not in str(info.value)
 

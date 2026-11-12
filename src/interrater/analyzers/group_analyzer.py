@@ -200,18 +200,12 @@ class GroupAnalyzer(Analyzer, ABC):
         ------
         ValueError
             If this analyzer was built from Ratings: use ``estimate()``.
-        NotImplementedError
-            If config.convergence_test is set; it is not implemented yet.
         """
         if self.nij_matrix is None:
             raise ValueError(
                 f"[{type(self).__name__}] Error: estimate_from_nij_matrix() "
                 f"needs a counts matrix, but this analyzer was built from "
                 f"Ratings. Use estimate() instead."
-            )
-        if self.config.convergence_test is not None:
-            raise NotImplementedError(
-                f"{_ERROR_PREFIX}: convergence_test not yet implemented"
             )
 
         nij_array = self.nij_matrix.matrix

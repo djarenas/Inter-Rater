@@ -89,9 +89,14 @@ def refuse_unknown_keys(
     config's name or what it accepts. I name the config (``owner``), the
     unknown keys, the nearest valid key for each, and every valid key.
 
+    Every config in the package refuses an unknown key through me, so the
+    exception and the wording are the same whichever file the typo was in.
+    A ValueError: the dict is the right type, and one of its keys is a value
+    the config does not have.
+
     Raises
     ------
-    TypeError
+    ValueError
         If any key is not valid.
     """
     valid = set(valid_keys)
@@ -104,7 +109,7 @@ def refuse_unknown_keys(
         if close:
             hints.append(f"{key!r} -> did you mean {close[0]!r}?")
     hint = f" ({'; '.join(hints)})" if hints else ""
-    raise TypeError(
+    raise ValueError(
         f"[{owner}] Error: unknown key(s) {unknown}{hint}. "
         f"Valid keys are: {sorted(valid)}."
     )

@@ -28,15 +28,16 @@ import numpy as np
 import pandas as pd
 
 from interrater import (
+    BalanceProfile,
     BrennanPredigerAnalyzer, BrennanPredigerConfig,
     CleanerConfig,
     CohenKappaAnalyzer, CohenKappaConfig,
     FleissKappaAnalyzer, FleissKappaConfig,
     GwetAC1Analyzer, GwetAC1Config,
+    RaterProfile,
     RatingsCleaner, RatingsSemantics,
     ScottsAnalyzer, ScottsConfig,
 )
-from interrater.intermediates.data_profiles import BalanceProfile, RaterProfile
 
 _ERROR_PREFIX = "[reproduce_page] Error"
 

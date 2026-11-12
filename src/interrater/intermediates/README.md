@@ -3,8 +3,11 @@
 The data structures that sit between validated input (`Ratings`) and final
 output (reports, visualizations). Every analysis hands some of them back. Some of them
 can be useful for reading results with summarized important information, or for feeding
-into visualizers. They are rarely built by users. 
-(They import what they need from `interrater`, what does this mean).
+into visualizers. They are rarely built by users. The ones an analysis
+hands back (the result classes, their intervals and tests, the profiles and
+`NotComputed`) are exported at the top level, so an `isinstance` check or a
+type hint reads `from interrater import BootstrapCIResult`, not
+`from interrater.intermediates.results.ci_results import ...`.
 
 ## Sub-packages
 

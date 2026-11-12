@@ -357,7 +357,7 @@ positional, not named).
 
 ### Config builders
 
-Three private builders, so that the resample count and CI method are defined
+Two private builders, so that the resample count and CI method are defined
 once rather than at every call site. `_INTEGRATION_RESAMPLES = 250` is the
 single number they share.
 

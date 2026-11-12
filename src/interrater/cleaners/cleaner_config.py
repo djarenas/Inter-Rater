@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+from ..yaml_utils import refuse_unknown_keys
 from ._string_utils import describe_folding, fold, fold_collisions
 from .frame_layout import FrameLayout
 from .insufficient_data_policy import InsufficientDataPolicy
@@ -253,16 +254,13 @@ class CleanerConfig:
         spec   = dict(spec)
         layout = spec.pop("frame_layout", None)
         drops  = spec.pop("insufficient_data_drops", None)
-        known  = {
+        # The two nested blocks were popped above; they are valid keys too,
+        # so the list a typo is answered with names them.
+        refuse_unknown_keys(spec, {
             "case_sensitive", "strip_whitespace", "missing_values",
             "value_map", "unknown_policy", "unused_categories",
-        }
-        unknown = sorted(set(spec) - known)
-        if unknown:
-            raise ValueError(
-                f"{_ERROR_PREFIX} has unknown key(s) {unknown}. Known: "
-                f"{sorted(known)}, frame_layout, insufficient_data_drops."
-            )
+            "frame_layout", "insufficient_data_drops",
+        }, cls.__name__)
 
         try:
             frame_layout = FrameLayout.build_from_dict(layout) if layout else None

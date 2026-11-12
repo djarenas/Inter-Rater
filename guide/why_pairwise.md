@@ -5,13 +5,13 @@
 ### Why you may be interested in the pairwise/subset permutations
 
 For a panel of raters, `interrater` offers the option of calculating 
-each coefficient (cohen, fleiss, AC1, etc...) as permutations of pairs
+each coefficient (Cohen, Fleiss, AC1 and so on) as permutations of pairs
 or subsets. For pairwise permutations, the result would be, for example, a coefficient for every pair of raters, the mean of those pairs, and a
 confidence interval on that mean. 
 
 The reason you may be interested is that in practice raters may not be "identical" and 
 we need ways to visualize or describe it that are intuitive. For example, you may have a systematic
-review where some of the abstract readers have more experience in the exclusion process or more experience in the topic. Furthermore, despite good efforts, some readers may spend more time per abstract than others. In pathologist ratings, some may have more experienced than others.
+review where some of the abstract readers have more experience in the exclusion process or more experience in the topic. Furthermore, despite good efforts, some readers may spend more time per abstract than others. Among pathologists, some may be more experienced than others.
 A group coefficient does not give you information on one rater that may have
 disagreed more with others than the rest. Other examples could be having ratings where some are 
 LLMs and others are people. 
@@ -49,12 +49,11 @@ reviewer, or nothing at all. The group coefficient is the same kind of number
 in both. The pairwise permutation plot is built to make the difference
 visible at a glance: every pair grouped by rater, an interval on each, and a
 shaded band for the interval on the mean, so that one rater pulling the panel
-shows up as a cluster of low bars under one name. Now it should be important to say that rater3 in
-the first example is
-not necessarily the wrong one here, maybe rater3 had more insight about the project
-and could share it with the others -- or maybe rater3 just read things faster. Main point,
-is that this printout and its visualization would allow you to find an anomaly you would 
-have lost with just a group coefficient and its CI. 
+shows up as a cluster of low bars under one name. Rater 3 in the first
+example is not necessarily the wrong one: maybe rater 3 had more insight
+about the project and could share it with the others, or maybe rater 3 just
+read faster. The point is that this printout and its plot find an anomaly
+that a group coefficient and its interval would have hidden.
 
 ### The pairs are well defined when the panel is not
 
@@ -88,8 +87,8 @@ Version 2 resamples subjects once per draw and recomputes every pair on the
 same resampled subjects, which keeps the dependence in the interval. The
 interval on the mean of pairs then lands where it should: on the same panel,
 [0.658, 0.747] against Fleiss' own bootstrap interval of [0.663, 0.750]. For
-the arithmetic see
-[Correlated and independent error](statistical_background.md#correlated-and-independent-error).
+the arithmetic see the permutation analysis README in the source
+(`analyzers/permutation_analysis/README.md`).
 
 On an unbalanced panel the same resampling does one more thing. A pair with
 few shared subjects has a wider sampling distribution across draws than a
@@ -102,14 +101,15 @@ could not see.
 ### What the package computes
 
 The pairwise analysis takes any two-rater coefficient; the examples above use
-Cohen's kappa, whose unweighted mean over all pairs is Light's kappa. However, the 
-program allows most coefficients to be used in both the pairwise and subeset permutattions.
+Cohen's kappa, whose unweighted mean over all pairs is Light's kappa. Seven
+coefficients can be used pairwise, and six in subset permutation (Scott's pi
+is two raters by definition).
 
-The
-interval on the mean is the correlated bootstrap by default, and asking for
-the independent one with a BCa interval is refused at configuration, because
-BCa's acceleration needs a jackknife over the same units the bootstrap
-resamples and the independent mean has none.
+The interval on the mean is computed only when asked for
+(`bootstrap_mean_config`), as the correlated or the independent bootstrap.
+Asking for the independent one with a BCa interval is refused at
+configuration, because BCa's acceleration needs a jackknife over the same
+units the bootstrap resamples, and the independent mean has none.
 
 A panel is also something you can add to. See
 [What if one of your raters were someone else?](rater_substitution.md).
