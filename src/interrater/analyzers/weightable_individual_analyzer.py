@@ -25,10 +25,8 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
     (Cohen 1968). I accept weights and take them from the semantics of the
     ratings, mirroring what WeightableGroupAnalyzer does on the group side.
 
-    I read the weights from ``ratings.semantics.categories`` and rebuild the
-    EstimatorInput that my parent built with weights=None. After my __init__,
-    self.estimator_input carries the resolved weights and is ready for the
-    agreement functions.
+    Analyzer reads the weights from ``ratings.semantics.categories``
+    because I say I accept them, so self.estimator_input carries them.
 
     Attributes
     ----------
@@ -44,10 +42,10 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
         Must be an instance of WeightableIndividualConfig or a subclass
         (CohenKappaConfig).
     estimator_input : EstimatorInput
-        Rebuilt from parent's version with resolved weights.
+        Carrying the weights (from Analyzer).
     weights : Weights | None
-        The weights declared by the semantics. None for unordered categories
-        (unweighted).
+        The weights declared by the semantics (from Analyzer). None for
+        unordered categories (unweighted).
     """
 
     # Attribute declaration
@@ -56,12 +54,10 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
+    weights: Weights | None
     # Checked at this level
     config: WeightableIndividualConfig
-    # Populated at this level
-    weights: Weights | None
 
     _ACCEPTS_WEIGHTS = True
 
@@ -71,8 +67,7 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
         self, ratings: Ratings, config: WeightableIndividualConfig
     ) -> None:
         """
-        Initialize weightable individual analyzer: validate config and build
-        Weights.
+        Initialize weightable individual analyzer: validate config.
 
         Parameters
         ----------
@@ -89,7 +84,7 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
         ValueError
         """
         # Call parent __init__ (validates ratings, config, computes BalanceProfile,
-        # builds EstimatorInput with weights=None)
+        # builds EstimatorInput with the weights)
         try:
             super().__init__(ratings, config)
         except (TypeError, ValueError) as exc:
@@ -97,12 +92,6 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
 
         # Validate config type
         self._validate_weightable_config()
-
-        # Weights come from the semantics; rebuild EstimatorInput with them
-        from ..intermediates.estimator_parts import Weights
-        self.weights = Weights.build_from_categories(self.ratings.semantics.categories)
-        if self.weights is not None:
-            self.estimator_input = self._rebuild_estimator_input_with_weights()
 
     # Public API ------------------------------------------------------------- #
 
@@ -129,23 +118,3 @@ class WeightableIndividualAnalyzer(IndividualMarginalAnalyzer, ABC):
                 f"(CohenKappaConfig). "
                 f"Got {type(self.config).__name__}"
             )
-
-    def _rebuild_estimator_input_with_weights(self) -> EstimatorInput:
-        """
-        Rebuild EstimatorInput with resolved weights.
-
-        Called when the semantics declares weights. Replaces the
-        EstimatorInput that IndividualMarginalAnalyzer built with weights=None.
-
-        Returns
-        -------
-        EstimatorInput
-            Carrying category_index, n_categories, and resolved weights.
-        """
-        from ..intermediates.estimator_parts.estimator_input import EstimatorInput
-
-        return EstimatorInput(
-            category_index=self.ratings.category_index,
-            n_categories=self.ratings.semantics.n_categories,
-            weights=self.weights,
-        )

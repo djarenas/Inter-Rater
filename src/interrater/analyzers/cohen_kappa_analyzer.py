@@ -160,7 +160,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             )
 
         ht_config = self.config.hypothesis_test_config
-        n_categories = self.ratings.semantics.n_categories
+        n_categories = self.estimator_input.n_categories
 
         # Compute point estimate
         point = cohen_kappa(self.estimator_input, self.weights)
@@ -223,7 +223,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             null_values = []
 
             for permuted_array in scheme_fn(
-                self.ratings.category_index,
+                self.estimator_input.category_index,
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
@@ -355,23 +355,15 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         p_a, p_b = self._compute_marginals()
         return cohen_kappa_max(p_a, p_b, self.weights)
 
-    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Cohen's kappa from a ratings array.
+        Cohen's kappa from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
-        draws samples is written once on Analyzer in terms of this.
-
-        I build my own EstimatorInput because the array I am handed is a
-        resample, not the original data: rater identity matters to me, and it
-        is the column positions that carry it.
+        draws samples is written once on Analyzer in terms of this. Rater
+        identity matters to me, and the column positions of data carry it.
         """
-        ei = EstimatorInput(
-            category_index=category_index,
-            n_categories=self.ratings.semantics.n_categories,
-            weights=self.weights,
-        )
-        return cohen_kappa(ei, self.weights)
+        return cohen_kappa(data, data.weights)
 
     def _parametric_null_ci(
         self,

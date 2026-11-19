@@ -32,9 +32,9 @@ Stated that plainly it sounds like a tautology. It is not: "the subjects the est
 
 ### Subject-Level Resampling
 
-#### `subject_bootstrap(category_index, n_resamples=1000, random_state=42)`
+#### `subject_bootstrap(data, n_resamples=1000, random_state=42)`
 
-Resample *subjects* with replacement. Yields n_resamples modified arrays, each drawn with replacement from the original subject rows.
+Resample *subjects* with replacement. Takes an `EstimatorInput` and yields n_resamples of them, each drawn with replacement from the original subject rows. Each keeps K and the weights, so a draw that misses a rare category is still computed against the rating task's K.
 
 **Supports:** All coefficients (group and pairwise). Pairs and subsets of
 raters are taken with `EstimatorInput.select_raters()` before resampling,
@@ -44,9 +44,9 @@ not by a function here.
 
 **Why this works:** Subjects are the unit of independence. Resampling them preserves the correlation structure between raters across subjects. Works at any sample size.
 
-#### `subject_jackknife(category_index)`
+#### `subject_jackknife(data)`
 
-Leave-one-subject-out. Yields n_subjects modified arrays, each with one subject removed.
+Leave-one-subject-out. Takes an `EstimatorInput` and yields n_subjects of them, each with one subject removed, K and weights kept.
 
 **Supports:** All coefficients.
 
@@ -96,10 +96,10 @@ Memory efficiency at scale:
 
 ```python
 # List approach (stores everything in RAM):
-resamples = list(subject_bootstrap(ratings, n_resamples=10000))  # 10,000 arrays in memory
+resamples = list(subject_bootstrap(data, n_resamples=10000))  # 10,000 arrays in memory
 
 # Generator approach (one array at a time):
-for resample in subject_bootstrap(ratings, n_resamples=10000):
+for resample in subject_bootstrap(data, n_resamples=10000):
     compute_coefficient(resample)  # Process one, discard, get next
 ```
 

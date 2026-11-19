@@ -39,7 +39,8 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         Must be an instance of WeightableGroupConfig or a subclass
         (FleissKappaConfig, etc.)
     weights : Weights | None
-        The weights declared by the semantics. None for unordered categories.
+        The weights declared by the semantics (from Analyzer). None for
+        unordered categories.
     """
 
     # Attribute declaration
@@ -48,10 +49,9 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights: Weights | None
     # Checked at this level
     config: WeightableGroupConfig
-    # Populated at this level
-    weights: Weights | None
 
     _ACCEPTS_WEIGHTS = True
 
@@ -61,7 +61,7 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         self, ratings: Ratings, config: WeightableGroupConfig
     ) -> None:
         """
-        Initialize weightable group analyzer: validate config and build Weights.
+        Initialize weightable group analyzer: validate config.
 
         Parameters
         ----------
@@ -83,10 +83,8 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         except (TypeError, ValueError) as e:
             raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
 
-        # Validate config type; weights come from the semantics
+        # Validate config type; Analyzer built the weights from the semantics
         self._validate_weightable_config()
-        from ..intermediates.estimator_parts import Weights
-        self.weights = Weights.build_from_categories(self.ratings.semantics.categories)
 
     # Public API ------------------------------------------------------------- #
 

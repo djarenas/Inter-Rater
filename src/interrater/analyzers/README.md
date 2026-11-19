@@ -48,8 +48,8 @@ Analyzer (ABC)
 
 The splits are meant to be conceptual: Group coefficients treat all raters
 as interchangeable; they pool the raters into one distribution; individual marginal coefficients 
-use marginal rates. Therefore, some capabilities such as building from nij matrices would be
-available to the former but not the latter. 
+use marginal rates. Therefore, the former read only counts (a NijMatrix), while the latter
+need the full ratings array, column by column. 
 
 
 ## What each level does
@@ -58,6 +58,9 @@ available to the former but not the latter.
 
 - Stores Ratings and config
 - Builds the BalanceProfile and the RaterProfile from the ratings
+- Builds `estimator_input`: the ratings array, K from the semantics, and the
+  weights (read from the semantics only if the coefficient accepts them).
+  The point and every resample are computed from it
 - Writes `estimate()` once for every coefficient (see below), with the one
   `_compute_ci` it uses
 
@@ -65,22 +68,26 @@ available to the former but not the latter.
 
 - Validates that the config is a GroupCoefficientConfig
 - Enforces balance constraints when `config.balanced_data_only=True`
+- Turns an EstimatorInput into counts (`data.nij`, K wide), so a group leaf
+  implements `_estimate_from_nij` on a NijMatrix
 
 ### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
 
-- Reads the Weights object from the semantics of the ratings (`Weights.build_from_categories`)
+- Say they accept weights (`_ACCEPTS_WEIGHTS`), so Analyzer reads them from
+  the semantics of the ratings (`Weights.build_from_categories`)
 - Validates weight matrix dimensions match the number of categories
 - Supports "identity" (unweighted), "linear", "quadratic", and "custom"
 
 ### IndividualMarginalAnalyzer
 
-- Builds EstimatorInput from Ratings (category_index + metadata)
+- Validates that the config is an IndividualMarginalConfig
 
 ### Leaf analyzers (e.g. FleissKappaAnalyzer)
 
 - Validate their own config type (FleissKappaConfig, etc.)
 - Supply only what is specific to their coefficient: the coefficient itself
-  (`_estimate_from_array`), the result it is packaged into (`_result`), and,
+  (`_estimate_from_input`, or `_estimate_from_nij` for a group leaf), the
+  result it is packaged into (`_result`), and,
   for Cohen, Scott and Fleiss, the null-variance interval
   (`_parametric_null_interval`)
 
@@ -90,9 +97,10 @@ available to the former but not the latter.
 `estimate()` is the same for every coefficient, so it is written once, on
 `Analyzer`:
 
-1. **Point estimate.** `_estimate_from_array` on the original data.
-2. **Bootstrap loop.** Resample subjects with replacement and call
-   `_estimate_from_array` on each resample. The bootstrap uses the same
+1. **Point estimate.** `_estimate_from_input(self.estimator_input)`.
+2. **Bootstrap loop.** Resample subjects with replacement
+   (`estimator_input.take_subjects`) and call `_estimate_from_input` on each
+   resample. Every resample keeps K and the weights. The bootstrap uses the same
    function as the point, so the two cannot drift apart.
 3. **Confidence interval.** Percentile or BCa from the draws; for
    `parametric_null`, `_parametric_null_interval` instead, with no draws.
@@ -100,7 +108,7 @@ available to the former but not the latter.
    the coefficient's frozen result object.
 
 A leaf analyzer writes only the coefficient-specific pieces: steps 2 and 3
-need nothing from it beyond `_estimate_from_array`. `_result` is separate
+need nothing from it beyond `_estimate_from_input`. `_result` is separate
 from the rest so that a permutation analysis, which bootstraps each pair or
 subset with its own seeds, can package a unit's point, interval and draws
 through the same method and get a result built and checked the same way.

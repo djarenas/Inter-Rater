@@ -174,11 +174,10 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
                 f"variance formula for this coefficient."
             )
 
-        n_categories = self.ratings.semantics.n_categories
+        n_categories = self.estimator_input.n_categories
 
         # Compute observed Brennan-Prediger
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        nij = NijMatrix(matrix=nij_array)
+        nij = self.estimator_input.nij
         observed_bp = brennan_prediger(nij, weights=self.weights)
 
         # Select permutation scheme
@@ -197,7 +196,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
         # Permutation loop
         null_values = []
         for permuted_array in permute_fn(
-            self.ratings.category_index,
+            self.estimator_input.category_index,
             n_permutations=ht_config.n_permutations,
             random_state=ht_config.random_state,
         ):
@@ -244,7 +243,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+    def _estimate_from_nij(self, nij: NijMatrix) -> float:
         """
         Brennan-Prediger's coefficient from a counts matrix.
 
@@ -253,20 +252,16 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
         classes in terms of this.
         """
         from .agreement_functions.group_agreement import brennan_prediger
-        from ..intermediates.estimator_parts import NijMatrix
 
-        return brennan_prediger(
-            NijMatrix(matrix=nij_array), weights=self.weights
-        )
+        return brennan_prediger(nij, weights=self.weights)
 
-    def _agreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+    def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """
         Po and Pe on the counts the point estimate was computed from.
 
         The same two functions brennan_prediger combines, so the result can
         check that they rebuild the point estimate.
         """
-        nij = NijMatrix(matrix=nij_array)
         return AgreementParts(
             observed=observed_agreement(nij, self.weights),
             chance=chance_brennan_prediger(nij, self.weights),
@@ -283,14 +278,13 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
         """
         from ..intermediates.results import BrennanPredigerResult
 
-        nij_array = self._nij_array()
         return BrennanPredigerResult(
             point=point,
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
-            parts=self._agreement_parts(nij_array),
+            parts=self._agreement_parts(self.estimator_input.nij),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,

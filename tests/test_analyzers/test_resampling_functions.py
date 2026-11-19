@@ -15,6 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from interrater.intermediates.estimator_parts import EstimatorInput, Weights
 from interrater.analyzers.resampling_functions.subject_resampling import (
     subject_bootstrap,
     subject_jackknife,
@@ -35,6 +36,18 @@ from interrater.analyzers.resampling_functions.permutation_resampling import (
 def ratings_3x2():
     """3 subjects, 2 raters, no missing data."""
     return np.array([[0, 1], [1, 0], [1, 1]], dtype=np.int8)
+
+
+@pytest.fixture
+def data_3x2(ratings_3x2):
+    """ratings_3x2 with K = 2, unweighted."""
+    return EstimatorInput(ratings_3x2, 2)
+
+
+@pytest.fixture
+def data_k3_weighted(ratings_3x2):
+    """ratings_3x2 declared over 3 categories, one never used, with weights."""
+    return EstimatorInput(ratings_3x2, 3, weights=Weights.linear(3))
 
 
 @pytest.fixture
@@ -63,78 +76,81 @@ def ratings_with_missing():
 class TestSubjectBootstrapValidation:
     """Type and value checks for subject_bootstrap."""
 
-    def test_category_index_not_ndarray(self):
-        with pytest.raises(TypeError, match="category_index must be np.ndarray"):
-            list(subject_bootstrap([[0, 1]], n_resamples=1))
+    def test_data_not_estimator_input(self, ratings_3x2):
+        with pytest.raises(TypeError, match="data must be EstimatorInput"):
+            list(subject_bootstrap(ratings_3x2, n_resamples=1))
 
-    def test_n_resamples_not_int(self, ratings_3x2):
+    def test_n_resamples_not_int(self, data_3x2):
         with pytest.raises(TypeError, match="n_resamples must be int"):
-            list(subject_bootstrap(ratings_3x2, n_resamples=5.0))
+            list(subject_bootstrap(data_3x2, n_resamples=5.0))
 
-    def test_random_state_not_int_or_none(self, ratings_3x2):
+    def test_random_state_not_int_or_none(self, data_3x2):
         with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(subject_bootstrap(ratings_3x2, random_state="bad"))
+            list(subject_bootstrap(data_3x2, random_state="bad"))
 
-    def test_category_index_not_2d(self):
-        with pytest.raises(ValueError, match="category_index must be 2D"):
-            list(subject_bootstrap(np.array([0, 1, 2]), n_resamples=1))
-
-    def test_n_resamples_zero(self, ratings_3x2):
+    def test_n_resamples_zero(self, data_3x2):
         with pytest.raises(ValueError, match="n_resamples must be >= 1"):
-            list(subject_bootstrap(ratings_3x2, n_resamples=0))
+            list(subject_bootstrap(data_3x2, n_resamples=0))
 
-    def test_n_resamples_negative(self, ratings_3x2):
+    def test_n_resamples_negative(self, data_3x2):
         with pytest.raises(ValueError, match="n_resamples must be >= 1"):
-            list(subject_bootstrap(ratings_3x2, n_resamples=-3))
+            list(subject_bootstrap(data_3x2, n_resamples=-3))
 
 
 class TestSubjectBootstrapBehavior:
     """Functional tests for subject_bootstrap."""
 
-    def test_yields_correct_count(self, ratings_3x2):
-        draws = list(subject_bootstrap(ratings_3x2, n_resamples=7))
+    def test_yields_correct_count(self, data_3x2):
+        draws = list(subject_bootstrap(data_3x2, n_resamples=7))
         assert len(draws) == 7
 
-    def test_each_draw_has_correct_shape(self, ratings_3x2):
-        for draw in subject_bootstrap(ratings_3x2, n_resamples=5):
-            assert draw.shape == (3, 2)
+    def test_each_draw_has_correct_shape(self, data_3x2):
+        for draw in subject_bootstrap(data_3x2, n_resamples=5):
+            assert draw.category_index.shape == (3, 2)
 
-    def test_draws_contain_original_rows(self, ratings_3x2):
+    def test_draws_contain_original_rows(self, data_3x2):
         """Each row in a draw must be a row from the original."""
-        original_set = {tuple(row) for row in ratings_3x2}
-        for draw in subject_bootstrap(ratings_3x2, n_resamples=10):
-            for row in draw:
+        original_set = {tuple(row) for row in data_3x2.category_index}
+        for draw in subject_bootstrap(data_3x2, n_resamples=10):
+            for row in draw.category_index:
                 assert tuple(row) in original_set
 
-    def test_reproducibility_same_seed(self, ratings_3x2):
-        draws_a = list(subject_bootstrap(ratings_3x2, n_resamples=5, random_state=42))
-        draws_b = list(subject_bootstrap(ratings_3x2, n_resamples=5, random_state=42))
-        for a, b in zip(draws_a, draws_b):
-            np.testing.assert_array_equal(a, b)
+    def test_draws_keep_k_and_weights(self, data_k3_weighted):
+        """A draw is computed against the rating task's K, never the draw's."""
+        for draw in subject_bootstrap(data_k3_weighted, n_resamples=10):
+            assert draw.n_categories == 3
+            assert draw.weights is data_k3_weighted.weights
 
-    def test_different_seed_different_results(self, ratings_3x2):
-        draws_a = list(subject_bootstrap(ratings_3x2, n_resamples=20, random_state=1))
-        draws_b = list(subject_bootstrap(ratings_3x2, n_resamples=20, random_state=2))
+    def test_reproducibility_same_seed(self, data_3x2):
+        draws_a = list(subject_bootstrap(data_3x2, n_resamples=5, random_state=42))
+        draws_b = list(subject_bootstrap(data_3x2, n_resamples=5, random_state=42))
+        for a, b in zip(draws_a, draws_b):
+            np.testing.assert_array_equal(a.category_index, b.category_index)
+
+    def test_different_seed_different_results(self, data_3x2):
+        draws_a = list(subject_bootstrap(data_3x2, n_resamples=20, random_state=1))
+        draws_b = list(subject_bootstrap(data_3x2, n_resamples=20, random_state=2))
         any_different = any(
-            not np.array_equal(a, b) for a, b in zip(draws_a, draws_b)
+            not np.array_equal(a.category_index, b.category_index)
+            for a, b in zip(draws_a, draws_b)
         )
         assert any_different
 
-    def test_none_seed_runs(self, ratings_3x2):
-        draws = list(subject_bootstrap(ratings_3x2, n_resamples=3, random_state=None))
+    def test_none_seed_runs(self, data_3x2):
+        draws = list(subject_bootstrap(data_3x2, n_resamples=3, random_state=None))
         assert len(draws) == 3
 
-    def test_default_random_state_is_42(self, ratings_3x2):
+    def test_default_random_state_is_42(self, data_3x2):
         """Default seed must be 42."""
-        draws_default = list(subject_bootstrap(ratings_3x2, n_resamples=5))
-        draws_42 = list(subject_bootstrap(ratings_3x2, n_resamples=5, random_state=42))
+        draws_default = list(subject_bootstrap(data_3x2, n_resamples=5))
+        draws_42 = list(subject_bootstrap(data_3x2, n_resamples=5, random_state=42))
         for a, b in zip(draws_default, draws_42):
-            np.testing.assert_array_equal(a, b)
+            np.testing.assert_array_equal(a.category_index, b.category_index)
 
-    def test_single_resample(self, ratings_3x2):
-        draws = list(subject_bootstrap(ratings_3x2, n_resamples=1))
+    def test_single_resample(self, data_3x2):
+        draws = list(subject_bootstrap(data_3x2, n_resamples=1))
         assert len(draws) == 1
-        assert draws[0].shape == (3, 2)
+        assert draws[0].category_index.shape == (3, 2)
 
 
 # ================================================================== #
@@ -147,41 +163,43 @@ class TestSubjectBootstrapBehavior:
 class TestSubjectJackknifeValidation:
     """Type and value checks for subject_jackknife."""
 
-    def test_category_index_not_ndarray(self):
-        with pytest.raises(TypeError, match="category_index must be np.ndarray"):
-            list(subject_jackknife([[0, 1], [1, 0]]))
-
-    def test_category_index_not_2d(self):
-        with pytest.raises(ValueError, match="category_index must be 2D"):
-            list(subject_jackknife(np.array([0, 1, 2])))
+    def test_data_not_estimator_input(self, ratings_3x2):
+        with pytest.raises(TypeError, match="data must be EstimatorInput"):
+            list(subject_jackknife(ratings_3x2))
 
     def test_fewer_than_2_subjects(self):
+        data = EstimatorInput(np.array([[0, 1]], dtype=np.int8), 2)
         with pytest.raises(ValueError, match="requires >= 2 subjects"):
-            list(subject_jackknife(np.array([[0, 1]], dtype=np.int8)))
+            list(subject_jackknife(data))
 
 
 class TestSubjectJackknifeBehavior:
     """Functional tests for subject_jackknife."""
 
-    def test_yields_n_subjects_draws(self, ratings_3x2):
-        draws = list(subject_jackknife(ratings_3x2))
+    def test_yields_n_subjects_draws(self, data_3x2):
+        draws = list(subject_jackknife(data_3x2))
         assert len(draws) == 3
 
-    def test_each_draw_has_correct_shape(self, ratings_3x2):
-        for draw in subject_jackknife(ratings_3x2):
-            assert draw.shape == (2, 2)
+    def test_each_draw_has_correct_shape(self, data_3x2):
+        for draw in subject_jackknife(data_3x2):
+            assert draw.category_index.shape == (2, 2)
 
-    def test_each_draw_omits_one_subject(self, ratings_3x2):
+    def test_each_draw_omits_one_subject(self, data_3x2):
         """Draw i must contain all rows except row i."""
-        for i, draw in enumerate(subject_jackknife(ratings_3x2)):
-            expected = np.delete(ratings_3x2, i, axis=0)
-            np.testing.assert_array_equal(draw, expected)
+        for i, draw in enumerate(subject_jackknife(data_3x2)):
+            expected = np.delete(data_3x2.category_index, i, axis=0)
+            np.testing.assert_array_equal(draw.category_index, expected)
+
+    def test_draws_keep_k_and_weights(self, data_k3_weighted):
+        for draw in subject_jackknife(data_k3_weighted):
+            assert draw.n_categories == 3
+            assert draw.weights is data_k3_weighted.weights
 
     def test_exactly_2_subjects(self):
-        data = np.array([[0, 1], [1, 0]], dtype=np.int8)
+        data = EstimatorInput(np.array([[0, 1], [1, 0]], dtype=np.int8), 2)
         draws = list(subject_jackknife(data))
         assert len(draws) == 2
-        assert draws[0].shape == (1, 2)
+        assert draws[0].category_index.shape == (1, 2)
 
 
 # ================================================================== #

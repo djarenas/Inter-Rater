@@ -5,12 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from .analyzer import Analyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
+    from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from .configs import GroupCoefficientConfig
 
@@ -90,7 +89,7 @@ class GroupAnalyzer(Analyzer, ABC):
     # Resampling ------------------------------------------------------------- #
 
     @abstractmethod
-    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+    def _estimate_from_nij(self, nij: NijMatrix) -> float:
         """
         Compute my coefficient from a counts matrix, and nothing else.
 
@@ -100,9 +99,9 @@ class GroupAnalyzer(Analyzer, ABC):
 
         Parameters
         ----------
-        nij_array : np.ndarray
-            Shape (n_subjects, n_categories). Entry (i, j) is how many raters
-            assigned category j to subject i.
+        nij : NijMatrix
+            Shape (n_subjects, n_categories), K wide. Entry (i, j) is how
+            many raters assigned category j to subject i.
 
         Returns
         -------
@@ -114,30 +113,18 @@ class GroupAnalyzer(Analyzer, ABC):
             f"by subclass"
         )
 
-    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
         Satisfy Analyzer's contract by counting, then deferring to nij.
 
         A group coefficient reads a counts matrix, so counting is the one step
         in front of it. Writing that step here means the five group analyzers
-        implement one method rather than two.
+        implement one method rather than two. The counts are K wide, K from
+        data, so a draw that misses a category keeps its column of zeros.
         """
-        from ..array_utils import category_counts
-
-        return self._estimate_from_nij(
-            category_counts(category_index, self._n_categories())
-        )
+        return self._estimate_from_nij(data.nij)
 
     # Private helpers -------------------------------------------------------- #
-
-    def _nij_array(self) -> np.ndarray:
-        """
-        The counts matrix of my ratings, for ``_result`` and
-        ``_parametric_null_interval``.
-        """
-        from ..array_utils import category_counts
-
-        return category_counts(self.ratings.category_index, self._n_categories())
 
     def _agreement_profile(self):
         """
@@ -146,15 +133,6 @@ class GroupAnalyzer(Analyzer, ABC):
         from ..intermediates.data_profiles import AgreementProfile
 
         return AgreementProfile.build_from_ratings(self.ratings)
-
-    def _n_categories(self) -> int:
-        """
-        K, from the semantics.
-
-        Never inferred from the values: a matrix whose largest observed
-        category is 2 may still have been declared over five.
-        """
-        return self.ratings.semantics.n_categories
 
     def _validate_group_config(self) -> None:
         """

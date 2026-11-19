@@ -167,7 +167,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             )
 
         ht_config = self.config.hypothesis_test_config
-        n_categories = self.ratings.semantics.n_categories
+        n_categories = self.estimator_input.n_categories
 
         # Compute point estimate
         point = light_kappa(self.estimator_input)
@@ -196,7 +196,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             null_values = []
 
             for permuted_array in scheme_fn(
-                self.ratings.category_index,
+                self.estimator_input.category_index,
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
@@ -271,23 +271,16 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
                 pair_kappa_max[key] = cohen_kappa_max(marginals[0], marginals[1])
         return pair_parts, pair_kappa_max
 
-    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Light's kappa from a ratings array.
+        Light's kappa from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
-        draws samples is written once on Analyzer in terms of this.
-
-        I build my own EstimatorInput because the array I am handed is a
-        resample, not the original data. Light's kappa is the mean of the
-        C(m,2) pairwise Cohen's kappas, so every rater pair is re-formed from
-        the column positions of whatever array I am given.
+        draws samples is written once on Analyzer in terms of this. Light's
+        kappa is the mean of the C(m,2) pairwise Cohen's kappas, so every
+        rater pair is re-formed from the column positions of data.
         """
-        ei = EstimatorInput(
-            category_index=category_index,
-            n_categories=self.ratings.semantics.n_categories,
-        )
-        return light_kappa(ei)
+        return light_kappa(data)
 
     def _result(
         self, point: float, ci, bootstrap_distribution: np.ndarray | None

@@ -186,11 +186,10 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
                 f"(Hayes & Krippendorff 2007)."
             )
 
-        n_categories = self.ratings.semantics.n_categories
+        n_categories = self.estimator_input.n_categories
 
         # Compute observed Krippendorff's alpha
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        nij = NijMatrix(matrix=nij_array)
+        nij = self.estimator_input.nij
         observed_ka = krippendorff_alpha(nij, weights=self.weights)
 
         # Select permutation scheme
@@ -209,7 +208,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         # Permutation loop
         null_values = []
         for permuted_array in permute_fn(
-            self.ratings.category_index,
+            self.estimator_input.category_index,
             n_permutations=ht_config.n_permutations,
             random_state=ht_config.random_state,
         ):
@@ -256,7 +255,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+    def _estimate_from_nij(self, nij: NijMatrix) -> float:
         """
         Krippendorff's alpha from a counts matrix.
 
@@ -265,20 +264,16 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         classes in terms of this.
         """
         from .agreement_functions.krippendorff import krippendorff_alpha
-        from ..intermediates.estimator_parts import NijMatrix
 
-        return krippendorff_alpha(
-            NijMatrix(matrix=nij_array), weights=self.weights
-        )
+        return krippendorff_alpha(nij, weights=self.weights)
 
-    def _disagreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+    def _disagreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """
         Do and De on the counts the point estimate was computed from.
 
         The same two functions krippendorff_alpha combines, so the result can
         check that they rebuild the point estimate.
         """
-        nij = NijMatrix(matrix=nij_array)
         return AgreementParts(
             observed=observed_disagreement(nij, self.weights),
             chance=expected_disagreement(nij, self.weights),
@@ -295,14 +290,13 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         """
         from ..intermediates.results import KrippendorffAlphaResult
 
-        nij_array = self._nij_array()
         return KrippendorffAlphaResult(
             point=point,
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
-            parts=self._disagreement_parts(nij_array),
+            parts=self._disagreement_parts(self.estimator_input.nij),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,

@@ -19,6 +19,9 @@ versioning follows [semver](https://semver.org/).
   the width of the table it was given rather than from a declared
   semantics. Results on the ratings route are unchanged.
 - Passing `None` as ratings now raises `TypeError` in every analyzer.
+- `subject_bootstrap()` and `subject_jackknife()` take an `EstimatorInput`
+  and yield `EstimatorInput`s, so every draw keeps K and the weights. The
+  draws are the same rows as before, and results are unchanged.
 - What only the counts route produced is gone with it: a result's
   `rater_profile` must be a `RaterProfile` (no longer `NotComputed`),
   `AgreementProfile.rater_marginals` is always a dict, and
@@ -35,6 +38,10 @@ versioning follows [semver](https://semver.org/).
   (1971) is published as counts only, so `example_data/made_up_ratings.py`
   turns its counts into Ratings in memory, with made-up rater slots. It is
   not part of the package, and no file of made-up ratings is kept.
+- Every analyzer builds its `EstimatorInput` (array, K from the semantics,
+  weights) once, in `Analyzer`, and computes the point and every resample
+  from it. Before, only Cohen, Conger and Light did, and the group
+  analyzers read K separately.
 - Example data: SR3, SR4 and SR5 files renamed to `SR3_*`, `SR4_*` and
   `SR5_*`; `SR5_CocCardio/` renamed to `SR5_SciRep2020/`. Each systematic
   review dataset now cites its paper.

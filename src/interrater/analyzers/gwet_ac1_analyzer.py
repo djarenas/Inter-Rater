@@ -166,11 +166,10 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"There is no parametric null variance formula for AC1."
             )
 
-        n_categories = self.ratings.semantics.n_categories
+        n_categories = self.estimator_input.n_categories
 
         # Compute observed AC1
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        nij = NijMatrix(matrix=nij_array)
+        nij = self.estimator_input.nij
         observed_ac1 = gwet_ac1(nij)
 
         # Select permutation scheme
@@ -189,7 +188,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         # Permutation loop
         null_values = []
         for permuted_array in permute_fn(
-            self.ratings.category_index,
+            self.estimator_input.category_index,
             n_permutations=ht_config.n_permutations,
             random_state=ht_config.random_state,
         ):
@@ -236,7 +235,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+    def _estimate_from_nij(self, nij: NijMatrix) -> float:
         """
         Gwet's AC1 from a counts matrix.
 
@@ -247,18 +246,16 @@ class GwetAC1Analyzer(GroupAnalyzer):
         AC1 takes no weights: Gwet (2008) defines it as unweighted.
         """
         from .agreement_functions.group_agreement import gwet_ac1
-        from ..intermediates.estimator_parts import NijMatrix
 
-        return gwet_ac1(NijMatrix(matrix=nij_array))
+        return gwet_ac1(nij)
 
-    def _agreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+    def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """
         Po and Pe on the counts the point estimate was computed from.
 
         The same two functions gwet_ac1 combines, so the result can check
         that they rebuild the point estimate.
         """
-        nij = NijMatrix(matrix=nij_array)
         return AgreementParts(
             observed=observed_agreement(nij),
             chance=chance_gwet_ac1(nij),
@@ -275,14 +272,13 @@ class GwetAC1Analyzer(GroupAnalyzer):
         """
         from ..intermediates.results import GwetsAC1Result
 
-        nij_array = self._nij_array()
         return GwetsAC1Result(
             point=point,
             confidence_interval=ci,
             bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
-            parts=self._agreement_parts(nij_array),
+            parts=self._agreement_parts(self.estimator_input.nij),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,

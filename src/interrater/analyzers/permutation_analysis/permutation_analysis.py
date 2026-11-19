@@ -501,7 +501,7 @@ class PermutationAnalysis:
         )
 
         # The analyzer and this analysis must agree on the unit's coefficient
-        theirs = analyzer._estimate_from_array(unit_ratings.category_index)
+        theirs = analyzer._estimate_from_input(analyzer.estimator_input)
         if not (
             (np.isnan(theirs) and np.isnan(point))
             or np.isclose(theirs, point, rtol=1e-12, atol=1e-12)

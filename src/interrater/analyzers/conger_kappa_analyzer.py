@@ -164,7 +164,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             )
 
         ht_config = self.config.hypothesis_test_config
-        n_categories = self.ratings.semantics.n_categories
+        n_categories = self.estimator_input.n_categories
 
         # Compute point estimate
         point = conger_kappa(self.estimator_input)
@@ -193,7 +193,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             null_values = []
 
             for permuted_array in scheme_fn(
-                self.ratings.category_index,
+                self.estimator_input.category_index,
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
@@ -264,22 +264,16 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         marginals = rater_marginals(self.estimator_input)
         return cohen_kappa_max(marginals[0], marginals[1])
 
-    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Conger's kappa from a ratings array.
+        Conger's kappa from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
-        draws samples is written once on Analyzer in terms of this.
-
-        I build my own EstimatorInput because the array I am handed is a
-        resample, not the original data: Conger's chance term is computed
-        from each rater's own marginals, so the column positions matter.
+        draws samples is written once on Analyzer in terms of this. Conger's
+        chance term is computed from each rater's own marginals, so the
+        column positions of data matter.
         """
-        ei = EstimatorInput(
-            category_index=category_index,
-            n_categories=self.ratings.semantics.n_categories,
-        )
-        return conger_kappa(ei)
+        return conger_kappa(data)
 
     def _result(
         self, point: float, ci, bootstrap_distribution: np.ndarray | None

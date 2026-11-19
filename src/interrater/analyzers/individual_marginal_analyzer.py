@@ -71,11 +71,10 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
     term. I am the sibling of GroupAnalyzer, which discards rater identity,
     reads a counts matrix, and therefore cares about 'pooled marginals'.
 
-    I store an EstimatorInput built from the Ratings. EstimatorInput carries
-    the category_index array alongside K and optional weights -- everything an
-    agreement function in individual_marginals.py needs. At this level weights
-    are always None; WeightableIndividualAnalyzer resolves them for coefficients
-    that support weighting.
+    Analyzer builds the EstimatorInput: the category_index array alongside K
+    and optional weights -- everything an agreement function in
+    individual_marginals.py needs. Weights are None unless the coefficient
+    accepts them (WeightableIndividualAnalyzer).
 
     Counts discard rater identity, which is exactly what individual marginal
     coefficients need to keep. If you have only counts,
@@ -97,9 +96,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         rated, how much each pair overlapped. Always present here:
         this coefficient needs rater identity.
     estimator_input : EstimatorInput
-        Built from ratings, carrying category_index, n_categories, and weights.
-        Weights are None at this level; subclasses may rebuild with resolved
-        weights.
+        Carrying category_index, n_categories, and weights (from Analyzer).
     """
 
     # Attribute declaration
@@ -108,10 +105,9 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    estimator_input: EstimatorInput
     # Checked at this level
     config: IndividualMarginalConfig
-    # Populated at this level
-    estimator_input: EstimatorInput
 
     # Constructor ------------------------------------------------------------ #
 
@@ -119,8 +115,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         self, ratings: Ratings, config: IndividualMarginalConfig
     ) -> None:
         """
-        Initialize individual marginal analyzer: validate inputs and build
-        EstimatorInput.
+        Initialize individual marginal analyzer: validate inputs.
 
         Parameters
         ----------
@@ -146,9 +141,6 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
 
         # Weights arrive with the semantics; refuse them if unusable here
         self._refuse_weights_if_unsupported()
-
-        # Build EstimatorInput from ratings (weights=None at this level)
-        self.estimator_input = self._build_estimator_input()
 
     # Public API ------------------------------------------------------------- #
 
@@ -188,23 +180,3 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
                 f"CongerKappaConfig, LightKappaConfig). "
                 f"Got {type(self.config).__name__}"
             )
-
-    def _build_estimator_input(self) -> EstimatorInput:
-        """
-        Build EstimatorInput from ratings with weights=None.
-
-        Subclasses that support weighting (WeightableIndividualAnalyzer)
-        rebuild this with resolved weights after calling super().__init__().
-
-        Returns
-        -------
-        EstimatorInput
-            Carrying category_index, n_categories, and weights=None.
-        """
-        from ..intermediates.estimator_parts.estimator_input import EstimatorInput
-
-        return EstimatorInput(
-            category_index=self.ratings.category_index,
-            n_categories=self.ratings.semantics.n_categories,
-            weights=None,
-        )

@@ -166,7 +166,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         ht_config = self.config.hypothesis_test_config
 
         # Compute point estimate from whichever data source is available
-        nij = self._get_nij()
+        nij = self.estimator_input.nij
         point = fleiss_kappa(nij, weights=self.weights)
         pj = self._compute_pj(nij)
 
@@ -225,7 +225,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             null_values = []
 
             for permuted_array in scheme_fn(
-                self.ratings.category_index,
+                self.estimator_input.category_index,
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
@@ -274,12 +274,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _get_nij(self) -> NijMatrix:
-        """The counts matrix of my ratings, with K from the semantics."""
-        n_categories = self.ratings.semantics.n_categories
-        nij_array = category_counts(self.ratings.category_index, n_categories)
-        return NijMatrix(matrix=nij_array)
-
     def _compute_pj(self, nij: NijMatrix) -> np.ndarray:
         """
         Compute category proportions (pj) from NijMatrix.
@@ -301,7 +295,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
         return np.mean(proportions_per_subject, axis=0)
 
-    def _estimate_from_nij(self, nij_array: np.ndarray) -> float:
+    def _estimate_from_nij(self, nij: NijMatrix) -> float:
         """
         Fleiss' kappa from a counts matrix.
 
@@ -309,16 +303,15 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         draws samples, bootstrap or jackknife, is written once on my base
         classes in terms of this.
         """
-        return fleiss_kappa(NijMatrix(matrix=nij_array), weights=self.weights)
+        return fleiss_kappa(nij, weights=self.weights)
 
-    def _agreement_parts(self, nij_array: np.ndarray) -> AgreementParts:
+    def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """
         Po and Pe on the counts the point estimate was computed from.
 
         The same two functions fleiss_kappa combines, so the result can check
         that they rebuild the point estimate.
         """
-        nij = NijMatrix(matrix=nij_array)
         return AgreementParts(
             observed=observed_agreement(nij, self.weights),
             chance=chance_fleiss(nij, self.weights),
@@ -352,7 +345,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         from scipy import stats
         from .variance_functions import fleiss_null_variance
 
-        nij = self._get_nij()
+        nij = self.estimator_input.nij
         n_subjects = nij.n_subjects
         n_raters = int(nij.n_per_subject[0])  # Assumes balanced
 
@@ -372,9 +365,8 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         The interval from Fleiss (1979) null variance, for
         ``ci_method="parametric_null"``: no bootstrap, so no draws.
         """
-        nij_array = self._nij_array()
         return self._parametric_null_ci(
-            point, self._compute_pj(NijMatrix(matrix=nij_array))
+            point, self._compute_pj(self.estimator_input.nij)
         )
 
     def _result(
@@ -384,14 +376,13 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         My result: the point, interval and draws ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
         """
-        nij_array = self._nij_array()
         return FleissKappaResult(
             point=point,
             confidence_interval=ci,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             bootstrap_distribution=bootstrap_distribution,
-            parts=self._agreement_parts(nij_array),
+            parts=self._agreement_parts(self.estimator_input.nij),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,

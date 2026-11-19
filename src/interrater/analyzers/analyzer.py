@@ -9,6 +9,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
+    from ..intermediates.estimator_parts import EstimatorInput, Weights
     from ..intermediates import AnalysisResult
     from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
@@ -30,12 +31,14 @@ class Analyzer(ABC):
     - Applying the injection pipeline (if config.injection is set),
       which adds synthetic raters to Ratings before any analysis
     - Computing BalanceProfile (relevant for most coefficients)
+    - Building the EstimatorInput (array, K, weights) that every estimate
+      and every resample is computed from
     - Providing the public estimate() interface
     - Delegating to subclasses for coefficient-specific logic
 
     Subclasses override __init__ to add their own validation
-    (e.g., GroupAnalyzer checks balanced_data_only, WeightableGroupAnalyzer
-    builds Weights, FleissKappaAnalyzer validates ratings type).
+    (e.g., GroupAnalyzer checks balanced_data_only, FleissKappaAnalyzer
+    validates ratings type).
 
     Attributes
     ----------
@@ -52,6 +55,12 @@ class Analyzer(ABC):
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
+    weights : Weights | None
+        From the semantics, for a coefficient with a weighted form. None
+        for identity, and always None for a coefficient without one.
+    estimator_input : EstimatorInput
+        The ratings array, K from the semantics, and the weights. What the
+        coefficient is computed from, and what every resample is drawn from.
     """
 
     # Attribute declaration
@@ -61,6 +70,8 @@ class Analyzer(ABC):
     config: AnalyzerConfig
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights: Weights | None
+    estimator_input: EstimatorInput
 
     def __init__(self, ratings: Ratings, config: AnalyzerConfig) -> None:
         """
@@ -114,6 +125,19 @@ class Analyzer(ABC):
         self.balance_profile = BalanceProfile.build_from_ratings(self.ratings)
         self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
 
+        # K and weights travel with the array from here on
+        from ..intermediates.estimator_parts import EstimatorInput, Weights
+
+        self.weights = (
+            Weights.build_from_categories(self.ratings.semantics.categories)
+            if self._ACCEPTS_WEIGHTS else None
+        )
+        self.estimator_input = EstimatorInput(
+            category_index=self.ratings.category_index,
+            n_categories=self.ratings.semantics.n_categories,
+            weights=self.weights,
+        )
+
     # Public API ------------------------------------------------------------- #
 
     def estimate(self) -> AnalysisResult:
@@ -124,7 +148,7 @@ class Analyzer(ABC):
         here: the point from the ratings, the interval (bootstrap, or the
         null variance for ``parametric_null``), then the coefficient's own
         result. Each analyzer supplies only what differs: the coefficient
-        (``_estimate_from_array``), its result (``_result``), and, where it
+        (``_estimate_from_input``), its result (``_result``), and, where it
         has one, its null variance (``_parametric_null_interval``).
 
         Returns
@@ -133,7 +157,7 @@ class Analyzer(ABC):
             Subclass-specific result (FleissKappaResult, CohenKappaResult, etc.)
             holding point estimate, confidence interval, and relevant metadata.
         """
-        point = self._estimate_from_array(self.ratings.category_index)
+        point = self._estimate_from_input(self.estimator_input)
 
         if self.config.ci_method == "parametric_null":
             ci = self._parametric_null_interval(point)
@@ -212,25 +236,25 @@ class Analyzer(ABC):
     # Resampling ------------------------------------------------------------- #
 
     @abstractmethod
-    def _estimate_from_array(self, category_index: np.ndarray) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Compute my coefficient from a ratings array, and nothing else.
+        Compute my coefficient from an EstimatorInput, and nothing else.
 
         This is the one step that differs between coefficients. Everything
         that resamples -- the bootstrap, the jackknife, anything added later
         -- is expressed in terms of it, so each of them exists once here
         rather than once per analyzer.
 
-        I take a bare array rather than a Ratings because my callers hand me
-        resampled arrays, which are not Ratings and should not have to
-        pretend to be. Semantics (how many categories, which weights) come
-        from the analyzer, not from the array.
+        I take an EstimatorInput rather than a Ratings because my callers
+        hand me resamples, which are not Ratings and should not have to
+        pretend to be. K and the weights come with the data, taken from
+        ``self.estimator_input``, never inferred from the array.
 
         Parameters
         ----------
-        category_index : np.ndarray
-            Shape (n_subjects, n_raters), dtype int8. A resample, a
-            leave-one-out subset, or the original data.
+        data : EstimatorInput
+            ``self.estimator_input``, a resample of it, or a leave-one-out
+            subset of it.
 
         Returns
         -------
@@ -240,7 +264,7 @@ class Analyzer(ABC):
             and the coefficient is then 0/0.
         """
         raise NotImplementedError(
-            f"{_ERROR_PREFIX}: _estimate_from_array() must be implemented "
+            f"{_ERROR_PREFIX}: _estimate_from_input() must be implemented "
             f"by subclass"
         )
 
@@ -258,9 +282,9 @@ class Analyzer(ABC):
         from .resampling_functions import subject_bootstrap
 
         return np.array([
-            self._estimate_from_array(resampled)
+            self._estimate_from_input(resampled)
             for resampled in subject_bootstrap(
-                self.ratings.category_index,
+                self.estimator_input,
                 n_resamples=self.config.n_resamples,
                 random_state=self.config.random_state,
             )
@@ -289,8 +313,8 @@ class Analyzer(ABC):
         from .resampling_functions import subject_jackknife
 
         return np.array([
-            self._estimate_from_array(subset)
-            for subset in subject_jackknife(self.ratings.category_index)
+            self._estimate_from_input(subset)
+            for subset in subject_jackknife(self.estimator_input)
         ], dtype=np.float64)
 
     def _compute_ci(
