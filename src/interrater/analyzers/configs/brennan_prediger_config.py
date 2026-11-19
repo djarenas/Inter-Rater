@@ -31,7 +31,7 @@ class BrennanPredigerConfig(WeightableGroupConfig):
     matrix. The chance term remains independent of what the raters actually
     did -- the hallmark of Brennan-Prediger -- and the weighted coefficient
     is the unweighted one with identity W as a special case. The formula is
-    from Gwet (2014), implemented in irrCAC as ``bp.coeff.raw``.
+    from Gwet (2014).
 
     Weights are declared in the semantics of the ratings (categories kind
     'ordered' or 'weighted'). The analyzer reads the weight matrix from there

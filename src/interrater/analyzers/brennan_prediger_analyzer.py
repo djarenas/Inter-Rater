@@ -38,8 +38,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
     derives chance from the observed marginals, and unlike Gwet's AC1, which
     derives it from category heterogeneity.
 
-    The weighted form (Gwet 2014, implemented in irrCAC as ``bp.coeff.raw``)
-    replaces 1/K with sum(W) / K^2, where W is the weight matrix. For
+    The weighted form (Gwet 2014) replaces 1/K with sum(W) / K^2, where W is the weight matrix. For
     identity weights sum(I) = K, so Pe = K/K^2 = 1/K -- the unweighted
     coefficient is the special case.
 

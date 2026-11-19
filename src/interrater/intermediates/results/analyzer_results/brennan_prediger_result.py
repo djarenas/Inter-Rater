@@ -43,8 +43,7 @@ class BrennanPredigerResult(PointEstimateResult):
     standard Brennan-Prediger with Pe = 1/K. When False, I am Gwet's formula
     for missing ratings: Po averaged per subject, each subject divided by its
     own rater count, over the same Pe (Gwet, K. L. (2014). Handbook of
-    Inter-Rater Reliability, 4th ed., as implemented in irrCAC's
-    ``bp.coeff.raw``). Not an approximation; my printed form names the source.
+    Inter-Rater Reliability, 4th ed.). Not an approximation; my printed form names the source.
 
     weights_type is on me (not just on the config) because weighted and
     unweighted Brennan-Prediger are different statistics with different

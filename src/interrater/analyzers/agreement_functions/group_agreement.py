@@ -1,64 +1,31 @@
 """
-Coefficients for many raters, computed from how many raters chose each category.
+Group coefficients from counts: Fleiss' kappa, Scott's pi, Gwet's AC1,
+Brennan-Prediger and percent agreement.
 
-(dumbest docstring ever, why take nij matrix fuck)
-I am ashamed I pushed this as V2.1.0
+Each coefficient is (Po - Pe) / (1 - Pe). Po is the same for all of them
+(``observed_agreement``); only the chance term Pe differs.
 
+Each reads an NijMatrix: for each subject, how many raters chose each
+category. Therefore, they use pooled marginals; there is no information
+about which rater chose which category.
 
-Every function here reads the same thing: for each subject, how many raters
-placed it in each category. They use
-pooled marginals, which means they do not care *which* rater said what. This
-separates them from the ones that use individual marginals, like Cohen's kappa. 
+- K (the number of categories) is calculated from the width of the NijMatrix.
+  This means that an analyzer must build the matrix with a K width;
+  ``EstimatorInput.nij`` does, with K from the semantics.
+- Nothing here validates. The analyzer checks the data once, before; these
+  functions run inside bootstrap loops.
+- A ``weights`` argument appears only where the coefficient has a weighted
+  form: Fleiss, Brennan-Prediger, percent agreement. Gwet's AC1 has none
+  (its weighted form is AC2). Scott's pi accepts weights only to refuse
+  non-identity ones.
 
-The functions here also share a skeleton. Observed agreement is computed once and identically
-for all of them; only the chance term differs:
-
-    coefficient = (Po - Pe) / (1 - Pe)
-
-On real data with Po = 0.8941, Fleiss (Pe = 0.784), Gwet's AC1 (0.216),
-Brennan-Prediger (0.500) and percent agreement (0) are the same arithmetic with
-four different answers to "how much agreement would chance alone produce". That
-question is the whole of the disagreement between them, and it is why they can
-differ by 0.35 on identical ratings.
-
-These take an ``NijMatrix`` and, optionally, a ``Weights``. Not an
-``EstimatorInput``: counts are what they actually read, and an analyser
-converts once and passes the result down rather than having each function
-recompute it. K travels with the matrix -- its width *is* K -- so a coefficient
-can never be computed against a smaller K than the rating task had, which is
-what would happen if a bootstrap draw that missed a rare category were allowed
-to infer K from itself.
-
-Nothing here validates, and that is the contract rather than an omission. They
-assume the counts came from an array that satisfied ``Ratings`` at the
-boundary, and they assume the caller knows which coefficient it is invoking and
-what that coefficient supports. The analysers are that caller: each one was
-written to compute a particular coefficient and already knows its
-preconditions, so asking a function to describe itself at runtime would be
-querying a fact the caller was authored with.
-
-Whether a coefficient *applies* to the data -- whether Fleiss' constant-rater
-requirement is met, whether there are enough raters for the question being
-asked -- is therefore checked once, by the analyser, before any of this runs.
-
-**A weights argument appears only where it is read.** Fleiss' kappa, percent
-agreement, and Brennan-Prediger take one; Gwet's AC1 does not, because there is
-no weighted form of it here -- the weighted AC1 is Gwet's AC2, a separate
-coefficient. Offering weights to a coefficient that has none is therefore a
-TypeError at the call site rather than a number that quietly ignored half of
-what it was given. Signature uniformity is not needed for resampling: a
-resampler receives a one-argument callable, and binding whatever else a
-coefficient wants is the analyser's job.
+Formulas are in README.md.
 
 References
-- Fleiss1969: Fleiss, Joseph L., Jacob Cohen, and Brian S. Everitt.
-  "Large sample standard errors of kappa and weighted kappa."
-  Psychological bulletin 72.5 (1969): 323.
-- Fleiss1971: Fleiss, Joseph L.
-  "Measuring nominal scale agreement among many raters."
-  Psychological bulletin 76.5 (1971): 378.
-
-
+- Brennan, R. L., & Prediger, D. J. (1981). Educational and Psychological
+  Measurement, 41(3), 687-699.
+- Fleiss, J. L. (1971). Psychological Bulletin, 76(5), 378-382.
+- Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
 """
 
 from __future__ import annotations
@@ -85,15 +52,12 @@ def observed_agreement(nij: NijMatrix, weights: Weights | None = None) -> float:
 
     Fleiss writes n as a constant, the same for every subject. Here each
     subject is divided by its own count, which agrees with Fleiss exactly when
-    the data is balanced and generalises it otherwise -- the generalisation
-    being Landis and Koch's, not Fleiss'. An analyser that promises *exact*
+    the data is balanced. An analyser that promises *exact*
     Fleiss must therefore require balanced data; this function will not stop
     it, because refusing here would also refuse the coefficients that have no
     such requirement.
 
-    Subjects rated fewer than twice are skipped. A single rating forms no pair,
-    so there is nothing for it to agree or disagree with, and dividing by
-    n(n-1) = 0 would be undefined rather than merely uninformative.
+    Subjects rated fewer than twice are skipped.
 
     With weights, a disagreement still earns whatever credit the weight matrix
     gives it, so the count of agreeing pairs becomes a weighted sum over every
@@ -149,30 +113,15 @@ def category_proportions(nij: NijMatrix) -> np.ndarray:
     The reason is consistency rather than authority: the
     observed agreement above is already a mean over subjects, each weighted
     equally, so weighting Pe by rating instead would have the two halves of one
-    formula disagree about what they are averaging over. It also matches Gwet's
-    implementation, which matters for anyone comparing.
+    formula disagree about what they are averaging over.
 
-    The choice is invisible on balanced data. An
-    analyser computing *Fleiss'* kappa should require balance and sidestep the
-    question; one that accepts unbalanced data is choosing among
-    generalisations Fleiss did not give, and should say so.
+    Subjects rated fewer than twice are skipped.
 
-    Length K, taken from the input rather than the data, so a category nobody
-    chose still has an entry holding zero. Gwet's AC1 and Brennan-Prediger put
-    the number of categories in their chance term, so dropping an empty one
-    would move them.
+    Has one component per column of the NijMatrix, so a category nobody chose
+    gets a zero, provided the matrix was built K wide. This is relevant for
+    Gwet's AC1 and Brennan-Prediger.
 
-    Subjects rated fewer than twice are skipped, as they are in the observed
-    agreement -- the two must average over the same subjects or they are not
-    describing the same data.
-
-    Guaranteed to have K components, since an NijMatrix is K columns wide by
-    construction and a category nobody chose is a column of zeros rather than a
-    column that is missing.
-
-    Weights do not enter. These are proportions of ratings, and how much credit
-    a disagreement earns has nothing to say about how often a category was
-    chosen.
+    Weights do not enter. These are proportions of ratings.
     """
     counts   = nij.matrix                              # i: subject; j: category
     per_subj = nij.n_per_subject.astype(np.float64)    # n_i: raters per subject
@@ -197,7 +146,7 @@ def chance_fleiss(nij: NijMatrix, weights: Weights | None = None) -> float:
     function here.
 
     This is the term that makes kappa behave oddly under skew. At 90% in one
-    category, Pe is around 0.82 and kappa is left dividing by 0.18 -- so a
+    category, Pe is around 0.82 and kappa is left dividing by 0.18; therefore, a
     dataset where raters agreed on 93% of subjects scores lower than one where
     they agreed on 91% but spread their ratings more evenly.
 
@@ -221,18 +170,14 @@ def chance_gwet_ac1(nij: NijMatrix) -> float:
     it should contribute little to the chance term. The result is a coefficient
     that does not collapse under skew the way kappa does.
 
-    Note K appearing explicitly. That is why an unused category cannot be
-    quietly dropped from the scheme: doing so changes this number, while
-    leaving Fleiss' untouched. NijMatrix is K columns wide for that reason.
+    This function is an example of why it is important that NijMatrix
+    gets properly built from the analyzers with the right number of
+    categories.
 
-    WHERE WHERE WHERE Does K appear explicitly
-
-    **Takes no weights, because there is no weighted form of it here.** The
+    **Takes no weights, this package has no weighted form for it.** The
     weighted version of AC1 is Gwet's AC2, a separate coefficient with a
     published definition of its own. Handing weights to this one is a
-    TypeError, which is the right answer: the alternative is a weighted
-    observed agreement over an unweighted chance term, which is neither
-    coefficient and looks entirely plausible.
+    TypeError.
     """
     pj = category_proportions(nij)
     k = nij.n_categories
@@ -243,11 +188,11 @@ def chance_brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> f
     """
     Pe as Brennan and Prediger: 1/K, regardless of what the raters did.
 
-    The most severe answer available. It assumes chance means picking
+    Chance is a uniform guess among the K categories.
+
+    It assumes chance means picking
     uniformly among the categories on offer, so the observed proportions do not
-    enter at all. Unaffected by skew because it never looks at it, which is
-    either the point or the problem depending on whether you think a category
-    nobody uses should still count as a possibility.
+    enter at all. Unaffected by skew because it never looks at it.
 
     With weights the formula becomes sum(W) / K^2, where W is the K x K weight
     matrix and K is the number of categories. Identity weights reduce this to
@@ -256,8 +201,7 @@ def chance_brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> f
     partial credit and therefore raise the baseline that chance alone would
     produce.
 
-    The weighted formula is from Gwet (2014), implemented in irrCAC's
-    ``bp.coeff.raw`` as ``pe <- sum(weights.mat) / (q^2)``.
+    The weighted formula is from Gwet (2014).
     """
     k = nij.n_categories
     if weights is None or weights.is_identity:
@@ -274,9 +218,10 @@ def agreement_corrected_by_chance(observed: float, chance: float) -> float:
     Returns NaN when chance agreement is total. That happens when every rating
     in the data went to one category, and it is not a failure to handle but a
     question with no answer: if chance alone would have produced perfect
-    agreement, there is no room above it to have taken up. Bootstrap draws
-    reach this state on skewed data, which is why the resampler counts NaNs
-    rather than treating them as zeros.
+    agreement, there is no room above it to have taken up. 
+    
+    Returning NaN is especially relevant for bootstrap draws. It would 
+    be misleading to return zero.
     """
     if np.isclose(chance, 1.0):
         return float("nan")
@@ -287,9 +232,8 @@ def percent_agreement(nij: NijMatrix, weights: Weights | None = None) -> float:
     """
     Po, uncorrected. The proportion of rater pairs that agreed.
 
-    Not chance-corrected and not pretending to be. Worth reporting beside a
-    kappa rather than instead of one: a kappa of 0.42 next to 93% agreement is
-    telling you something about the prevalence, not about the raters.
+    Worth reporting beside a kappa rather than instead of one: a kappa of 0.42 next to 93% agreement is
+    telling you something about the prevalence, and not just about the raters.
     """
     return observed_agreement(nij, weights)
 
@@ -304,10 +248,9 @@ def fleiss_kappa(nij: NijMatrix, weights: Weights | None = None) -> float:
 
     **The constant-rater requirement is real and is not checked here.** Fleiss
     Equation 2 divides by n(n-1) with a fixed n, and the introduction says
-    plainly that the case of varying numbers of raters is not considered. An
-    analyser promising exact Fleiss must require balanced data; given
-    unbalanced data this returns the Landis and Koch generalisation, which is a
-    reasonable number but not the one Fleiss defined.
+    plainly that the case of varying numbers of raters is not considered. 
+    
+    On unbalanced data the result reports itself as an approximation.
 
     Examples
     --------
@@ -325,7 +268,8 @@ def gwet_ac1(nij: NijMatrix) -> float:
 
     Same observed agreement as Fleiss', a different answer to how much of it
     chance would explain. On heavily skewed data the two diverge sharply --
-    measured across five real screening datasets, by between 0.17 and 0.36 --
+    across the six systematic-review datasets in example_data, by 0.17 to
+    0.36 --
     and the gap is entirely the chance term.
 
     **Unweighted only.** The weighted coefficient is Gwet's AC2, defined
@@ -341,11 +285,8 @@ def brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> float:
     """
     Brennan and Prediger's coefficient: chance is a uniform guess among K.
 
-    Independent of how the raters actually used the categories, which makes it
-    stable under skew and insensitive to it in a way some find too blunt.
-    Included mainly because it is the clearest demonstration that the chance
-    term is a modelling choice rather than a fact: same Po, same data, a
-    different number because of a different assumption.
+    Its chance term is independent of how the raters actually used the
+    categories.
 
     With weights, both halves change: observed agreement credits near-misses
     via the weight matrix, and the chance term becomes sum(W) / K^2 instead
@@ -363,7 +304,7 @@ def scotts_pi(nij: NijMatrix, weights: Weights | None = None) -> float:
 
     Scott (1955) proposed this two-rater coefficient; it generalizes to many
     raters identically to how Fleiss' kappa does. Both use the same chance term
-    (sum of squared category proportions), so at two raters they are one
+    (the sum of squared pooled category proportions); therefore, at two raters they are one
     function. The name honors Scott's priority; the implementation is shared
     with Fleiss' kappa.
 

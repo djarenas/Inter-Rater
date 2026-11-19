@@ -43,8 +43,7 @@ class GwetsAC1Result(PointEstimateResult):
     subject), where every reference gives the same formula. When False, I
     am Gwet's formula for missing ratings: Po and p_j averaged per subject,
     each subject divided by its own rater count (Gwet, K. L. (2014).
-    Handbook of Inter-Rater Reliability, 4th ed., as implemented in irrCAC's
-    ``gwet.ac1.raw``). Not an approximation; my printed form names the source.
+    Handbook of Inter-Rater Reliability, 4th ed.). Not an approximation; my printed form names the source.
 
     I exist as a separate class (rather than just using PointEstimateResult)
     for type clarity. This is especially useful for error chaining.
