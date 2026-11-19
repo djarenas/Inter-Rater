@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..intermediates.data_profiles.balance_profile import BalanceProfile
     from ..intermediates.data_profiles.rater_profile import RaterProfile
 
-from ..intermediates.estimator_parts import NijMatrix
+from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.scotts_pi_result import (
@@ -27,7 +27,6 @@ from .agreement_functions.group_agreement import (
     scotts_pi,
 )
 from ..intermediates.results.ci_results import ParametricCIResult
-from ..array_utils import category_counts
 
 _ERROR_PREFIX = "[ScottsAnalyzer] Error"
 
@@ -149,7 +148,7 @@ class ScottsAnalyzer(GroupAnalyzer):
 
         # Compute point estimate from whichever data source is available
         nij = self.estimator_input.nij
-        point = scotts_pi(nij, weights=None)
+        point = scotts_pi(self.estimator_input)
         pj = self._compute_pj(nij)
 
         if ht_config.method == "parametric_null":
@@ -198,7 +197,6 @@ class ScottsAnalyzer(GroupAnalyzer):
                 )
 
             # Build null distribution
-            n_categories = nij.n_categories
             null_values = []
 
             for permuted_array in scheme_fn(
@@ -206,10 +204,9 @@ class ScottsAnalyzer(GroupAnalyzer):
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
-                nij_array_perm = category_counts(permuted_array, n_categories)
-                nij_permuted = NijMatrix(matrix=nij_array_perm)
-                pi_perm = scotts_pi(nij_permuted, weights=None)
-                null_values.append(pi_perm)
+                null_values.append(self._estimate_from_input(
+                    self._with_category_index(permuted_array)
+                ))
 
             null_distribution = np.array(null_values)
             counts = self._permutation_p_value(
@@ -260,15 +257,15 @@ class ScottsAnalyzer(GroupAnalyzer):
         proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
         return np.mean(proportions_per_subject, axis=0)
 
-    def _estimate_from_nij(self, nij: NijMatrix) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Scott's pi from a counts matrix.
+        Scott's pi from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples, bootstrap or jackknife, is written once on my base
         classes in terms of this.
         """
-        return scotts_pi(nij, weights=None)
+        return scotts_pi(data)
 
     def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """

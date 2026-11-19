@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import TYPE_CHECKING
 
 from .analyzer import Analyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from .configs import GroupCoefficientConfig
 
@@ -85,44 +84,6 @@ class GroupAnalyzer(Analyzer, ABC):
         self._refuse_weights_if_unsupported()
 
     # Public API ------------------------------------------------------------- #
-
-    # Resampling ------------------------------------------------------------- #
-
-    @abstractmethod
-    def _estimate_from_nij(self, nij: NijMatrix) -> float:
-        """
-        Compute my coefficient from a counts matrix, and nothing else.
-
-        This is the one step that differs between group coefficients. My
-        subclasses implement this and nothing else about resampling: the
-        bootstrap and the jackknife are written once in terms of it.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            Shape (n_subjects, n_categories), K wide. Entry (i, j) is how
-            many raters assigned category j to subject i.
-
-        Returns
-        -------
-        float
-            The coefficient, or NaN when this matrix cannot define it.
-        """
-        raise NotImplementedError(
-            f"{_ERROR_PREFIX}: _estimate_from_nij() must be implemented "
-            f"by subclass"
-        )
-
-    def _estimate_from_input(self, data: EstimatorInput) -> float:
-        """
-        Satisfy Analyzer's contract by counting, then deferring to nij.
-
-        A group coefficient reads a counts matrix, so counting is the one step
-        in front of it. Writing that step here means the five group analyzers
-        implement one method rather than two. The counts are K wide, K from
-        data, so a draw that misses a category keeps its column of zeros.
-        """
-        return self._estimate_from_nij(data.nij)
 
     # Private helpers -------------------------------------------------------- #
 

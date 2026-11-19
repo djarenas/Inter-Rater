@@ -16,9 +16,7 @@ from .agreement_functions.group_agreement import (
     fleiss_kappa,
     observed_agreement,
 )
-from ..array_utils import category_counts
-
-from ..intermediates.estimator_parts import NijMatrix, Weights
+from ..intermediates.estimator_parts import EstimatorInput, NijMatrix, Weights
 from ..intermediates.data_profiles import BalanceProfile, RaterProfile
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
@@ -167,7 +165,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
 
         # Compute point estimate from whichever data source is available
         nij = self.estimator_input.nij
-        point = fleiss_kappa(nij, weights=self.weights)
+        point = fleiss_kappa(self.estimator_input)
         pj = self._compute_pj(nij)
 
         if ht_config.method == "parametric_null":
@@ -221,7 +219,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
                 )
 
             # Build null distribution
-            n_categories = nij.n_categories
             null_values = []
 
             for permuted_array in scheme_fn(
@@ -229,10 +226,9 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
-                nij_array_perm = category_counts(permuted_array, n_categories)
-                nij_permuted = NijMatrix(matrix=nij_array_perm)
-                kappa_perm = fleiss_kappa(nij_permuted, weights=self.weights)
-                null_values.append(kappa_perm)
+                null_values.append(self._estimate_from_input(
+                    self._with_category_index(permuted_array)
+                ))
 
             null_distribution = np.array(null_values)
 
@@ -295,15 +291,15 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
         return np.mean(proportions_per_subject, axis=0)
 
-    def _estimate_from_nij(self, nij: NijMatrix) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Fleiss' kappa from a counts matrix.
+        Fleiss' kappa from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples, bootstrap or jackknife, is written once on my base
         classes in terms of this.
         """
-        return fleiss_kappa(nij, weights=self.weights)
+        return fleiss_kappa(data)
 
     def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """

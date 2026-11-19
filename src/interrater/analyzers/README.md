@@ -68,8 +68,6 @@ need the full ratings array, column by column.
 
 - Validates that the config is a GroupCoefficientConfig
 - Enforces balance constraints when `config.balanced_data_only=True`
-- Turns an EstimatorInput into counts (`data.nij`, K wide), so a group leaf
-  implements `_estimate_from_nij` on a NijMatrix
 
 ### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
 
@@ -86,7 +84,7 @@ need the full ratings array, column by column.
 
 - Validate their own config type (FleissKappaConfig, etc.)
 - Supply only what is specific to their coefficient: the coefficient itself
-  (`_estimate_from_input`, or `_estimate_from_nij` for a group leaf), the
+  (`_estimate_from_input`, one line calling its agreement function), the
   result it is packaged into (`_result`), and,
   for Cohen, Scott and Fleiss, the null-variance interval
   (`_parametric_null_interval`)

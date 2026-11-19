@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...intermediates.estimator_parts import NijMatrix, Weights
+from ...intermediates.estimator_parts import EstimatorInput, NijMatrix, Weights
 
 # Shared parts -----------------------------------------------------------  #
 
@@ -163,9 +163,7 @@ def expected_disagreement(nij: NijMatrix, weights: Weights | None = None) -> flo
 # Coefficient ------------------------------------------------------------  #
 
 
-def krippendorff_alpha(
-    nij: NijMatrix, weights: Weights | None = None
-) -> float:
+def krippendorff_alpha(data: EstimatorInput) -> float:
     """
     Krippendorff's alpha: one minus observed disagreement over expected.
 
@@ -174,7 +172,8 @@ def krippendorff_alpha(
     and goes negative when raters disagree more than chance -- which for alpha
     means systematically, not merely badly.
 
-    Takes weights, and unlike the AC1 family it has a published weighted form:
+    Counts ``data`` once (``data.nij``, K wide) and reads ``data.weights``.
+    Unlike the AC1 family it has a published weighted form:
     the cost of confusing two categories is one minus their weight, entering
     both terms identically. Identity weights give the nominal case.
 
@@ -190,8 +189,9 @@ def krippendorff_alpha(
     different units and different chance models; neither approximates the
     other.
     """
-    do = observed_disagreement(nij, weights)
-    de = expected_disagreement(nij, weights)
+    nij = data.nij
+    do = observed_disagreement(nij, data.weights)
+    de = expected_disagreement(nij, data.weights)
 
     if np.isnan(do) or np.isnan(de) or np.isclose(de, 0.0):
         return float("nan")

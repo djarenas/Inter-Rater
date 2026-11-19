@@ -11,7 +11,7 @@ from .agreement_functions.krippendorff import (
     observed_disagreement,
 )
 from .weightable_group_analyzer import WeightableGroupAnalyzer
-from ..intermediates.estimator_parts import NijMatrix
+from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.krippendorff_alpha_result import (
@@ -159,13 +159,11 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             If method is not "permutation".
         """
         from ..intermediates.results import HypothesisTestResult
-        from ..intermediates.estimator_parts import NijMatrix
         from .agreement_functions.krippendorff import krippendorff_alpha
         from .resampling_functions.permutation_resampling import (
             within_rater_shuffle,
             pool_and_redistribute,
         )
-        from ..array_utils import category_counts
 
         # Guard: hypothesis_test_config must be set
         if self.config.hypothesis_test_config is None:
@@ -186,11 +184,8 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
                 f"(Hayes & Krippendorff 2007)."
             )
 
-        n_categories = self.estimator_input.n_categories
-
         # Compute observed Krippendorff's alpha
-        nij = self.estimator_input.nij
-        observed_ka = krippendorff_alpha(nij, weights=self.weights)
+        observed_ka = krippendorff_alpha(self.estimator_input)
 
         # Select permutation scheme
         scheme_map = {
@@ -212,10 +207,9 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
             n_permutations=ht_config.n_permutations,
             random_state=ht_config.random_state,
         ):
-            nij_perm = category_counts(permuted_array, n_categories)
-            nij_perm_obj = NijMatrix(matrix=nij_perm)
-            ka_perm = krippendorff_alpha(nij_perm_obj, weights=self.weights)
-            null_values.append(ka_perm)
+            null_values.append(self._estimate_from_input(
+                self._with_category_index(permuted_array)
+            ))
 
         null_distribution = np.array(null_values)
 
@@ -255,9 +249,9 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _estimate_from_nij(self, nij: NijMatrix) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Krippendorff's alpha from a counts matrix.
+        Krippendorff's alpha from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples, bootstrap or jackknife, is written once on my base
@@ -265,7 +259,7 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         """
         from .agreement_functions.krippendorff import krippendorff_alpha
 
-        return krippendorff_alpha(nij, weights=self.weights)
+        return krippendorff_alpha(data)
 
     def _disagreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """

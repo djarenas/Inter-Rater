@@ -19,6 +19,13 @@ versioning follows [semver](https://semver.org/).
   the width of the table it was given rather than from a declared
   semantics. Results on the ratings route are unchanged.
 - Passing `None` as ratings now raises `TypeError` in every analyzer.
+- Every agreement coefficient function takes one `EstimatorInput` and
+  reads K and the weights from it: `fleiss_kappa`, `scotts_pi`, `gwet_ac1`,
+  `brennan_prediger`, `percent_agreement`, `krippendorff_alpha` (which took
+  an `NijMatrix` and a `weights` argument) and `cohen_kappa` (which took a
+  separate `weights`). Their parts (Po, Pe, Do, De) still take an
+  `NijMatrix`. Coefficients without a weighted form (Scott, AC1, Conger,
+  Light) refuse non-identity weights instead of ignoring them.
 - `subject_bootstrap()` and `subject_jackknife()` take an `EstimatorInput`
   and yield `EstimatorInput`s, so every draw keeps K and the weights. The
   draws are the same rows as before, and results are unchanged.

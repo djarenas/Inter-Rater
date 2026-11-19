@@ -254,11 +254,12 @@ def cohen_kappa_max(
 # Coefficients -----------------------------------------------------------  #
 
 
-def cohen_kappa(data: EstimatorInput, weights: Weights | None = None) -> float:
+def cohen_kappa(data: EstimatorInput) -> float:
     """
     Cohen's kappa: agreement between two raters, each keeping their own rates.
 
-    Cohen (1960), and Cohen (1968) for the weighted form. Defined on the
+    Cohen (1960), and Cohen (1968) for the weighted form, with the weights
+    read from ``data.weights``. Defined on the
     subjects both raters rated; subjects only one of them saw are dropped
     before anything is computed.
 
@@ -275,7 +276,7 @@ def cohen_kappa(data: EstimatorInput, weights: Weights | None = None) -> float:
     than exceptional: disjoint assignment is a real design, just one that
     cannot produce a pairwise coefficient.
     """
-    return agreement_corrected_by_chance(*cohen_parts(data, weights))
+    return agreement_corrected_by_chance(*cohen_parts(data, data.weights))
 
 
 def cohen_parts(data: EstimatorInput, weights: Weights | None = None) -> tuple[float, float]:
@@ -327,10 +328,15 @@ def conger_kappa(data: EstimatorInput) -> float:
     differ. The analysers refuse incomplete data before calling this. On two
     raters it is exactly Cohen's kappa.
 
-    **Takes no weights**, because its weighted form is not implemented. There
-    is no parameter to pass one to, which is a TypeError at the call site
-    rather than a number that quietly ignored half of what it was given.
+    **Takes no weights**, because its weighted form is not implemented.
+    Non-identity ``data.weights`` raise NotImplementedError rather than give
+    a number that quietly ignored them.
     """
+    if data.is_weighted:
+        raise NotImplementedError(
+            "[conger_kappa] weighted Conger's kappa is not implemented; "
+            f"data carries {data.weights.kind} weights."
+        )
     return agreement_corrected_by_chance(*conger_parts(data))
 
 
@@ -372,7 +378,7 @@ def light_kappa(data: EstimatorInput) -> float:
     a bootstrap can meet it in many draws.
 
     **Takes no weights**, following Light (1971). There is no weighted form
-    of Light's kappa.
+    of Light's kappa, so non-identity ``data.weights`` raise ValueError.
 
     References
     ----------
@@ -380,6 +386,11 @@ def light_kappa(data: EstimatorInput) -> float:
         data: Some generalizations and alternatives. Psychological
         Bulletin, 76(5), 365--377.
     """
+    if data.is_weighted:
+        raise ValueError(
+            "[light_kappa] Error: Light's kappa has no weighted form; data "
+            f"carries {data.weights.kind} weights."
+        )
     kappas = [
         agreement_corrected_by_chance(po, pe)
         for po, pe in light_pair_parts(data).values()

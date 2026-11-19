@@ -11,7 +11,7 @@ from .agreement_functions.group_agreement import (
     observed_agreement,
 )
 from .weightable_group_analyzer import WeightableGroupAnalyzer
-from ..intermediates.estimator_parts import NijMatrix
+from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.brennan_prediger_result import (
@@ -147,13 +147,11 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
             If method is not "permutation".
         """
         from ..intermediates.results import HypothesisTestResult
-        from ..intermediates.estimator_parts import NijMatrix
         from .agreement_functions.group_agreement import brennan_prediger
         from .resampling_functions.permutation_resampling import (
             within_rater_shuffle,
             pool_and_redistribute,
         )
-        from ..array_utils import category_counts
 
         # Guard: hypothesis_test_config must be set
         if self.config.hypothesis_test_config is None:
@@ -173,11 +171,8 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
                 f"variance formula for this coefficient."
             )
 
-        n_categories = self.estimator_input.n_categories
-
         # Compute observed Brennan-Prediger
-        nij = self.estimator_input.nij
-        observed_bp = brennan_prediger(nij, weights=self.weights)
+        observed_bp = brennan_prediger(self.estimator_input)
 
         # Select permutation scheme
         scheme_map = {
@@ -199,10 +194,9 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
             n_permutations=ht_config.n_permutations,
             random_state=ht_config.random_state,
         ):
-            nij_perm = category_counts(permuted_array, n_categories)
-            nij_perm_obj = NijMatrix(matrix=nij_perm)
-            bp_perm = brennan_prediger(nij_perm_obj, weights=self.weights)
-            null_values.append(bp_perm)
+            null_values.append(self._estimate_from_input(
+                self._with_category_index(permuted_array)
+            ))
 
         null_distribution = np.array(null_values)
 
@@ -242,9 +236,9 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _estimate_from_nij(self, nij: NijMatrix) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Brennan-Prediger's coefficient from a counts matrix.
+        Brennan-Prediger's coefficient from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples, bootstrap or jackknife, is written once on my base
@@ -252,7 +246,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
         """
         from .agreement_functions.group_agreement import brennan_prediger
 
-        return brennan_prediger(nij, weights=self.weights)
+        return brennan_prediger(data)
 
     def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """

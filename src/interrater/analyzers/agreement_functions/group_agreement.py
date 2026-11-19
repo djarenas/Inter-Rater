@@ -5,19 +5,20 @@ Brennan-Prediger and percent agreement.
 Each coefficient is (Po - Pe) / (1 - Pe). Po is the same for all of them
 (``observed_agreement``); only the chance term Pe differs.
 
-Each reads an NijMatrix: for each subject, how many raters chose each
-category. Therefore, they use pooled marginals; there is no information
-about which rater chose which category.
+Each coefficient takes an EstimatorInput and counts it once
+(``data.nij``): for each subject, how many raters chose each category.
+Therefore, they use pooled marginals; which rater chose which category is
+not used. The parts (observed agreement, the chance terms, the category
+proportions) take that NijMatrix.
 
-- K (the number of categories) is calculated from the width of the NijMatrix.
-  This means that an analyzer must build the matrix with a K width;
-  ``EstimatorInput.nij`` does, with K from the semantics.
+- K comes from ``data.n_categories``, so the counts are K wide even when a
+  draw misses a category. A part handed an NijMatrix directly takes K from
+  its width.
 - Nothing here validates. The analyzer checks the data once, before; these
   functions run inside bootstrap loops.
-- A ``weights`` argument appears only where the coefficient has a weighted
-  form: Fleiss, Brennan-Prediger, percent agreement. Gwet's AC1 has none
-  (its weighted form is AC2). Scott's pi accepts weights only to refuse
-  non-identity ones.
+- Weights come from ``data.weights``. Fleiss, Brennan-Prediger and percent
+  agreement use them. Gwet's AC1 (whose weighted form is AC2) and Scott's pi
+  refuse non-identity weights.
 
 Formulas are in README.md.
 
@@ -32,9 +33,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...intermediates.estimator_parts import NijMatrix, Weights
+from ...intermediates.estimator_parts import EstimatorInput, NijMatrix, Weights
 
 _SCOTT_ERROR_PREFIX = "[scotts_pi] Error"
+_GWET_ERROR_PREFIX = "[gwet_ac1] Error"
 
 # Shared parts -----------------------------------------------------------  #
 # These are methods shared by different kappa statistics. 
@@ -176,8 +178,7 @@ def chance_gwet_ac1(nij: NijMatrix) -> float:
 
     **Takes no weights, this package has no weighted form for it.** The
     weighted version of AC1 is Gwet's AC2, a separate coefficient with a
-    published definition of its own. Handing weights to this one is a
-    TypeError.
+    published definition of its own.
     """
     pj = category_proportions(nij)
     k = nij.n_categories
@@ -228,17 +229,17 @@ def agreement_corrected_by_chance(observed: float, chance: float) -> float:
     return float((observed - chance) / (1.0 - chance))
 
 
-def percent_agreement(nij: NijMatrix, weights: Weights | None = None) -> float:
+def percent_agreement(data: EstimatorInput) -> float:
     """
     Po, uncorrected. The proportion of rater pairs that agreed.
 
     Worth reporting beside a kappa rather than instead of one: a kappa of 0.42 next to 93% agreement is
     telling you something about the prevalence, and not just about the raters.
     """
-    return observed_agreement(nij, weights)
+    return observed_agreement(data.nij, data.weights)
 
 
-def fleiss_kappa(nij: NijMatrix, weights: Weights | None = None) -> float:
+def fleiss_kappa(data: EstimatorInput) -> float:
     """
     Fleiss' kappa: agreement among many raters, corrected for chance.
 
@@ -257,12 +258,13 @@ def fleiss_kappa(nij: NijMatrix, weights: Weights | None = None) -> float:
     Fleiss (1971) Table 1: thirty patients, six raters each, five diagnoses.
     The paper reports 0.430.
     """
+    nij = data.nij
     return agreement_corrected_by_chance(
-        observed_agreement(nij, weights), chance_fleiss(nij, weights)
+        observed_agreement(nij, data.weights), chance_fleiss(nij, data.weights)
     )
 
 
-def gwet_ac1(nij: NijMatrix) -> float:
+def gwet_ac1(data: EstimatorInput) -> float:
     """
     Gwet's AC1: chance-corrected agreement that holds up under skew.
 
@@ -273,15 +275,22 @@ def gwet_ac1(nij: NijMatrix) -> float:
     and the gap is entirely the chance term.
 
     **Unweighted only.** The weighted coefficient is Gwet's AC2, defined
-    separately and not implemented here, so this takes no weights argument at
-    all and offering one is a TypeError at the call site.
+    separately and not implemented here, so non-identity weights raise
+    ValueError.
     """
+    if data.is_weighted:
+        raise ValueError(
+            f"{_GWET_ERROR_PREFIX}: Gwet's AC1 has no weighted form here (the "
+            f"weighted coefficient is AC2). weights must be None or identity, "
+            f"got {data.weights.kind}."
+        )
+    nij = data.nij
     return agreement_corrected_by_chance(
         observed_agreement(nij), chance_gwet_ac1(nij)
     )
 
 
-def brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> float:
+def brennan_prediger(data: EstimatorInput) -> float:
     """
     Brennan and Prediger's coefficient: chance is a uniform guess among K.
 
@@ -293,12 +302,14 @@ def brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> float:
     of 1/K. The unweighted coefficient is the special case where W is the
     identity.
     """
+    nij = data.nij
     return agreement_corrected_by_chance(
-        observed_agreement(nij, weights), chance_brennan_prediger(nij, weights)
+        observed_agreement(nij, data.weights),
+        chance_brennan_prediger(nij, data.weights),
     )
 
 
-def scotts_pi(nij: NijMatrix, weights: Weights | None = None) -> float:
+def scotts_pi(data: EstimatorInput) -> float:
     """
     Scott's pi: agreement between raters using pooled category rates.
 
@@ -308,17 +319,15 @@ def scotts_pi(nij: NijMatrix, weights: Weights | None = None) -> float:
     function. The name honors Scott's priority; the implementation is shared
     with Fleiss' kappa.
 
-    **Scott's pi is defined for nominal (unweighted) data only.** If weights
-    are provided, they must be None or identity; any other weighting raises
-    ValueError. For ordinal agreement with pooled marginals, use a weighted
-    generalization of Fleiss' kappa instead.
+    **Scott's pi is defined for nominal (unweighted) data only.** If
+    ``data.weights`` is not None or identity, raises ValueError. For
+    ordinal agreement with pooled marginals, use a weighted generalization
+    of Fleiss' kappa instead.
 
     Parameters
     ----------
-    nij : NijMatrix
-        The counts matrix.
-    weights : Weights | None
-        Must be None or identity weights. Non-identity weights raise ValueError.
+    data : EstimatorInput
+        The ratings, K, and weights (None or identity).
 
     Returns
     -------
@@ -336,12 +345,13 @@ def scotts_pi(nij: NijMatrix, weights: Weights | None = None) -> float:
     nominal scale coding." *Public opinion quarterly* 19.3: 321-325.
     """
     # Scott's pi is unweighted; reject non-identity weights
-    if weights is not None and not weights.is_identity:
+    if data.is_weighted:
         raise ValueError(
             f"{_SCOTT_ERROR_PREFIX}: Scott's pi is defined for nominal (unweighted) data only. "
-            f"weights must be None or identity, got {weights.kind}."
+            f"weights must be None or identity, got {data.weights.kind}."
         )
-    
+
+    nij = data.nij
     return agreement_corrected_by_chance(
         observed_agreement(nij, None),  # Always unweighted
         chance_fleiss(nij, None)

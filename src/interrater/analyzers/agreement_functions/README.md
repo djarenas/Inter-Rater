@@ -4,8 +4,8 @@ Coefficient arithmetic. They should only be called by the analyzers, and not man
 
 | module | holds | input |
 | --- | --- | --- |
-| ``group_agreement`` | Fleiss, Scott, Gwet's AC1, Brennan-Prediger, percent agreement | ``NijMatrix`` |
-| ``krippendorff`` | Krippendorff's alpha | ``NijMatrix`` |
+| ``group_agreement`` | Fleiss, Scott, Gwet's AC1, Brennan-Prediger, percent agreement | ``EstimatorInput`` |
+| ``krippendorff`` | Krippendorff's alpha | ``EstimatorInput`` |
 | ``individual_marginals`` | Cohen, Conger, Light, kappa_max | ``EstimatorInput`` |
 | ``rater_combinations`` | a coefficient over subsets of the raters | ``EstimatorInput`` |
 
@@ -14,9 +14,13 @@ Coefficient arithmetic. They should only be called by the analyzers, and not man
 
 - Each function returns a float, NaN when the coefficient is undefined.
 - They are not meant to be called manually because nothing here validates. There is no validation because these functions run inside bootstrap loops. Analyzers check data before calling these functions.
-- **K.** A function that uses ``NijMatrix`` takes K from the matrix width. The analyzers must build the NijMatrix properly from EstimatorInput.
-- **Weights.** A ``weights`` argument appears only on coefficients with a
-  weighted form. ``None`` means identity.
+- **One input.** Every coefficient takes an ``EstimatorInput``, so all of
+  them are the same ``Callable[[EstimatorInput], float]``.
+- **K** comes from ``data.n_categories``. Group coefficients count the data
+  once (``data.nij``, K wide) and hand that NijMatrix to their parts (Po,
+  Pe, Do, De), which take K from its width.
+- **Weights** come from ``data.weights``; ``None`` means identity. A
+  coefficient without a weighted form refuses non-identity weights.
 
 
 ## Notation

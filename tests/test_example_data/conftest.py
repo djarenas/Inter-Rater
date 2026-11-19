@@ -342,9 +342,9 @@ def subset_config():
     it compare behaviour across k rather than fixing one.
 
     Uses Fleiss' kappa with balanced_data_only=False, because the dataset
-    this exists for is SR1 main: partially crossed, which is the only
-    shipped data where a subset's measurable pool and its complete cases
-    differ. On balanced data the two coincide and the test proves nothing.
+    this exists for is SR1 main: partially crossed, so a subset's measurable
+    pool and its complete cases differ by hundreds of subjects. On balanced
+    data the two coincide and the test proves nothing.
     """
     def _make(k: int):
         return SubsetPermutationConfig(

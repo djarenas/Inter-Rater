@@ -7,12 +7,10 @@ changes what is being measured and not how the enumeration works. Pairs are the
 subsets of size two; leaving one rater out is a subset of size n-1; anything
 between is available for the asking.
 
-(this has to be changed, all functions should take estimator input)
-**The estimator is a callable taking an ``EstimatorInput``.** The coefficients
-in ``group_agreement`` take an ``NijMatrix`` instead, so an analyser using one
-of those supplies a small module-level adapter rather than a lambda -- these
-results are often computed inside a resampling loop, and a closure cannot be
-shipped to a worker process.
+**The estimator is a callable taking an ``EstimatorInput``.** Every
+coefficient function has that signature, so an analyser passes the function
+itself, never a lambda: these results are often computed inside a resampling
+loop, and a closure cannot be shipped to a worker process.
 
 **Dropping raters guts sparse data, and the damage is uneven.** Every subject
 left with fewer than two ratings contributes to nothing, so the coefficient for

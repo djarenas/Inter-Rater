@@ -167,7 +167,6 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             )
 
         ht_config = self.config.hypothesis_test_config
-        n_categories = self.estimator_input.n_categories
 
         # Compute point estimate
         point = light_kappa(self.estimator_input)
@@ -200,12 +199,9 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
-                ei = EstimatorInput(
-                    category_index=permuted_array,
-                    n_categories=n_categories,
-                )
-                kappa_perm = light_kappa(ei)
-                null_values.append(kappa_perm)
+                null_values.append(self._estimate_from_input(
+                    self._with_category_index(permuted_array)
+                ))
 
             null_distribution = np.array(null_values)
 

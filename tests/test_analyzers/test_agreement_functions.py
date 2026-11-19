@@ -13,6 +13,7 @@ with no resampling.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 
 import numpy as np
@@ -75,6 +76,23 @@ from interrater.analyzers.agreement_functions.rater_combinations import (
 
 
 TOL = 1e-12
+
+
+def _input(nij: NijMatrix, weights: Weights | None = None) -> EstimatorInput:
+    """
+    An EstimatorInput whose counts are nij exactly, K from its width.
+
+    Each row is written out left to right in category order, EMPTY after;
+    the coefficient functions read only the counts, so the order is arbitrary.
+    At least two slots, which EstimatorInput requires.
+    """
+    counts = nij.matrix
+    n_slots = max(2, int(counts.sum(axis=1).max()))
+    index = np.full((counts.shape[0], n_slots), EMPTY, dtype=np.int8)
+    for row, row_counts in enumerate(counts):
+        written = np.repeat(np.arange(counts.shape[1]), row_counts)
+        index[row, : written.size] = written
+    return EstimatorInput(index, counts.shape[1], weights=weights)
 
 
 # ========================================================================== #
@@ -248,7 +266,7 @@ class TestCategoryProportions:
         """
         counts = np.array([[2, 0]] * 950 + [[1, 1]] * 50 + [[5, 45]] * 20)
         nij = NijMatrix(counts)
-        per_subject = fleiss_kappa(nij)
+        per_subject = fleiss_kappa(_input(nij))
         assert per_subject == pytest.approx(0.348, abs=5e-4)
 
         pooled_pj = counts.sum(axis=0) / counts.sum()
@@ -297,59 +315,59 @@ class TestGroupCoefficients:
 
     def test_fleiss_balanced(self):
         # (5/6 - 5/9) / (1 - 5/9) = 5/8.
-        assert abs(fleiss_kappa(BALANCED_NIJ) - 5 / 8) < TOL
+        assert abs(fleiss_kappa(_input(BALANCED_NIJ)) - 5 / 8) < TOL
 
     def test_fleiss_degenerate_is_nan(self):
         # Pe = 1 -- denominator = 0.
-        assert math.isnan(fleiss_kappa(DEGENERATE_NIJ))
+        assert math.isnan(fleiss_kappa(_input(DEGENERATE_NIJ)))
 
     def test_fleiss_negative(self):
         # UNBALANCED_NIJ: Po=1/6, Pe_fleiss=37/72. fleiss = -5/7.
-        assert abs(fleiss_kappa(UNBALANCED_NIJ) - (-5 / 7)) < TOL
+        assert abs(fleiss_kappa(_input(UNBALANCED_NIJ)) - (-5 / 7)) < TOL
 
     def test_fleiss_three_rater(self):
         nij = THREE_RATER_INPUT.nij
-        assert abs(fleiss_kappa(nij) - 11 / 35) < TOL
+        assert abs(fleiss_kappa(_input(nij)) - 11 / 35) < TOL
 
     # -- Gwet AC1 ---------------------------------------------------------- #
 
     def test_ac1_balanced(self):
         # (5/6 - 4/9) / (1 - 4/9) = 7/10.
-        assert abs(gwet_ac1(BALANCED_NIJ) - 7 / 10) < TOL
+        assert abs(gwet_ac1(_input(BALANCED_NIJ)) - 7 / 10) < TOL
 
     def test_ac1_degenerate_is_one(self):
         # Po=1, Pe=0 -- ac1 = 1.
-        assert abs(gwet_ac1(DEGENERATE_NIJ) - 1.0) < TOL
+        assert abs(gwet_ac1(_input(DEGENERATE_NIJ)) - 1.0) < TOL
 
     def test_ac1_three_rater(self):
         nij = THREE_RATER_INPUT.nij
-        assert abs(gwet_ac1(nij) - 13 / 37) < TOL
+        assert abs(gwet_ac1(_input(nij)) - 13 / 37) < TOL
 
     # -- Brennan-Prediger -------------------------------------------------- #
 
     def test_bp_balanced(self):
         # (5/6 - 1/2) / (1 - 1/2) = 2/3.
-        assert abs(brennan_prediger(BALANCED_NIJ) - 2 / 3) < TOL
+        assert abs(brennan_prediger(_input(BALANCED_NIJ)) - 2 / 3) < TOL
 
     def test_bp_degenerate_is_one(self):
         # Pe = 1/2, Po = 1 -- bp = 1.
-        assert abs(brennan_prediger(DEGENERATE_NIJ) - 1.0) < TOL
+        assert abs(brennan_prediger(_input(DEGENERATE_NIJ)) - 1.0) < TOL
 
     def test_bp_three_rater(self):
         nij = THREE_RATER_INPUT.nij
-        assert abs(brennan_prediger(nij) - 1 / 3) < TOL
+        assert abs(brennan_prediger(_input(nij)) - 1 / 3) < TOL
 
     # -- percent agreement ------------------------------------------------- #
 
     def test_percent_agreement_is_po(self):
-        assert abs(percent_agreement(BALANCED_NIJ) - 5 / 6) < TOL
+        assert abs(percent_agreement(_input(BALANCED_NIJ)) - 5 / 6) < TOL
 
     # -- perfect agreement ------------------------------------------------- #
 
     def test_perfect_agreement_all_one(self):
-        assert abs(fleiss_kappa(PERFECT_NIJ) - 1.0) < TOL
-        assert abs(gwet_ac1(PERFECT_NIJ) - 1.0) < TOL
-        assert abs(brennan_prediger(PERFECT_NIJ) - 1.0) < TOL
+        assert abs(fleiss_kappa(_input(PERFECT_NIJ)) - 1.0) < TOL
+        assert abs(gwet_ac1(_input(PERFECT_NIJ)) - 1.0) < TOL
+        assert abs(brennan_prediger(_input(PERFECT_NIJ)) - 1.0) < TOL
 
 
 class TestScottsPi:
@@ -357,25 +375,25 @@ class TestScottsPi:
 
     def test_scotts_pi_balanced(self):
         # Same chance term as Fleiss (unweighted). fleiss = 5/8.
-        assert abs(scotts_pi(BALANCED_NIJ) - 5 / 8) < TOL
+        assert abs(scotts_pi(_input(BALANCED_NIJ)) - 5 / 8) < TOL
 
     def test_scotts_pi_equals_fleiss_unweighted(self):
         # For unweighted data, Scott's pi = Fleiss' kappa.
         assert abs(
-            scotts_pi(BALANCED_NIJ) - fleiss_kappa(BALANCED_NIJ)
+            scotts_pi(_input(BALANCED_NIJ)) - fleiss_kappa(_input(BALANCED_NIJ))
         ) < TOL
 
     def test_scotts_pi_with_identity_weights(self):
         wi = Weights.identity(2)
-        assert abs(scotts_pi(BALANCED_NIJ, wi) - 5 / 8) < TOL
+        assert abs(scotts_pi(_input(BALANCED_NIJ, wi)) - 5 / 8) < TOL
 
     def test_scotts_pi_rejects_non_identity_weights(self):
         wq = Weights.quadratic(3)
         with pytest.raises(ValueError, match="nominal"):
-            scotts_pi(THREE_CAT_NIJ, wq)
+            scotts_pi(_input(THREE_CAT_NIJ, wq))
 
     def test_scotts_pi_degenerate_is_nan(self):
-        assert math.isnan(scotts_pi(DEGENERATE_NIJ))
+        assert math.isnan(scotts_pi(_input(DEGENERATE_NIJ)))
 
 
 class TestGroupWeighted:
@@ -395,7 +413,7 @@ class TestGroupWeighted:
 
     def test_fleiss_kappa_weighted(self, wq):
         # (11/12 - 7/8) / (1 - 7/8) = 1/3.
-        assert abs(fleiss_kappa(THREE_CAT_NIJ, wq) - 1 / 3) < TOL
+        assert abs(fleiss_kappa(_input(THREE_CAT_NIJ, wq)) - 1 / 3) < TOL
 
     def test_chance_bp_weighted(self, wq):
         # sum(W) / K^2 = 6/9 = 2/3.
@@ -403,10 +421,10 @@ class TestGroupWeighted:
 
     def test_bp_weighted(self, wq):
         # (11/12 - 2/3) / (1 - 2/3) = 3/4.
-        assert abs(brennan_prediger(THREE_CAT_NIJ, wq) - 3 / 4) < TOL
+        assert abs(brennan_prediger(_input(THREE_CAT_NIJ, wq)) - 3 / 4) < TOL
 
     def test_percent_agreement_weighted(self, wq):
-        assert abs(percent_agreement(THREE_CAT_NIJ, wq) - 11 / 12) < TOL
+        assert abs(percent_agreement(_input(THREE_CAT_NIJ, wq)) - 11 / 12) < TOL
 
 
 # ========================================================================== #
@@ -530,7 +548,7 @@ class TestCohenKappa:
     def test_cohen_weighted(self):
         wq = Weights.quadratic(3)
         # Po_w = 15/16, Pe_w = 11/16. kappa_w = 4/5.
-        assert abs(cohen_kappa(TWO_RATER_K3_INPUT, wq) - 4 / 5) < TOL
+        assert abs(cohen_kappa(dataclasses.replace(TWO_RATER_K3_INPUT, weights=wq)) - 4 / 5) < TOL
 
     def test_cohen_sparse_too_few_shared(self):
         # SPARSE_INPUT: 1 shared subject < 2 -- NaN.
@@ -625,22 +643,22 @@ class TestKrippendorff:
 
     def test_alpha_balanced(self):
         # 1 - (1/6) / (16/33) = 21/32.
-        assert abs(krippendorff_alpha(BALANCED_NIJ) - 21 / 32) < TOL
+        assert abs(krippendorff_alpha(_input(BALANCED_NIJ)) - 21 / 32) < TOL
 
     def test_alpha_perfect(self):
-        assert abs(krippendorff_alpha(PERFECT_NIJ) - 1.0) < TOL
+        assert abs(krippendorff_alpha(_input(PERFECT_NIJ)) - 1.0) < TOL
 
     def test_alpha_degenerate_is_nan(self):
         # De = 0 -- NaN.
-        assert math.isnan(krippendorff_alpha(DEGENERATE_NIJ))
+        assert math.isnan(krippendorff_alpha(_input(DEGENERATE_NIJ)))
 
     def test_alpha_negative(self):
         # UNBALANCED_NIJ: alpha = -1/3.
-        assert abs(krippendorff_alpha(UNBALANCED_NIJ) - (-1 / 3)) < TOL
+        assert abs(krippendorff_alpha(_input(UNBALANCED_NIJ)) - (-1 / 3)) < TOL
 
     def test_alpha_three_rater(self):
         nij = THREE_RATER_INPUT.nij
-        assert abs(krippendorff_alpha(nij) - 13 / 35) < TOL
+        assert abs(krippendorff_alpha(_input(nij)) - 13 / 35) < TOL
 
     # -- weighted ---------------------------------------------------------- #
 
@@ -657,7 +675,7 @@ class TestKrippendorff:
     def test_alpha_weighted(self):
         wq = Weights.quadratic(3)
         # THREE_CAT_NIJ: alpha_w = 4/9.
-        assert abs(krippendorff_alpha(THREE_CAT_NIJ, wq) - 4 / 9) < TOL
+        assert abs(krippendorff_alpha(_input(THREE_CAT_NIJ, wq)) - 4 / 9) < TOL
 
 
 # ========================================================================== #
@@ -944,9 +962,11 @@ class TestKappaMax:
         weights = None if weighting is None else getattr(Weights, weighting)(4)
         for _ in range(25):
             index = rng.integers(0, 4, size=(30, 2)).astype(np.int8)
-            data = EstimatorInput(category_index=index, n_categories=4)
+            data = EstimatorInput(
+                category_index=index, n_categories=4, weights=weights
+            )
             marg = rater_marginals(data)
-            kappa = cohen_kappa(data, weights)
+            kappa = cohen_kappa(data)
             assert kappa <= cohen_kappa_max(marg[0], marg[1], weights) + 1e-9
 
 
@@ -955,21 +975,28 @@ class TestKappaMax:
 # ========================================================================== #
 
 
+def _three_raters_weighted() -> EstimatorInput:
+    """THREE_RATER_INPUT declared over 3 categories with quadratic weights."""
+    return EstimatorInput(
+        THREE_RATER_INPUT.category_index, 3, weights=Weights.quadratic(3)
+    )
+
+
 class TestEdgeCases:
     """I test cross-cutting edge cases: NaN returns, degenerate inputs."""
 
     def test_all_one_category_nij(self):
         # Single-category data: Po=1, Pe_fleiss=1 -- NaN, Pe_gwet=0 -- 1.
         nij = NijMatrix(np.array([[4, 0], [4, 0]], dtype=np.int64))
-        assert math.isnan(fleiss_kappa(nij))
-        assert abs(gwet_ac1(nij) - 1.0) < TOL
-        assert math.isnan(krippendorff_alpha(nij))
+        assert math.isnan(fleiss_kappa(_input(nij)))
+        assert abs(gwet_ac1(_input(nij)) - 1.0) < TOL
+        assert math.isnan(krippendorff_alpha(_input(nij)))
 
     def test_no_usable_subjects(self):
         # Every subject rated by at most 1 rater.
         nij = NijMatrix(np.array([[1, 0], [0, 1]], dtype=np.int64))
         assert math.isnan(observed_agreement(nij))
-        assert math.isnan(krippendorff_alpha(nij))
+        assert math.isnan(krippendorff_alpha(_input(nij)))
 
     def test_identity_weights_equal_unweighted(self):
         wi = Weights.identity(2)
@@ -978,28 +1005,26 @@ class TestEdgeCases:
             - observed_agreement(BALANCED_NIJ)
         ) < TOL
         assert abs(
-            fleiss_kappa(BALANCED_NIJ, wi)
-            - fleiss_kappa(BALANCED_NIJ)
+            fleiss_kappa(_input(BALANCED_NIJ, wi))
+            - fleiss_kappa(_input(BALANCED_NIJ))
         ) < TOL
         assert abs(
-            krippendorff_alpha(BALANCED_NIJ, wi)
-            - krippendorff_alpha(BALANCED_NIJ)
+            krippendorff_alpha(_input(BALANCED_NIJ, wi))
+            - krippendorff_alpha(_input(BALANCED_NIJ))
         ) < TOL
 
     def test_gwet_ac1_rejects_weights(self):
-        # AC1 takes no weights argument -- TypeError.
+        # AC1 has no weighted form -- ValueError on non-identity weights.
         wq = Weights.quadratic(3)
-        with pytest.raises(TypeError):
-            gwet_ac1(THREE_CAT_NIJ, wq)
+        with pytest.raises(ValueError, match="AC2"):
+            gwet_ac1(_input(THREE_CAT_NIJ, wq))
 
     def test_conger_rejects_weights(self):
-        # conger_kappa takes no weights -- TypeError at call site.
-        wq = Weights.quadratic(3)
-        with pytest.raises(TypeError):
-            conger_kappa(THREE_RATER_INPUT, wq)
+        # No weighted Conger's kappa -- NotImplementedError, not ignored.
+        with pytest.raises(NotImplementedError):
+            conger_kappa(_three_raters_weighted())
 
     def test_light_rejects_weights(self):
-        # light_kappa takes no weights -- TypeError at call site.
-        wq = Weights.quadratic(3)
-        with pytest.raises(TypeError):
-            light_kappa(THREE_RATER_INPUT, wq)
+        # No weighted Light's kappa -- ValueError, not ignored.
+        with pytest.raises(ValueError, match="no weighted form"):
+            light_kappa(_three_raters_weighted())

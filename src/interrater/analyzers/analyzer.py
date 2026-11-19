@@ -268,6 +268,17 @@ class Analyzer(ABC):
             f"by subclass"
         )
 
+    def _with_category_index(self, category_index: np.ndarray) -> EstimatorInput:
+        """
+        My estimator_input with another array in place of mine: same K, same
+        weights. For permutation tests, whose permuted arrays have my shape.
+        """
+        import dataclasses
+
+        return dataclasses.replace(
+            self.estimator_input, category_index=category_index
+        )
+
     def _bootstrap_distribution(self) -> np.ndarray:
         """
         Resample subjects with replacement and recompute my coefficient.

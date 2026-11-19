@@ -8,7 +8,7 @@ import numpy as np
 
 from .agreement_functions.group_agreement import chance_gwet_ac1, observed_agreement
 from .group_analyzer import GroupAnalyzer
-from ..intermediates.estimator_parts import NijMatrix
+from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.gwets_ac1_result import (
@@ -141,13 +141,11 @@ class GwetAC1Analyzer(GroupAnalyzer):
             If method is not "permutation".
         """
         from ..intermediates.results import HypothesisTestResult
-        from ..intermediates.estimator_parts import NijMatrix
         from .agreement_functions.group_agreement import gwet_ac1
         from .resampling_functions.permutation_resampling import (
             within_rater_shuffle,
             pool_and_redistribute,
         )
-        from ..array_utils import category_counts
 
         # Guard: hypothesis_test_config must be set
         if self.config.hypothesis_test_config is None:
@@ -166,11 +164,8 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"There is no parametric null variance formula for AC1."
             )
 
-        n_categories = self.estimator_input.n_categories
-
         # Compute observed AC1
-        nij = self.estimator_input.nij
-        observed_ac1 = gwet_ac1(nij)
+        observed_ac1 = gwet_ac1(self.estimator_input)
 
         # Select permutation scheme
         scheme_map = {
@@ -192,10 +187,9 @@ class GwetAC1Analyzer(GroupAnalyzer):
             n_permutations=ht_config.n_permutations,
             random_state=ht_config.random_state,
         ):
-            nij_perm = category_counts(permuted_array, n_categories)
-            nij_perm_obj = NijMatrix(matrix=nij_perm)
-            ac1_perm = gwet_ac1(nij_perm_obj)
-            null_values.append(ac1_perm)
+            null_values.append(self._estimate_from_input(
+                self._with_category_index(permuted_array)
+            ))
 
         null_distribution = np.array(null_values)
 
@@ -235,9 +229,9 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"got {type(self.config).__name__}"
             )
 
-    def _estimate_from_nij(self, nij: NijMatrix) -> float:
+    def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Gwet's AC1 from a counts matrix.
+        Gwet's AC1 from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples, bootstrap or jackknife, is written once on my base
@@ -247,7 +241,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         """
         from .agreement_functions.group_agreement import gwet_ac1
 
-        return gwet_ac1(nij)
+        return gwet_ac1(data)
 
     def _agreement_parts(self, nij: NijMatrix) -> AgreementParts:
         """

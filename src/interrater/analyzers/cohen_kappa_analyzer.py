@@ -160,10 +160,9 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
             )
 
         ht_config = self.config.hypothesis_test_config
-        n_categories = self.estimator_input.n_categories
 
         # Compute point estimate
-        point = cohen_kappa(self.estimator_input, self.weights)
+        point = cohen_kappa(self.estimator_input)
 
         if ht_config.method == "parametric_null":
             # Fleiss, Cohen & Everitt (1969): null variance for two raters
@@ -227,13 +226,9 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
                 n_permutations=ht_config.n_permutations,
                 random_state=ht_config.random_state,
             ):
-                ei = EstimatorInput(
-                    category_index=permuted_array,
-                    n_categories=n_categories,
-                    weights=self.weights,
-                )
-                kappa_perm = cohen_kappa(ei, self.weights)
-                null_values.append(kappa_perm)
+                null_values.append(self._estimate_from_input(
+                    self._with_category_index(permuted_array)
+                ))
 
             null_distribution = np.array(null_values)
 
@@ -363,7 +358,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         draws samples is written once on Analyzer in terms of this. Rater
         identity matters to me, and the column positions of data carry it.
         """
-        return cohen_kappa(data, data.weights)
+        return cohen_kappa(data)
 
     def _parametric_null_ci(
         self,

@@ -20,6 +20,11 @@ from ...intermediates.data_profiles.balance_profile import BalanceProfile
 from ...intermediates.data_profiles.rater_profile import RaterProfile
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
 from ...intermediates.results.ci_results import BootstrapCIResult
+from ..agreement_functions.group_agreement import (
+    brennan_prediger, fleiss_kappa, gwet_ac1, scotts_pi,
+)
+from ..agreement_functions.individual_marginals import cohen_kappa, conger_kappa
+from ..agreement_functions.krippendorff import krippendorff_alpha
 
 if TYPE_CHECKING:
     from ...intermediates.estimator_parts.weights import Weights
@@ -27,68 +32,8 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[PermutationAnalysis] Error"
 
-
 # Type alias matching rater_combinations.Estimator
 Estimator = Callable[[EstimatorInput], float]
-
-
-# ------------------------------------------------------------------ #
-# Module-level estimator adapters                                      #
-#                                                                      #
-# Each wraps a coefficient function into the Estimator signature       #
-# (EstimatorInput -> float). Module-level so they are picklable if     #
-# we ever move to multiprocessing. Lazy imports keep the module from   #
-# pulling in every agreement function at import time.                  #
-# ------------------------------------------------------------------ #
-
-
-def _cohen_kappa_estimator(data: EstimatorInput) -> float:
-    """Cohen's kappa, weights extracted from EstimatorInput."""
-    from ..agreement_functions.individual_marginals import cohen_kappa
-
-    return cohen_kappa(data, data.weights)
-
-
-def _conger_kappa_estimator(data: EstimatorInput) -> float:
-    """Conger's kappa (unweighted, individual marginals)."""
-    from ..agreement_functions.individual_marginals import conger_kappa
-
-    return conger_kappa(data)
-
-
-def _scotts_pi_estimator(data: EstimatorInput) -> float:
-    """Scott's pi via NijMatrix bridge. Weights from EstimatorInput."""
-    from ..agreement_functions.group_agreement import scotts_pi
-
-    return scotts_pi(data.nij, data.weights)
-
-
-def _gwet_ac1_estimator(data: EstimatorInput) -> float:
-    """Gwet's AC1 (no weights)."""
-    from ..agreement_functions.group_agreement import gwet_ac1
-
-    return gwet_ac1(data.nij)
-
-
-def _fleiss_kappa_estimator(data: EstimatorInput) -> float:
-    """Fleiss' kappa. Weights from EstimatorInput."""
-    from ..agreement_functions.group_agreement import fleiss_kappa
-
-    return fleiss_kappa(data.nij, data.weights)
-
-
-def _brennan_prediger_estimator(data: EstimatorInput) -> float:
-    """Brennan-Prediger. Weights from EstimatorInput."""
-    from ..agreement_functions.group_agreement import brennan_prediger
-
-    return brennan_prediger(data.nij, data.weights)
-
-
-def _krippendorff_alpha_estimator(data: EstimatorInput) -> float:
-    """Krippendorff's alpha. Weights from EstimatorInput."""
-    from ..agreement_functions.krippendorff import krippendorff_alpha
-
-    return krippendorff_alpha(data.nij, data.weights)
 
 
 _WEIGHTABLE_COEFFICIENTS = frozenset(
@@ -97,14 +42,15 @@ _WEIGHTABLE_COEFFICIENTS = frozenset(
 """Coefficients with a weighted form, matching the weightable analyzers."""
 
 
+# Every coefficient function takes an EstimatorInput, K and weights included
 _ESTIMATOR_MAP: dict[str, Estimator] = {
-    "cohen_kappa": _cohen_kappa_estimator,
-    "scotts_pi": _scotts_pi_estimator,
-    "conger_kappa": _conger_kappa_estimator,
-    "gwet_ac1": _gwet_ac1_estimator,
-    "fleiss_kappa": _fleiss_kappa_estimator,
-    "brennan_prediger": _brennan_prediger_estimator,
-    "krippendorff_alpha": _krippendorff_alpha_estimator,
+    "cohen_kappa": cohen_kappa,
+    "scotts_pi": scotts_pi,
+    "conger_kappa": conger_kappa,
+    "gwet_ac1": gwet_ac1,
+    "fleiss_kappa": fleiss_kappa,
+    "brennan_prediger": brennan_prediger,
+    "krippendorff_alpha": krippendorff_alpha,
 }
 
 
