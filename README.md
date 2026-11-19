@@ -201,8 +201,8 @@ whatever the other four decided, raises this panel's reported reliability by
 can tie, and ties are broken at random.) See
 [What if one of your raters were someone else?](https://djarenas.github.io/packages/interrater/rater_substitution/)
 
-Worked configurations for eleven datasets, five of them real systematic
-reviews, are in [`example_data/`](https://github.com/djarenas/Inter-Rater/tree/master/example_data/),
+Worked configurations for nine datasets, six of them from real systematic
+review screenings, are in [`example_data/`](https://github.com/djarenas/Inter-Rater/tree/master/example_data/),
 each with the reference values it should reproduce; one folder holds every
 table from the statistical background page as ratings.
 

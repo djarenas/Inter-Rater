@@ -50,12 +50,7 @@ class IndividualMarginalResult(PointEstimateResult):
 
     Individual marginal coefficients (Cohen, Conger, Light) require rater
     identity: you must know which rater gave which rating to compute
-    per-rater marginals. This means they can only be built from Ratings,
-    never from an NijMatrix (which discards rater identity). I enforce
-    that constraint here: balance_profile must not be None, and
-    rater_profile must be a RaterProfile, not NotComputed.
-
-    For the same reason my agreement profile must carry each rater's
+    per-rater marginals. So my agreement profile must carry each rater's
     marginals, one row per rater in my rater profile: they are what my
     children's chance terms are built from, and they check their parts
     against them.
@@ -96,19 +91,9 @@ class IndividualMarginalResult(PointEstimateResult):
     def __post_init__(self) -> None:
         """Validate individual marginal result constraints.
 
-        Enforces that balance_profile is not None and rater_profile is a
-        RaterProfile -- individual marginal coefficients always require
-        rater identity.
+        Enforces that the agreement profile has one row of marginals per
+        rater in the rater profile.
         """
-
-        # Individual marginal coefficients always require the raters
-        if isinstance(self.rater_profile, NotComputed):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: rater_profile must be a RaterProfile "
-                f"for individual marginal coefficients (rater identity "
-                f"required), got {self.rater_profile}"
-            )
-
         # Call parent validation (validates point, confidence_interval,
         # bootstrap_distribution, balance_profile type)
         try:
@@ -118,12 +103,6 @@ class IndividualMarginalResult(PointEstimateResult):
 
         # Each rater's marginals, one row per rater
         marginals = self.agreement_profile.rater_marginals
-        if isinstance(marginals, NotComputed):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: agreement_profile.rater_marginals must be "
-                f"computed for individual marginal coefficients (rater "
-                f"identity required), got {marginals}"
-            )
         if len(marginals) != self.rater_profile.n_raters:
             raise ValueError(
                 f"{_ERROR_PREFIX}: agreement_profile has marginals for "

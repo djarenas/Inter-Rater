@@ -46,9 +46,6 @@ Ratings (validated input)          Weights (from the semantics)
     └──► analyzer.hypothesis_test() ──► HypothesisTestResult (separate)
 ```
 
-A result built from counts (`build_from_nij_matrix`) has no rater identity,
-so its `rater_profile` is `NotComputed`.
-
 ## Dependencies
 
 - `array_utils` (root-level counting and masking)

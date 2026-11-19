@@ -1,20 +1,13 @@
 """
 Running a coefficient over subsets of the raters, rather than over all of them.
 
-A panel coefficient is one number for the whole group. It cannot tell you that
-one rater was the problem, because it has already averaged that rater away. On
-one real screening round the six pairs span 0.58 to 0.82 with a single reviewer
-accounting for the spread, and the panel coefficient is 0.71 with no hint that
-anything is uneven; on another the three pairs span 0.05. Those are different
-situations calling for different responses, and the single number is identical
-in kind for both.
-
 Nothing here computes agreement. Each function enumerates subsets of the rater
 columns and calls an estimator on each, so swapping Cohen's kappa for Fleiss'
 changes what is being measured and not how the enumeration works. Pairs are the
 subsets of size two; leaving one rater out is a subset of size n-1; anything
 between is available for the asking.
 
+(this has to be changed, all functions should take estimator input)
 **The estimator is a callable taking an ``EstimatorInput``.** The coefficients
 in ``group_agreement`` take an ``NijMatrix`` instead, so an analyser using one
 of those supplies a small module-level adapter rather than a lambda -- these

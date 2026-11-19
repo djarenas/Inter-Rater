@@ -67,8 +67,8 @@ class BrennanPredigerResult(PointEstimateResult):
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
-    rater_profile : RaterProfile | NotComputed
-        The raters (inherited). NotComputed when built from counts.
+    rater_profile : RaterProfile
+        The raters (inherited).
     parts : AgreementParts
         Po and Pe (inherited). Always computed for Brennan-Prediger.
     kappa_max : NotComputed
@@ -100,7 +100,7 @@ class BrennanPredigerResult(PointEstimateResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
+    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

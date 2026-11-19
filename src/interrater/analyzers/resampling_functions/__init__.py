@@ -8,8 +8,6 @@ for hypothesis testing. See README.md for rationale and developer workflow.
 from .subject_resampling import (
     subject_bootstrap,
     subject_jackknife,
-    subject_bootstrap_from_nij_matrix,
-    subject_jackknife_from_nij_matrix,
 )
 from .permutation_resampling import within_rater_shuffle, within_subject_shuffle, pool_and_redistribute
 # Renamed within_rater_shuffle in 2.1.0; importable so a call says so
@@ -18,8 +16,6 @@ from .permutation_resampling import column_shuffle
 __all__ = [
     "subject_bootstrap",
     "subject_jackknife",
-    "subject_bootstrap_from_nij_matrix",
-    "subject_jackknife_from_nij_matrix",
     "within_rater_shuffle",
     "within_subject_shuffle",
     "pool_and_redistribute",

@@ -69,19 +69,15 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
 
     Attributes
     ----------
-    ratings : Ratings | None
+    ratings : Ratings
         The validated ratings data (inherited from Analyzer).
-        None if initialized from NijMatrix via build_from_nij_matrix().
     config : KrippendorffAlphaConfig
         The analysis configuration for Krippendorff's alpha.
     balance_profile : BalanceProfile
         Describes the balance structure of the data (inherited from Analyzer).
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. NotComputed when built
-        from an nij_matrix, which carries no rater identity.
-    nij_matrix : NijMatrix | None
-        The counts matrix (from GroupAnalyzer, populated if built from nij_matrix).
+        rated, how much each pair overlapped.
     weights : Weights | None
         The weights object (from WeightableGroupAnalyzer).
     """
@@ -89,11 +85,9 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
     # Attribute declaration
 
     # Populated at parent class Analyzer
-    ratings: Ratings | None
+    ratings: Ratings
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
-    # Populated at parent class GroupAnalyzer
-    nij_matrix: NijMatrix | None
+    rater_profile: RaterProfile
     # Populated at parent class WeightableGroupAnalyzer
     weights: Weights | None
     # Checked at this level
@@ -138,48 +132,6 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         # Validate config is KrippendorffAlphaConfig
         self._validate_ka_config()
 
-    @classmethod
-    def build_from_nij_matrix(
-        cls, nij: NijMatrix, config: KrippendorffAlphaConfig
-    ) -> KrippendorffAlphaAnalyzer:
-        """
-        Build Krippendorff's alpha analyzer from NijMatrix (counts matrix) directly.
-
-        This alternate constructor is useful for analyzing published data that
-        only provides the counts matrix without the original ratings.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-        config : KrippendorffAlphaConfig
-            The analysis configuration for Krippendorff's alpha.
-
-        Returns
-        -------
-        KrippendorffAlphaAnalyzer
-            An initialized analyzer ready to call estimate_from_nij_matrix().
-
-        Raises
-        ------
-        TypeError
-            If config is not KrippendorffAlphaConfig.
-        ValueError
-            If config.balanced_data_only=True but nij indicates unbalanced data.
-        """
-        # Delegate to parent's build_from_nij_matrix (handles __new__,
-        # Analyzer.__init__ with None, stores nij, computes BalanceProfile,
-        # validates group config, balance constraint, and resolves weights)
-        try:
-            instance = super().build_from_nij_matrix(nij, config)
-        except (TypeError, ValueError) as e:
-            raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
-
-        # Validate config is KrippendorffAlphaConfig
-        instance._validate_ka_config()
-
-        return instance
-
     # Public API ------------------------------------------------------------- #
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -205,7 +157,6 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         ValueError
             If hypothesis_test_config is None.
             If method is not "permutation".
-            If ratings is None (permutation requires raw ratings).
         """
         from ..intermediates.results import HypothesisTestResult
         from ..intermediates.estimator_parts import NijMatrix
@@ -234,9 +185,6 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
                 f"variance formula for this coefficient "
                 f"(Hayes & Krippendorff 2007)."
             )
-
-        # Permutation requires raw ratings
-        self._check_permutation_available()
 
         n_categories = self.ratings.semantics.n_categories
 
@@ -313,8 +261,8 @@ class KrippendorffAlphaAnalyzer(WeightableGroupAnalyzer):
         Krippendorff's alpha from a counts matrix.
 
         The only coefficient-specific step in my resampling. Everything that
-        draws samples -- bootstrap or jackknife, from ratings or from counts
-        -- is written once on my base classes in terms of this.
+        draws samples, bootstrap or jackknife, is written once on my base
+        classes in terms of this.
         """
         from .agreement_functions.krippendorff import krippendorff_alpha
         from ..intermediates.estimator_parts import NijMatrix

@@ -23,10 +23,10 @@ from interrater.contracts import EMPTY
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.data_profiles.rater_profile import RaterProfile
 from interrater.intermediates.data_profiles.rater_shared_matrix import RaterSharedMatrix
-from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
+from fixtures.from_counts import ratings_from_counts
 from fixtures.through_cleaner import clean_ratings
 
 from .conftest import SIMPLE_SHARED
@@ -183,36 +183,6 @@ class TestBalanceProfileProperties:
 
 
 
-class TestBalanceProfileFromNijMatrix:
-    """BalanceProfile.build_from_nij_matrix factory method."""
-
-    def test_from_balanced(self, balanced_nij):
-        """Balanced nij matrix produces a balanced profile, every field exact."""
-        bp = BalanceProfile.build_from_nij_matrix(balanced_nij)
-        assert bp.is_balanced is True
-        assert bp.raters_per_subject == 3
-        np.testing.assert_array_equal(bp.n_per_subject, [3, 3, 3, 3])
-        assert bp.subject_counts == {3: 4}
-        # All counts can say about the raters is a lower bound
-        assert bp.n_raters_lower_bound == 3
-
-    def test_from_unbalanced(self, unbalanced_nij):
-        """Unbalanced nij matrix produces an unbalanced profile, every field exact."""
-        bp = BalanceProfile.build_from_nij_matrix(unbalanced_nij)
-        assert bp.is_balanced is False
-        assert bp.raters_per_subject is None
-        np.testing.assert_array_equal(bp.n_per_subject, [3, 2, 4, 2])
-        assert bp.subject_counts == {2: 2, 3: 1, 4: 1}
-        # Lower bound = max of n_per_subject
-        assert bp.n_raters_lower_bound == 4
-
-    def test_all_zeros_raises(self):
-        """Nij matrix where every row sums to zero raises."""
-        nij = NijMatrix(np.zeros((3, 2), dtype=np.int32))
-        with pytest.raises(ValueError, match="all subjects have zero raters"):
-            BalanceProfile.build_from_nij_matrix(nij)
-
-
 class TestBalanceProfileSummary:
     """BalanceProfile.summary() produces plain-type dicts."""
 
@@ -236,8 +206,8 @@ class TestBalanceProfileSummary:
         assert "raters_per_subject" not in s
 
     def test_summary_has_no_rater_fields(self, balanced_nij):
-        """The same keys from ratings or counts: the subject side only."""
-        s = BalanceProfile.build_from_nij_matrix(balanced_nij).summary()
+        """The subject side only; who rated what is RaterProfile's."""
+        s = BalanceProfile.build_from_ratings(ratings_from_counts(balanced_nij.matrix)).summary()
         assert set(s) == {"is_balanced", "n_subjects", "n_raters_lower_bound", "raters_per_subject"}
 
 

@@ -90,10 +90,9 @@ class PointEstimateResult(AnalysisResult):
     balance_profile : BalanceProfile
         Structural metadata about the subjects: n_subjects and how many
         ratings each got.
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         The raters: names, how much each rated, and how much each pair
-        overlapped. NotComputed when the result was built from counts,
-        which carry no rater identity.
+        overlapped.
     parts : AgreementParts | NotComputed
         The observed and chance terms (Po and Pe, or Do and De) the point
         estimate is built from. NotComputed when the coefficient is not one
@@ -118,7 +117,7 @@ class PointEstimateResult(AnalysisResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
+    rater_profile: RaterProfile
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile
@@ -197,19 +196,18 @@ class PointEstimateResult(AnalysisResult):
                 f"got {type(self.balance_profile).__name__}"
             )
 
-        if not isinstance(self.rater_profile, (RaterProfile, NotComputed)):
+        if not isinstance(self.rater_profile, RaterProfile):
             raise TypeError(
-                f"{_ERROR_PREFIX}: rater_profile must be RaterProfile or "
-                f"NotComputed, got {type(self.rater_profile).__name__}"
+                f"{_ERROR_PREFIX}: rater_profile must be RaterProfile, got "
+                f"{type(self.rater_profile).__name__}"
             )
         # Both profiles describe the same data
-        if isinstance(self.rater_profile, RaterProfile):
-            if self.rater_profile.n_subjects != self.balance_profile.n_subjects:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: rater_profile has "
-                    f"{self.rater_profile.n_subjects} subjects but "
-                    f"balance_profile has {self.balance_profile.n_subjects}"
-                )
+        if self.rater_profile.n_subjects != self.balance_profile.n_subjects:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: rater_profile has "
+                f"{self.rater_profile.n_subjects} subjects but "
+                f"balance_profile has {self.balance_profile.n_subjects}"
+            )
 
         self._check_parts()
         self._check_kappa_max()
@@ -224,8 +222,8 @@ class PointEstimateResult(AnalysisResult):
 
     def _check_subjects(self) -> None:
         """Every subject in my data is one the coefficient used."""
-        # Ratings and build_from_nij_matrix refuse subjects rated fewer than
-        # twice, so none can be left out. If one is, something built me from
+        # Ratings refuses subjects rated fewer than twice, so none can be
+        # left out. If one is, something built me from
         # data that skipped that rule.
         total = self.balance_profile.n_subjects
         used  = self.agreement_profile.n_subjects
@@ -366,10 +364,8 @@ class PointEstimateResult(AnalysisResult):
         return f"{self.balance_profile.n_subjects:,} subjects"
 
     def _raters_phrase(self) -> str:
-        """'4 raters', or 'at least 3 raters' when only counts were given."""
-        if isinstance(self.rater_profile, RaterProfile):
-            return f"{self.rater_profile.n_raters} raters"
-        return f"at least {self.balance_profile.n_raters_lower_bound} raters"
+        """'4 raters'."""
+        return f"{self.rater_profile.n_raters} raters"
 
     @staticmethod
     def _weights_phrase(weights_type: str) -> str:

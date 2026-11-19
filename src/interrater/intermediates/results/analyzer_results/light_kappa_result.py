@@ -136,21 +136,6 @@ class LightKappaResult(PointEstimateResult):
                 f"{_ERROR_PREFIX}: n_pairs must be int, "
                 f"got {type(self.n_pairs).__name__}"
             )
-        from ...data_profiles.rater_profile import RaterProfile
-
-        if not isinstance(self.rater_profile, RaterProfile):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: rater_profile must be a RaterProfile for "
-                f"Light's kappa (rater identity is needed to compute "
-                f"pairwise kappas), got {self.rater_profile}"
-            )
-        expected_pairs = self.rater_profile.n_raters * (self.rater_profile.n_raters - 1) // 2
-        if self.n_pairs != expected_pairs:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: n_pairs must be C(n_raters, 2) = "
-                f"{expected_pairs}, got {self.n_pairs}"
-            )
-
         # Validate ci_method (no parametric_null for Light)
         if not isinstance(self.ci_method, str):
             raise TypeError(
@@ -172,6 +157,14 @@ class LightKappaResult(PointEstimateResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+        # After the parent has checked rater_profile is a RaterProfile
+        expected_pairs = self.rater_profile.n_raters * (self.rater_profile.n_raters - 1) // 2
+        if self.n_pairs != expected_pairs:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: n_pairs must be C(n_raters, 2) = "
+                f"{expected_pairs}, got {self.n_pairs}"
+            )
+
         self._check_pairs()
 
     def _check_pairs(self) -> None:
@@ -189,11 +182,6 @@ class LightKappaResult(PointEstimateResult):
                     f"kappa; each pair's is in pair_{name}"
                 )
         marginals = self.agreement_profile.rater_marginals
-        if isinstance(marginals, NotComputed):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: agreement_profile.rater_marginals must be "
-                f"computed for Light's kappa (rater identity required)"
-            )
         pairs = list(combinations(marginals, 2))
         for name in ("pair_parts", "pair_kappa_max"):
             value = getattr(self, name)

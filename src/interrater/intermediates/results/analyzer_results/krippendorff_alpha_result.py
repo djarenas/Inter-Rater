@@ -74,8 +74,8 @@ class KrippendorffAlphaResult(PointEstimateResult):
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Informational only --
         alpha handles both balanced and unbalanced data exactly.
-    rater_profile : RaterProfile | NotComputed
-        The raters (inherited). NotComputed when built from counts.
+    rater_profile : RaterProfile
+        The raters (inherited).
     parts : AgreementParts
         Do and De, kind "disagreement" (inherited). Always computed for
         alpha.
@@ -108,7 +108,7 @@ class KrippendorffAlphaResult(PointEstimateResult):
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
+    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

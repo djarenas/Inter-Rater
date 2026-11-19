@@ -23,7 +23,7 @@ without re-inspecting the raw arrays.
   Po = Sum_j p_j * s_j; on unbalanced data that identity does not hold,
   because Po averages per subject and this pools pairs.
 - `rater_marginals` -- each rater's shares, as Cohen's and Conger's chance
-  terms use them; `NotComputed` from counts.
+  terms use them.
 - `prevalence_bias` -- a `PrevalenceBiasIndex` for two raters and two
   categories, otherwise `NotComputed` with the reason.
 
@@ -35,20 +35,14 @@ on each category. On unbalanced data the overall row is the per-subject
 average the coefficients use, so it is not exactly the mean of the rater
 rows.
 
-Built with `build_from_ratings()` or `build_from_nij_matrix()`. In the case of nij matrix, as it carries no category names, the categories are labelled "column 0", "column 1", ...
+Built with `build_from_ratings()`.
 
 ## BalanceProfile
 
 The subject side only: `is_balanced`, `n_per_subject`, `subject_counts`
 ({raters: subjects}) and `raters_per_subject` (when balanced), with
-`n_subjects` and `n_raters_lower_bound` as properties. All of that is in a
-counts matrix as well as in ratings, so every result carries one. Two
-construction paths, both exact:
-
-- **`build_from_ratings()`**
-- **`build_from_nij_matrix()`** -- a rater who rated nothing is invisible in
-  counts, so `n_raters_lower_bound` is all a counts matrix can say about the
-  raters.
+`n_subjects` and `n_raters_lower_bound` as properties. Every result carries
+one. Built with `build_from_ratings()`.
 
 Plotted by `BalanceProfilePlotter` (see `visualizers/README.md`).
 
@@ -59,11 +53,7 @@ The rater side: `rater_names`, `n_subjects`, `n_per_rater` and
 derived from them so they cannot disagree. It checks that the overlap's
 diagonal is each rater's own total.
 
-Built only with `build_from_ratings()`. A counts matrix keeps how many raters
-chose each category, not who they were, so a result built from counts holds
-`NotComputed("built from counts: no rater identity")` in its `rater_profile`.
-Cohen's, Conger's and Light's kappas and every permutation analysis require
-one.
+Built with `build_from_ratings()`. Every result carries one.
 
 The printed tables, `to_frame()`, summaries and plots name raters through
 `rater_profile.rater_names`. Plotted by `RaterProfilePlotter` (see
@@ -84,13 +74,8 @@ order travel with the numbers and are printed in words, because the signs
 mean nothing without them. The four cells are stored and the indices worked
 out from them, so they cannot disagree.
 
-Two construction paths, as for `BalanceProfile`:
-
-- **`build_from_pair()`** -- two raters' answers on the subjects both rated. Both
-  indices are computed.
-- **`build_from_counts()`** -- per-subject category counts. The prevalence index is
-  computed; the bias index is `NotComputed`, because counts do not say which
-  rater gave which answer.
+Built with **`build_from_pair()`**: two raters' answers on the subjects both
+rated. Both indices are computed.
 
 For two categories, PABAK (prevalence- and bias-adjusted kappa) equals
 2 Po - 1, which is unweighted Brennan-Prediger, so it has no field of its own.

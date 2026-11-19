@@ -1,11 +1,10 @@
 """
 Coefficients that give each rater their own distribution.
 
-Every function here reads which rater said what. That is the whole of what
-separates them from ``group_agreement``: those treat the raters as
-interchangeable and read only counts, while these ask how often *this* rater
-said "include" as opposed to *that* one, and subtract the difference out before
-measuring agreement.
+The functions in this file use individual marginals. Every function here reads which rater said what. This separates
+these functions from those in ``group_agreement``: those treat the raters as
+interchangeable and read only counts, while these ask how often a specific rater
+chose each category. 
 
 The distinction is one modelling choice appearing twice:
 
@@ -25,9 +24,7 @@ distinct from how erratic they are. Those are different problems with different
 remedies, and a single coefficient cannot tell them apart.
 
 These take an ``EstimatorInput`` rather than a projection of it, because the
-array is what they read and K and the weights travel with it. There is no
-counts-shaped summary for this family the way ``NijMatrix`` serves the other:
-counts discard rater identity, which is precisely what these need.
+array is what they read and K and the weights travel with it. 
 
 Nothing here validates, and that is the contract. Cohen's kappa assumes it was
 handed exactly two rater columns and will return a number for any other shape;
@@ -66,9 +63,11 @@ from .group_agreement import agreement_corrected_by_chance
 
 def rater_marginals(data: EstimatorInput, rows: np.ndarray | None = None) -> np.ndarray:
     """
+    Calculates p_rj.
     p_rj: how often each rater chose each category, as a proportion.
 
-    A numpy array of size n_raters by K. Row r is rater r's own distribution
+
+    p_rj is a numpy array of size n_raters by K. Row r is rater r's own distribution
     over the categories, summing to one across the categories they actually
     used.
 

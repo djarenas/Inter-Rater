@@ -14,8 +14,8 @@ class NotComputed:
 
     ``None`` cannot tell "does not apply" from "was never filled in", so a
     field that is legitimately absent holds me instead, with a reason a
-    reader can act on -- for example, that a bias index needs each rater's
-    ratings and the result was built from category counts only.
+    reader can act on -- for example, that the prevalence and bias indices
+    are defined only for two raters and two categories.
 
     Three states, kept apart:
 

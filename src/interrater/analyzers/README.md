@@ -57,17 +57,13 @@ available to the former but not the latter.
 ### Analyzer (base)
 
 - Stores Ratings and config
-- Builds the BalanceProfile and, from ratings, the RaterProfile
-  (`NotComputed` on the counts path)
+- Builds the BalanceProfile and the RaterProfile from the ratings
 - Writes `estimate()` once for every coefficient (see below), with the one
   `_compute_ci` it uses
 
 ### GroupAnalyzer
 
 - Validates that the config is a GroupCoefficientConfig
-- Supports two initialization paths: from Ratings, or from NijMatrix directly
-- Writes `estimate_from_nij_matrix()` once for every group coefficient: the
-  counts-path twin of `estimate()`, calling the same `_result`
 - Enforces balance constraints when `config.balanced_data_only=True`
 
 ### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
@@ -78,9 +74,7 @@ available to the former but not the latter.
 
 ### IndividualMarginalAnalyzer
 
-- Requires Ratings (never None: rater identity is essential)
 - Builds EstimatorInput from Ratings (category_index + metadata)
-- No NijMatrix path: counts discard exactly what these coefficients need
 
 ### Leaf analyzers (e.g. FleissKappaAnalyzer)
 
@@ -110,12 +104,6 @@ need nothing from it beyond `_estimate_from_array`. `_result` is separate
 from the rest so that a permutation analysis, which bootstraps each pair or
 subset with its own seeds, can package a unit's point, interval and draws
 through the same method and get a result built and checked the same way.
-
-The counts path, `estimate_from_nij_matrix()`, is the same four steps on the
-counts matrix, written once on `GroupAnalyzer`. `_result` reads its counts and
-agreement profile through `_nij_array()` and `_agreement_profile()`, which
-take them from whichever source the analyzer was built from, so one `_result`
-serves both paths.
 
 ```python
 analyzer = FleissKappaAnalyzer(ratings, config)

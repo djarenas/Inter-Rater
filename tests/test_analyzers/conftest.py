@@ -1,7 +1,7 @@
 """
 Shared fixtures for test_analyzers/.
 
-I hold data fixtures (Ratings, NijMatrix) and minimal config instances
+I hold data fixtures (Ratings) and minimal config instances
 that the analyzer test files share. The raw numeric arrays and expected
 values are inlined here -- they are small, frozen constants duplicated
 from test_agreement_functions/conftest.py so that this conftest is
@@ -9,7 +9,6 @@ self-contained (no cross-directory imports).
 
 Construction recipe (bottom-up):
     UnorderedCategories -> RatingsSemantics -> Ratings
-    np.ndarray          -> NijMatrix
 """
 
 import numpy as np
@@ -18,7 +17,6 @@ import pytest
 from interrater.contracts import INDEX_DTYPE
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
-from interrater.intermediates.estimator_parts import NijMatrix
 
 from interrater.analyzers.configs import (
     FleissKappaConfig,
@@ -216,22 +214,6 @@ def fleiss_1971_ratings():
 def three_rater_ratings():
     """Three-rater dataset: 10 subjects, 3 raters, K=2."""
     return clean_ratings(THREE_RATER_INDEX.copy(), SEM_3RATER_2CAT)
-
-
-# -- Fixtures: NijMatrix objects ------------------------------------------- #
-
-@pytest.fixture
-def fleiss_1971_nij_matrix():
-    """Fleiss (1971) Table 1 as NijMatrix: 30 subjects x 5 categories."""
-    return NijMatrix(FLEISS_1971_NIJ.copy())
-
-
-@pytest.fixture
-def two_rater_nij_matrix():
-    """TWO_RATER_INDEX converted to NijMatrix: 10 subjects x 2 categories."""
-    from interrater.intermediates.estimator_parts.estimator_input import EstimatorInput
-    ei = EstimatorInput(TWO_RATER_INDEX.copy(), TWO_RATER_K)
-    return ei.nij
 
 
 # -- Fixtures: minimal configs (deterministic, for point-estimate tests) --- #

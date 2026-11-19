@@ -55,8 +55,8 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     - Bootstrap confidence interval (percentile or BCa -- no parametric null)
     - Return LightKappaResult with all metadata including n_pairs
 
-    There is no NijMatrix path. Light's kappa reads rater identity -- who said
-    what -- and counts discard that.
+    Light's kappa reads rater identity -- who said what -- and counts discard
+    that.
 
     There is no weighted form in this package. Light (1971) defined the coefficient as the
     mean of unweighted pairwise kappas.
@@ -118,10 +118,10 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         TypeError
             If config is not LightKappaConfig.
         ValueError
-            If ratings is None, or any rating is missing (after injection):
+            If any rating is missing (after injection):
             Light (1971) defines the coefficient for complete data.
         """
-        # Call parent __init__ (validates ratings not None, validates config is
+        # Call parent __init__ (validates ratings and checks that config is
         # IndividualMarginalConfig, computes BalanceProfile, builds
         # EstimatorInput with weights=None)
         try:

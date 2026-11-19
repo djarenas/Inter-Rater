@@ -15,7 +15,6 @@ from ...array_utils import (
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
-    from ...intermediates.estimator_parts import NijMatrix
 
 _ERROR_PREFIX = "[BalanceProfile] Error"
 
@@ -27,8 +26,8 @@ class BalanceProfile:
 
     I answer structural questions about data: Are all subjects rated the same
     number of times? If not, what's the distribution? I exist because
-    visualization and interpretation depend on understanding the data shape,
-    not just the coefficient value.
+    visualization and interpretation may depend on understanding the data shape,
+    and not just the coefficient value.
 
     If is_balanced is True, the data is uniform and I report it simply. If
     False, I hold the granular distribution for diagnostics and visualization.
@@ -44,7 +43,7 @@ class BalanceProfile:
     is_balanced : bool
         Every subject was rated the same number of times.
     n_per_subject : ndarray
-        (n_subjects,) -- how many raters rated each subject.
+        how many raters rated each subject.
     subject_counts : dict[int, int]
         Distribution: {n_raters: count}. Example: {2: 1614, 3: 3} means 1614
         subjects had 2 raters, 3 subjects had 3 raters.
@@ -167,45 +166,6 @@ class BalanceProfile:
         is_balanced_flag = check_balanced(index)
         n_per_subject_arr = get_n_per_subject(index)
         subject_counts_dict = subject_count_distribution(index)
-
-        raters_per_subject = int(n_per_subject_arr[0]) if is_balanced_flag else None
-
-        return cls(
-            is_balanced=is_balanced_flag,
-            n_per_subject=n_per_subject_arr,
-            subject_counts=subject_counts_dict,
-            raters_per_subject=raters_per_subject,
-        )
-
-    @classmethod
-    def build_from_nij_matrix(cls, nij: NijMatrix) -> BalanceProfile:
-        """
-        Construct a BalanceProfile from an NijMatrix (counts matrix).
-
-        Everything I hold is subject-level, so it is all in the counts.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-
-        Returns
-        -------
-        BalanceProfile
-            A profile describing the balance structure.
-        """
-        n_per_subject_arr = nij.n_per_subject
-
-        if int(np.max(n_per_subject_arr)) == 0:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: all subjects have zero raters "
-                f"(every row of the nij matrix sums to 0)"
-            )
-
-        is_balanced_flag = len(np.unique(n_per_subject_arr)) == 1
-
-        unique_counts, count_frequencies = np.unique(n_per_subject_arr, return_counts=True)
-        subject_counts_dict = {int(k): int(v) for k, v in zip(unique_counts, count_frequencies)}
 
         raters_per_subject = int(n_per_subject_arr[0]) if is_balanced_flag else None
 

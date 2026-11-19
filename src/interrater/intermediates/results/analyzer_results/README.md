@@ -13,7 +13,6 @@ analyzer returns when it has estimated a single coefficient. It holds:
 - `kappa_max`: the ceiling the raters' marginals allow, where that applies.
 - `balance_profile`: ratings per subject.
 - `rater_profile`: rater names, subjects rated by each, and their overlap.
-  `NotComputed` when the result was built from counts.
 - `agreement_profile`: prevalence and per-category agreement.
 
 ```
@@ -95,11 +94,9 @@ draw counts are in the interval's own summary, under `ci`.
 
 ## `IndividualMarginalResult` is internal
 
-It validates what Cohen and Conger share: `rater_profile` must be a
-`RaterProfile`, not `NotComputed`, because both chance terms need to know
-which rater said what, so neither can be built from counts; and the
-agreement profile must carry one row of marginals per rater, which the
-children check their chance term against. It is a base, not an outcome, so
+It validates what Cohen and Conger share: the agreement profile must carry
+one row of marginals per rater in the rater profile, which the children
+check their chance term against. It is a base, not an outcome, so
 it is deliberately absent from `__all__`.
 
 ## Dependencies

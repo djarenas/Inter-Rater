@@ -14,8 +14,8 @@ point, legitimately -- so the same assertion there would be asserting
 something allowed to be false. BCa is covered separately below.
 
 Datasets:
-    Fleiss 1971     -- nij pathway, 6 raters, 5 categories, balanced
-    Gwet cont3x3   -- ratings + nij pathways, 2 raters, 3 categories, balanced
+    Fleiss 1971     -- 6 made-up rater slots (the source is counts), 5 categories, balanced
+    Gwet cont3x3   -- 2 raters, 3 categories, balanced
     Synthetic 2-rater -- ratings pathway, 2 raters, 3 categories, balanced
 """
 
@@ -53,7 +53,7 @@ def _assert_brackets_point(result) -> None:
     )
 
 
-# ── Fleiss 1971 (nij pathway, 6 raters, K=5, balanced) ──────────────────── #
+# ── Fleiss 1971 (6 made-up rater slots, K=5, balanced) ──────────────────── #
 #
 # Source: Fleiss, J. L. (1971). Measuring nominal scale agreement among
 #         many raters. Psychological Bulletin, 76(5), 378–382.
@@ -62,32 +62,26 @@ def _assert_brackets_point(result) -> None:
 class TestFleiss1971:
     """Fleiss 1971 psychiatric diagnosis dataset (30 subjects, 6 raters, K=5)."""
 
-    def test_fleiss_kappa(self, fleiss1971_nij, fast_fleiss_config):
+    def test_fleiss_kappa(self, fleiss1971_ratings, fast_fleiss_config):
         """Fleiss' kappa = 0.430 (Fleiss 1971 original)."""
-        analyzer = FleissKappaAnalyzer.build_from_nij_matrix(
-            fleiss1971_nij, fast_fleiss_config,
-        )
-        result = analyzer.estimate_from_nij_matrix()
+        analyzer = FleissKappaAnalyzer(fleiss1971_ratings, fast_fleiss_config)
+        result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.430, abs=TOL)
         _assert_brackets_point(result)
 
-    def test_gwet_ac1(self, fleiss1971_nij, fast_gwet_config):
+    def test_gwet_ac1(self, fleiss1971_ratings, fast_gwet_config):
         """Gwet AC1 = 0.448 (V2 validated)."""
-        analyzer = GwetAC1Analyzer.build_from_nij_matrix(
-            fleiss1971_nij, fast_gwet_config,
-        )
-        result = analyzer.estimate_from_nij_matrix()
+        analyzer = GwetAC1Analyzer(fleiss1971_ratings, fast_gwet_config)
+        result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.448, abs=TOL)
         _assert_brackets_point(result)
 
-    def test_brennan_prediger(self, fleiss1971_nij, fast_bp_config):
+    def test_brennan_prediger(self, fleiss1971_ratings, fast_bp_config):
         """Brennan-Prediger = 0.444 (V2 validated, Pe = 1/5)."""
-        analyzer = BrennanPredigerAnalyzer.build_from_nij_matrix(
-            fleiss1971_nij, fast_bp_config,
-        )
-        result = analyzer.estimate_from_nij_matrix()
+        analyzer = BrennanPredigerAnalyzer(fleiss1971_ratings, fast_bp_config)
+        result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.444, abs=TOL)
         _assert_brackets_point(result)
@@ -119,12 +113,10 @@ class TestGwetCont3x3:
         assert result.point == pytest.approx(0.849, abs=TOL)
         _assert_brackets_point(result)
 
-    def test_krippendorff_alpha_nij(self, gwet_nij, fast_krippendorff_config):
-        """Krippendorff α = 0.797 via nij pathway (V2 validated)."""
-        analyzer = KrippendorffAlphaAnalyzer.build_from_nij_matrix(
-            gwet_nij, fast_krippendorff_config,
-        )
-        result = analyzer.estimate_from_nij_matrix()
+    def test_krippendorff_alpha_ratings(self, gwet_ratings, fast_krippendorff_config):
+        """Krippendorff α = 0.797 (V2 validated)."""
+        analyzer = KrippendorffAlphaAnalyzer(gwet_ratings, fast_krippendorff_config)
+        result = analyzer.estimate()
 
         assert result.point == pytest.approx(0.797, abs=TOL)
         _assert_brackets_point(result)
@@ -167,7 +159,7 @@ class TestSynthetic2Rater:
 class TestBcaEndToEnd:
     """BCa at B=1000 on the Fleiss 1971 data (30 subjects, 6 raters)."""
 
-    def test_bca_runs_without_falling_back(self, fleiss1971_nij, bca_fleiss_config):
+    def test_bca_runs_without_falling_back(self, fleiss1971_ratings, bca_fleiss_config):
         """The interval must be BCa's own work, not percentile wearing its name.
 
         ``method_used`` is the assertion that matters. BCa steps down to
@@ -175,10 +167,8 @@ class TestBcaEndToEnd:
         estimate and bounds would look perfectly reasonable either way --
         only the interval's own account distinguishes them.
         """
-        analyzer = FleissKappaAnalyzer.build_from_nij_matrix(
-            fleiss1971_nij, bca_fleiss_config,
-        )
-        result = analyzer.estimate_from_nij_matrix()
+        analyzer = FleissKappaAnalyzer(fleiss1971_ratings, bca_fleiss_config)
+        result = analyzer.estimate()
         ci = result.confidence_interval
 
         assert result.point == pytest.approx(0.430, abs=TOL)
@@ -186,23 +176,19 @@ class TestBcaEndToEnd:
         assert ci.method_used == "bca"
         assert ci.degraded is False
 
-    def test_bca_carries_its_diagnostics(self, fleiss1971_nij, bca_fleiss_config):
+    def test_bca_carries_its_diagnostics(self, fleiss1971_ratings, bca_fleiss_config):
         """A real BCa interval reports the two constants it was built from."""
-        analyzer = FleissKappaAnalyzer.build_from_nij_matrix(
-            fleiss1971_nij, bca_fleiss_config,
-        )
-        ci = analyzer.estimate_from_nij_matrix().confidence_interval
+        analyzer = FleissKappaAnalyzer(fleiss1971_ratings, bca_fleiss_config)
+        ci = analyzer.estimate().confidence_interval
 
         assert ci.acceleration is not None
         assert ci.bias_correction is not None
         assert abs(ci.acceleration) < 1.0
 
-    def test_bca_is_given_enough_resamples(self, fleiss1971_nij, bca_fleiss_config):
+    def test_bca_is_given_enough_resamples(self, fleiss1971_ratings, bca_fleiss_config):
         """B=1000 is Efron & Tibshirani's minimum for BCa; the interval agrees."""
-        analyzer = FleissKappaAnalyzer.build_from_nij_matrix(
-            fleiss1971_nij, bca_fleiss_config,
-        )
-        ci = analyzer.estimate_from_nij_matrix().confidence_interval
+        analyzer = FleissKappaAnalyzer(fleiss1971_ratings, bca_fleiss_config)
+        ci = analyzer.estimate().confidence_interval
 
         assert ci.n_resamples == 1000
         assert ci.recommended_resamples == 1000

@@ -685,27 +685,13 @@ class TestChaining:
 
 class TestInjectionNeedsRatings:
     """
-    Injection builds a new rater from the real raters' answers. A nij matrix
-    holds only counts per subject, so there is nothing to build from: the
-    analyzer refuses at construction rather than silently skipping the step
-    and reporting an un-augmented coefficient as an augmented one.
+    Injection builds a new rater from the real raters' answers, at
+    construction, so every coefficient sees the augmented ratings.
     """
 
     @staticmethod
     def _config(config_cls):
         return config_cls(injection=DistributionInjectorConfig(n_new_raters=1, random_state=0))
-
-    @pytest.mark.parametrize("name", ["FleissKappa", "GwetAC1"])
-    def test_nij_path_refused(self, name):
-        import interrater.analyzers as A
-        import interrater.analyzers.configs as C
-        from interrater.intermediates.estimator_parts import NijMatrix
-
-        nij = NijMatrix(matrix=np.array([[3, 0], [2, 1], [1, 2], [0, 3]]))
-        with pytest.raises(ValueError, match="injection needs individual ratings"):
-            getattr(A, f"{name}Analyzer").build_from_nij_matrix(
-                nij, self._config(getattr(C, f"{name}Config")),
-            )
 
     def test_ratings_path_injects(self, simple_ratings):
         from interrater.analyzers import FleissKappaAnalyzer

@@ -23,7 +23,6 @@ import yaml
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 from interrater.data_objects.ratings import Ratings
-from interrater.intermediates.estimator_parts import NijMatrix
 from interrater.intermediates.results.ci_results import (
     BootstrapCIResult,
     ParametricCIResult,
@@ -85,19 +84,6 @@ def _make_ratings(n_raters: int = 3) -> Ratings:
     else:
         raise ValueError(f"Fixture does not support n_raters={n_raters}")
     return clean_ratings(category_index=ci, semantics=sem)
-
-
-def _make_nij(raters_per_subject: int = 3) -> NijMatrix:
-    """Build a minimal NijMatrix fixture with given raters per subject."""
-    if raters_per_subject == 2:
-        arr = np.array([[2, 0], [0, 2], [1, 1], [1, 1]])
-    elif raters_per_subject == 3:
-        arr = np.array([[2, 1], [1, 2], [1, 2], [2, 1]])
-    else:
-        raise ValueError(
-            f"Fixture does not support raters_per_subject={raters_per_subject}"
-        )
-    return NijMatrix(matrix=arr)
 
 
 # ------------------------------------------------------------------ #
@@ -330,190 +316,27 @@ class TestConfigTypeValidation:
 
 
 # ------------------------------------------------------------------ #
-# Constructor paths -- __init__ and build_from_nij_matrix              #
+# Constructors -- Ratings only                                         #
 # ------------------------------------------------------------------ #
 
 
-class TestConstructorPaths:
-    """Group analyzers support both __init__ and build_from_nij_matrix."""
+class TestNoCountsConstructor:
+    """Every analyzer is built from Ratings; none has a counts constructor."""
 
-    def test_fleiss_from_ratings(self):
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        a = FleissKappaAnalyzer(_make_ratings(3), FleissKappaConfig())
-        assert a.ratings is not None
-        assert a.nij_matrix is None
-
-    def test_fleiss_from_nij_matrix(self):
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        a = FleissKappaAnalyzer.build_from_nij_matrix(
-            _make_nij(3), FleissKappaConfig()
+    def test_no_analyzer_builds_from_counts(self):
+        from interrater import (
+            BrennanPredigerAnalyzer, CohenKappaAnalyzer, CongerKappaAnalyzer,
+            FleissKappaAnalyzer, GwetAC1Analyzer, KrippendorffAlphaAnalyzer,
+            LightKappaAnalyzer, ScottsAnalyzer,
         )
-        assert a.ratings is None
-        assert a.nij_matrix is not None
 
-    def test_gwet_from_ratings(self):
-        from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
-        from interrater.analyzers.configs import GwetAC1Config
-
-        a = GwetAC1Analyzer(_make_ratings(3), GwetAC1Config())
-        assert a.ratings is not None
-
-    def test_gwet_from_nij_matrix(self):
-        from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
-        from interrater.analyzers.configs import GwetAC1Config
-
-        a = GwetAC1Analyzer.build_from_nij_matrix(_make_nij(3), GwetAC1Config())
-        assert a.ratings is None
-        assert a.nij_matrix is not None
-
-    def test_brennan_prediger_from_ratings(self):
-        from interrater.analyzers.brennan_prediger_analyzer import (
-            BrennanPredigerAnalyzer,
-        )
-        from interrater.analyzers.configs import BrennanPredigerConfig
-
-        a = BrennanPredigerAnalyzer(_make_ratings(3), BrennanPredigerConfig())
-        assert a.ratings is not None
-
-    def test_brennan_prediger_from_nij_matrix(self):
-        from interrater.analyzers.brennan_prediger_analyzer import (
-            BrennanPredigerAnalyzer,
-        )
-        from interrater.analyzers.configs import BrennanPredigerConfig
-
-        a = BrennanPredigerAnalyzer.build_from_nij_matrix(
-            _make_nij(3), BrennanPredigerConfig()
-        )
-        assert a.ratings is None
-        assert a.nij_matrix is not None
-
-    def test_krippendorff_from_ratings(self):
-        from interrater.analyzers.krippendorff_alpha_analyzer import (
-            KrippendorffAlphaAnalyzer,
-        )
-        from interrater.analyzers.configs import KrippendorffAlphaConfig
-
-        a = KrippendorffAlphaAnalyzer(_make_ratings(3), KrippendorffAlphaConfig())
-        assert a.ratings is not None
-
-    def test_krippendorff_from_nij_matrix(self):
-        from interrater.analyzers.krippendorff_alpha_analyzer import (
-            KrippendorffAlphaAnalyzer,
-        )
-        from interrater.analyzers.configs import KrippendorffAlphaConfig
-
-        a = KrippendorffAlphaAnalyzer.build_from_nij_matrix(
-            _make_nij(3), KrippendorffAlphaConfig()
-        )
-        assert a.ratings is None
-        assert a.nij_matrix is not None
-
-    def test_scott_from_ratings(self):
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        a = ScottsAnalyzer(_make_ratings(2), ScottsConfig())
-        assert a.ratings is not None
-
-    def test_scott_from_nij_matrix(self):
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        a = ScottsAnalyzer.build_from_nij_matrix(_make_nij(2), ScottsConfig())
-        assert a.ratings is None
-        assert a.nij_matrix is not None
-
-    def test_individual_analyzers_have_no_nij_path(self):
-        """Cohen, Conger, Light -- no build_from_nij_matrix classmethod."""
-        from interrater.analyzers.cohen_kappa_analyzer import CohenKappaAnalyzer
-        from interrater.analyzers.conger_kappa_analyzer import CongerKappaAnalyzer
-        from interrater.analyzers.light_kappa_analyzer import LightKappaAnalyzer
-
-        # These classes should NOT have build_from_nij_matrix as their own method.
-        # They do inherit it from Analyzer via GroupAnalyzer, but individual
-        # analyzers do not extend GroupAnalyzer, so it should not exist.
-        assert not hasattr(CohenKappaAnalyzer, "build_from_nij_matrix")
-        assert not hasattr(CongerKappaAnalyzer, "build_from_nij_matrix")
-        assert not hasattr(LightKappaAnalyzer, "build_from_nij_matrix")
-
-
-# ------------------------------------------------------------------ #
-# Estimate guards                                                      #
-# ------------------------------------------------------------------ #
-
-
-class TestEstimateGuards:
-    """Guard on estimate() when ratings is None, and vice versa."""
-
-    def test_fleiss_estimate_raises_when_built_from_nij(self):
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        a = FleissKappaAnalyzer.build_from_nij_matrix(
-            _make_nij(3), FleissKappaConfig()
-        )
-        with pytest.raises(ValueError, match="ratings"):
-            a.estimate()
-
-    def test_fleiss_estimate_from_nij_raises_when_built_from_ratings(self):
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        a = FleissKappaAnalyzer(_make_ratings(3), FleissKappaConfig())
-        with pytest.raises(ValueError, match="nij_matrix"):
-            a.estimate_from_nij_matrix()
-
-    def test_gwet_estimate_raises_when_built_from_nij(self):
-        from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
-        from interrater.analyzers.configs import GwetAC1Config
-
-        a = GwetAC1Analyzer.build_from_nij_matrix(_make_nij(3), GwetAC1Config())
-        with pytest.raises(ValueError, match="ratings"):
-            a.estimate()
-
-    def test_gwet_estimate_from_nij_raises_when_built_from_ratings(self):
-        from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
-        from interrater.analyzers.configs import GwetAC1Config
-
-        a = GwetAC1Analyzer(_make_ratings(3), GwetAC1Config())
-        with pytest.raises(ValueError, match="nij_matrix"):
-            a.estimate_from_nij_matrix()
-
-    def test_brennan_prediger_estimate_raises_when_built_from_nij(self):
-        from interrater.analyzers.brennan_prediger_analyzer import (
-            BrennanPredigerAnalyzer,
-        )
-        from interrater.analyzers.configs import BrennanPredigerConfig
-
-        a = BrennanPredigerAnalyzer.build_from_nij_matrix(
-            _make_nij(3), BrennanPredigerConfig()
-        )
-        with pytest.raises(ValueError, match="ratings"):
-            a.estimate()
-
-    def test_krippendorff_estimate_raises_when_built_from_nij(self):
-        from interrater.analyzers.krippendorff_alpha_analyzer import (
-            KrippendorffAlphaAnalyzer,
-        )
-        from interrater.analyzers.configs import KrippendorffAlphaConfig
-
-        a = KrippendorffAlphaAnalyzer.build_from_nij_matrix(
-            _make_nij(3), KrippendorffAlphaConfig()
-        )
-        with pytest.raises(ValueError, match="ratings"):
-            a.estimate()
-
-    def test_scott_estimate_raises_when_built_from_nij(self):
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        a = ScottsAnalyzer.build_from_nij_matrix(_make_nij(2), ScottsConfig())
-        with pytest.raises(ValueError, match="ratings"):
-            a.estimate()
+        for cls in (
+            BrennanPredigerAnalyzer, CohenKappaAnalyzer, CongerKappaAnalyzer,
+            FleissKappaAnalyzer, GwetAC1Analyzer, KrippendorffAlphaAnalyzer,
+            LightKappaAnalyzer, ScottsAnalyzer,
+        ):
+            assert not hasattr(cls, "build_from_nij_matrix"), cls.__name__
+            assert not hasattr(cls, "estimate_from_nij_matrix"), cls.__name__
 
 
 # ------------------------------------------------------------------ #
@@ -551,22 +374,6 @@ class TestRaterConstraints:
 
         a = ScottsAnalyzer(_make_ratings(2), ScottsConfig())
         assert a.ratings is not None
-
-    def test_scott_rejects_three_raters_from_nij(self):
-        """Row sums = 3 means 3 raters -- Scott rejects."""
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        with pytest.raises(ValueError):
-            ScottsAnalyzer.build_from_nij_matrix(_make_nij(3), ScottsConfig())
-
-    def test_scott_accepts_two_raters_from_nij(self):
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        a = ScottsAnalyzer.build_from_nij_matrix(_make_nij(2), ScottsConfig())
-        assert a.nij_matrix is not None
-
 
 # ------------------------------------------------------------------ #
 # Hypothesis test guards                                               #
@@ -662,22 +469,6 @@ class TestHypothesisTestGuards:
                 )
             )
 
-    def test_permutation_from_nij_raises(self):
-        """Permutation requires raw ratings, not NijMatrix."""
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-        from interrater.analyzers.configs.hypothesis_test_config import (
-            HypothesisTestConfig,
-        )
-
-        config = FleissKappaConfig(
-            hypothesis_test_config=HypothesisTestConfig(method="permutation")
-        )
-        a = FleissKappaAnalyzer.build_from_nij_matrix(_make_nij(3), config)
-        with pytest.raises(ValueError, match="Ratings"):
-            a.hypothesis_test()
-
-
 # ------------------------------------------------------------------ #
 # Hypothesis test through the analyzer                                 #
 # ------------------------------------------------------------------ #
@@ -714,8 +505,7 @@ _HT_CASES = ["fleiss_parametric", "scott_parametric", "cohen_parametric", "fleis
 class TestHypothesisTestThroughAnalyzer:
     """
     hypothesis_test() end to end: the decision is a plain Python bool that
-    agrees with p and alpha, Fleiss (1971) rejects H₀, and the counts path
-    gives the same parametric test as the ratings path.
+    agrees with p and alpha, and Fleiss (1971) rejects H₀.
     """
 
     @pytest.mark.parametrize("name", _HT_CASES)
@@ -736,22 +526,6 @@ class TestHypothesisTestThroughAnalyzer:
         """Fleiss (1971): kappa 0.430 on 30 subjects is far from chance."""
         result = _ht_analyzer("fleiss_parametric", request).hypothesis_test()
         assert result.reject_null is True
-
-    def test_counts_path_gives_the_same_test(self, request, fleiss_1971_nij_matrix):
-        """The parametric test needs only counts, so both paths agree exactly."""
-        from interrater.analyzers import FleissKappaAnalyzer
-
-        from_ratings = _ht_analyzer("fleiss_parametric", request)
-        from_counts = FleissKappaAnalyzer.build_from_nij_matrix(
-            fleiss_1971_nij_matrix, from_ratings.config,
-        )
-        a, b = from_ratings.hypothesis_test(), from_counts.hypothesis_test()
-        assert b.reject_null is True
-        assert type(b.reject_null) is bool
-        assert b.p_value == pytest.approx(a.p_value, abs=1e-12)
-        assert b.z_statistic == pytest.approx(a.z_statistic, abs=1e-12)
-        assert b.point == pytest.approx(a.point, abs=1e-12)
-
 
 # ------------------------------------------------------------------ #
 # Hypothesis test on an undefined coefficient                          #
@@ -877,15 +651,6 @@ class TestResultsRecordWeightMatrix:
         assert result.weights_type == "custom"
         assert result.summary()["weight_matrix"] == _DECLARED
 
-    @pytest.mark.parametrize("name", ["FleissKappa", "BrennanPrediger", "KrippendorffAlpha"])
-    def test_counts_path_records_none(self, name):
-        """Counts carry no category order, so the counts path is unweighted."""
-        analyzer_cls, config_cls = _analyzer_and_config(name)
-        result = analyzer_cls.build_from_nij_matrix(
-            _three_cat_ratings(3).to_nij_matrix(), config_cls(n_resamples=20, random_state=42),
-        ).estimate_from_nij_matrix()
-        assert result.summary()["weight_matrix"] is None
-
     @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
     def test_matrix_on_an_unweighted_result_refused(self, name, n_raters):
         result = _weighted_result(name, n_raters, UnorderedCategories(("A", "B", "C")))
@@ -956,15 +721,6 @@ class TestAnalyzersReadWeightsFromSemantics:
         assert analyzer.weights.kind == "quadratic"
         np.testing.assert_array_equal(analyzer.weights.matrix, categories.weight_matrix())
 
-    @pytest.mark.parametrize("name", ["FleissKappa", "BrennanPrediger", "KrippendorffAlpha"])
-    def test_counts_path_has_no_weights(self, name):
-        analyzer_cls, config_cls = _analyzer_and_config(name)
-        analyzer = analyzer_cls.build_from_nij_matrix(
-            _three_cat_ratings(3).to_nij_matrix(), config_cls(n_resamples=20),
-        )
-        assert analyzer.weights is None
-
-
 @pytest.mark.filterwarnings("ignore::UserWarning")  # parametric_null warns; not the subject
 class TestParametricNullNeedsItsAssumptions:
     """
@@ -992,15 +748,6 @@ class TestParametricNullNeedsItsAssumptions:
         config = self._configs(FleissKappaConfig, balanced_data_only=False)[which]
         with pytest.raises(ValueError, match="same number of raters; these data have 2 to 3"):
             FleissKappaAnalyzer(_three_cat_ratings(3, unbalanced=True), config)
-
-    def test_fleiss_unbalanced_nij_refused(self):
-        from interrater.analyzers import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        nij = NijMatrix(matrix=np.array([[3, 0], [2, 1], [1, 1], [0, 2]]))
-        config = self._configs(FleissKappaConfig, balanced_data_only=False)[0]
-        with pytest.raises(ValueError, match="same number of raters"):
-            FleissKappaAnalyzer.build_from_nij_matrix(nij, config)
 
     @pytest.mark.parametrize("which", [0, 1], ids=["interval", "test"])
     def test_fleiss_weighted_refused(self, which):
@@ -1171,19 +918,6 @@ class TestSmokeEstimates:
         assert result.bootstrap_distribution is not None
         assert len(result.bootstrap_distribution) == 10
 
-    def test_fleiss_estimate_from_nij_matrix(self):
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        config = FleissKappaConfig(n_resamples=10, random_state=42)
-        a = FleissKappaAnalyzer.build_from_nij_matrix(_make_nij(3), config)
-        result = a.estimate_from_nij_matrix()
-
-        assert isinstance(result.point, float)
-        _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
-        assert len(result.bootstrap_distribution) == 10
-
     def test_gwet_estimate_from_ratings(self):
         from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
         from interrater.analyzers.configs import GwetAC1Config
@@ -1197,17 +931,6 @@ class TestSmokeEstimates:
         assert result.bootstrap_distribution is not None
         assert len(result.bootstrap_distribution) == 10
 
-    def test_gwet_estimate_from_nij_matrix(self):
-        from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
-        from interrater.analyzers.configs import GwetAC1Config
-
-        config = GwetAC1Config(n_resamples=10, random_state=42)
-        a = GwetAC1Analyzer.build_from_nij_matrix(_make_nij(3), config)
-        result = a.estimate_from_nij_matrix()
-
-        assert isinstance(result.point, float)
-        assert result.bootstrap_distribution is not None
-
     def test_brennan_prediger_estimate_from_ratings(self):
         from interrater.analyzers.brennan_prediger_analyzer import (
             BrennanPredigerAnalyzer,
@@ -1220,21 +943,6 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
-
-    def test_brennan_prediger_estimate_from_nij_matrix(self):
-        from interrater.analyzers.brennan_prediger_analyzer import (
-            BrennanPredigerAnalyzer,
-        )
-        from interrater.analyzers.configs import BrennanPredigerConfig
-
-        config = BrennanPredigerConfig(n_resamples=10, random_state=42)
-        a = BrennanPredigerAnalyzer.build_from_nij_matrix(
-            _make_nij(3), config
-        )
-        result = a.estimate_from_nij_matrix()
-
-        assert isinstance(result.point, float)
         assert result.bootstrap_distribution is not None
 
     def test_krippendorff_estimate_from_ratings(self):
@@ -1251,21 +959,6 @@ class TestSmokeEstimates:
         _assert_bootstrap_interval(result, n_resamples=10)
         assert result.bootstrap_distribution is not None
 
-    def test_krippendorff_estimate_from_nij_matrix(self):
-        from interrater.analyzers.krippendorff_alpha_analyzer import (
-            KrippendorffAlphaAnalyzer,
-        )
-        from interrater.analyzers.configs import KrippendorffAlphaConfig
-
-        config = KrippendorffAlphaConfig(n_resamples=10, random_state=42)
-        a = KrippendorffAlphaAnalyzer.build_from_nij_matrix(
-            _make_nij(3), config
-        )
-        result = a.estimate_from_nij_matrix()
-
-        assert isinstance(result.point, float)
-        assert result.bootstrap_distribution is not None
-
     def test_scott_estimate_from_ratings(self):
         from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
         from interrater.analyzers.configs import ScottsConfig
@@ -1276,17 +969,6 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
-
-    def test_scott_estimate_from_nij_matrix(self):
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.configs import ScottsConfig
-
-        config = ScottsConfig(n_resamples=10, random_state=42)
-        a = ScottsAnalyzer.build_from_nij_matrix(_make_nij(2), config)
-        result = a.estimate_from_nij_matrix()
-
-        assert isinstance(result.point, float)
         assert result.bootstrap_distribution is not None
 
     def test_cohen_estimate(self):
@@ -1436,18 +1118,6 @@ class TestBalanceProfilePropagation:
         result = a.estimate()
 
         assert result.balance_profile is a.balance_profile
-
-    def test_nij_matrix_balance_profile_in_result(self):
-        """Balance profile propagated even via NijMatrix path."""
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.configs import FleissKappaConfig
-
-        config = FleissKappaConfig(n_resamples=10, random_state=42)
-        a = FleissKappaAnalyzer.build_from_nij_matrix(_make_nij(3), config)
-        result = a.estimate_from_nij_matrix()
-
-        assert result.balance_profile is a.balance_profile
-
 
 # ------------------------------------------------------------------ #
 # Bootstrap summary with failed draws                                  #
@@ -1662,45 +1332,23 @@ class TestResultsCarryTheirParts:
     """
     Every result carries Po and Pe (or why not), kappa_max (or why not) and
     the agreement profile. The result checks them against its point
-    estimate and each other; these tests check the analyzers fill them in
-    the same way from ratings and from counts.
+    estimate and each other; these tests check the analyzers fill them in.
     """
 
-    @staticmethod
-    def _both_paths(analyzer_cls, config, ratings, nij):
-        from_ratings = analyzer_cls(ratings, config).estimate()
-        from_counts = analyzer_cls.build_from_nij_matrix(nij, config).estimate_from_nij_matrix()
-        return from_ratings, from_counts
-
-    @staticmethod
-    def _assert_same_parts(a, b):
-        assert a.parts.observed == pytest.approx(b.parts.observed, abs=1e-12)
-        assert a.parts.chance == pytest.approx(b.parts.chance, abs=1e-12)
-        assert a.parts.weighted == b.parts.weighted
-        # Counts carry no category names, so compare the shares in order
-        assert list(a.agreement_profile.prevalence.values()) == pytest.approx(
-            list(b.agreement_profile.prevalence.values())
-        )
-
-    def test_fleiss_1971_po_and_pe(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+    def test_fleiss_1971_po_and_pe(self, fleiss_1971_ratings):
         """Fleiss (1971) reports P = 0.556 and Pe = 0.220 for Table 1."""
         from interrater import NotComputed
         from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
         from interrater.analyzers.configs import FleissKappaConfig
 
         config = FleissKappaConfig(n_resamples=10, random_state=42, ci_method="percentile")
-        a, b = self._both_paths(
-            FleissKappaAnalyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
-        )
+        a = FleissKappaAnalyzer(fleiss_1971_ratings, config).estimate()
         assert a.parts.observed == pytest.approx(0.556, abs=5e-4)
         assert a.parts.chance == pytest.approx(0.220, abs=5e-4)
         assert not a.parts.weighted
-        self._assert_same_parts(a, b)
-        for result in (a, b):
-            assert isinstance(result.kappa_max, NotComputed)
-            assert "pooled" in result.kappa_max.reason
+        assert isinstance(a.kappa_max, NotComputed)
+        assert "pooled" in a.kappa_max.reason
         assert isinstance(a.agreement_profile.rater_marginals, dict)
-        assert isinstance(b.agreement_profile.rater_marginals, NotComputed)
 
     def test_weighted_fleiss_parts_say_weighted(self):
         from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
@@ -1712,45 +1360,37 @@ class TestResultsCarryTheirParts:
         assert result.parts.weighted
         assert result.parts.reproduces(result.point)
 
-    def test_scott_parts(self, two_rater_ratings, two_rater_nij_matrix):
+    def test_scott_parts(self, two_rater_ratings):
         from interrater import NotComputed
         from interrater.analyzers import ScottsAnalyzer
         from interrater.analyzers.configs import ScottsConfig
         from interrater.intermediates.data_profiles import PrevalenceBiasIndex
 
         config = ScottsConfig(n_resamples=10, random_state=42, ci_method="percentile")
-        a, b = self._both_paths(ScottsAnalyzer, config, two_rater_ratings, two_rater_nij_matrix)
-        self._assert_same_parts(a, b)
+        a = ScottsAnalyzer(two_rater_ratings, config).estimate()
         assert not a.parts.weighted
         assert isinstance(a.kappa_max, NotComputed)
-        # Two raters, two categories: both indices from ratings, PI only from counts
+        # Two raters, two categories: both indices
         assert isinstance(a.agreement_profile.prevalence_bias, PrevalenceBiasIndex)
-        assert isinstance(b.agreement_profile.prevalence_bias.bias_index, NotComputed)
 
-    def test_gwet_parts(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+    def test_gwet_parts(self, fleiss_1971_ratings):
         """Same Po as Fleiss' kappa on the same data; only Pe differs."""
         from interrater import NotComputed
         from interrater.analyzers import GwetAC1Analyzer
         from interrater.analyzers.configs import GwetAC1Config
 
         config = GwetAC1Config(n_resamples=10, random_state=42, ci_method="percentile")
-        a, b = self._both_paths(
-            GwetAC1Analyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
-        )
-        self._assert_same_parts(a, b)
+        a = GwetAC1Analyzer(fleiss_1971_ratings, config).estimate()
         assert a.parts.observed == pytest.approx(0.556, abs=5e-4)
         assert not a.parts.weighted
         assert isinstance(a.kappa_max, NotComputed)
 
-    def test_brennan_prediger_parts(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+    def test_brennan_prediger_parts(self, fleiss_1971_ratings):
         from interrater.analyzers import BrennanPredigerAnalyzer
         from interrater.analyzers.configs import BrennanPredigerConfig
 
         config = BrennanPredigerConfig(n_resamples=10, random_state=42, ci_method="percentile")
-        a, b = self._both_paths(
-            BrennanPredigerAnalyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
-        )
-        self._assert_same_parts(a, b)
+        a = BrennanPredigerAnalyzer(fleiss_1971_ratings, config).estimate()
         assert a.parts.chance == pytest.approx(1 / 5)
 
     def test_weighted_brennan_prediger_parts(self):
@@ -1763,16 +1403,13 @@ class TestResultsCarryTheirParts:
         assert result.parts.chance == pytest.approx(np.sum(result.weight_matrix) / 9)
         assert result.parts.reproduces(result.point)
 
-    def test_krippendorff_parts(self, fleiss_1971_ratings, fleiss_1971_nij_matrix):
+    def test_krippendorff_parts(self, fleiss_1971_ratings):
         from interrater import NotComputed
         from interrater.analyzers import KrippendorffAlphaAnalyzer
         from interrater.analyzers.configs import KrippendorffAlphaConfig
 
         config = KrippendorffAlphaConfig(n_resamples=10, random_state=42, ci_method="percentile")
-        a, b = self._both_paths(
-            KrippendorffAlphaAnalyzer, config, fleiss_1971_ratings, fleiss_1971_nij_matrix,
-        )
-        self._assert_same_parts(a, b)
+        a = KrippendorffAlphaAnalyzer(fleiss_1971_ratings, config).estimate()
         assert a.parts.kind == "disagreement"
         assert not a.parts.weighted
         assert isinstance(a.kappa_max, NotComputed)
@@ -1949,29 +1586,6 @@ class TestLightNeedsCompleteData:
         assert result.rater_profile.fill_rate == 1.0
 
 
-class TestCountsNeedTwoRatings:
-    """
-    build_from_nij_matrix holds counts to the rule Ratings holds ratings to:
-    every subject rated at least twice. Every group coefficient reaches it
-    through GroupAnalyzer.build_from_nij_matrix.
-    """
-
-    @pytest.mark.parametrize("name", [
-        "FleissKappa", "Scotts", "GwetAC1", "BrennanPrediger", "KrippendorffAlpha",
-    ])
-    def test_rows_rated_fewer_than_twice_refused(self, name):
-        import interrater.analyzers as analyzers
-        import interrater.analyzers.configs as configs
-
-        analyzer = getattr(analyzers, f"{name}Analyzer")
-        config = getattr(configs, f"{name}Config")(balanced_data_only=False)
-        nij = NijMatrix(np.array([[2, 0], [1, 0], [0, 0], [1, 1]]))
-        with pytest.raises(
-            ValueError, match="1 rated by nobody and 1 rated by only one rater",
-        ):
-            analyzer.build_from_nij_matrix(nij, config)
-
-
 _ALL_ANALYZERS = [
     ("CohenKappa", 2), ("ScottsAnalyzer", 2), ("CongerKappa", 3),
     ("LightKappa", 3), ("FleissKappa", 3), ("GwetAC1", 3),
@@ -2007,9 +1621,7 @@ class TestHypothesisTestSignature:
 
 class TestResultsCarryTheRaters:
     """
-    Every result built from ratings holds a RaterProfile naming its raters;
-    one built from counts holds NotComputed, since counts carry no rater
-    identity, and says only "at least N raters".
+    Every result holds a RaterProfile naming its raters.
     """
 
     @pytest.mark.parametrize("name, n_raters", _ALL_ANALYZERS)
@@ -2024,19 +1636,6 @@ class TestResultsCarryTheRaters:
         assert result.rater_profile.n_raters == n_raters
         assert result.rater_profile.n_subjects == result.balance_profile.n_subjects
 
-    @pytest.mark.parametrize("name", ["FleissKappa", "GwetAC1", "BrennanPrediger", "KrippendorffAlpha"])
-    def test_from_counts(self, name):
-        from interrater.intermediates.not_computed import NotComputed
-
-        analyzer_cls, config_cls = _analyzer_and_config(name)
-        result = analyzer_cls.build_from_nij_matrix(
-            _three_cat_ratings(3).to_nij_matrix(), config_cls(n_resamples=20, random_state=42),
-        ).estimate_from_nij_matrix()
-        assert isinstance(result.rater_profile, NotComputed)
-        assert result.rater_profile.reason == "built from counts: no rater identity"
-        assert "at least 3 raters" in str(result)
-
-
 class TestOneEstimate:
     """
     estimate() is written once, on Analyzer. Each analyzer supplies the
@@ -2050,7 +1649,6 @@ class TestOneEstimate:
     def test_no_analyzer_writes_its_own_estimate(self, name, n_raters):
         analyzer_cls, _ = _analyzer_and_config(name)
         assert "estimate" not in vars(analyzer_cls)
-        assert "estimate_from_nij_matrix" not in vars(analyzer_cls)
         assert "_compute_ci" not in vars(analyzer_cls)
         assert "_result" in vars(analyzer_cls)
 

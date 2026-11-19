@@ -4,8 +4,8 @@ Integration tests that run analyzers on the shipped example datasets and assert
 point estimates against the validated reference values in `example_data/README.md`.
 
 These sit above the unit test suite: a unit test checks that `FleissKappaAnalyzer`
-handles a 4x3 NijMatrix correctly; an integration test checks that the full
-pipeline -- load file, clean, build Ratings/NijMatrix, configure analyzer,
+handles a small array correctly; an integration test checks that the full
+pipeline -- load file, clean, build Ratings, configure analyzer,
 estimate-- reproduces a published result end-to-end.
 
 
@@ -51,7 +51,7 @@ the README's CI bounds.
 
 1. All 8 leaf analyzers appear at least once
 2. All 5 systematic review datasets represented
-3. Both data pathways exercised (ratings and nij)
+3. A dataset published only as counts runs through the ratings route (Fleiss 1971)
 4. Both balance conditions covered (balanced and unbalanced)
 5. Both pairwise bootstrap methods tested (correlated and independent)
 6. Weighted analysis (linear and quadratic) tested on multiple datasets
@@ -83,11 +83,12 @@ the README's CI bounds.
 | test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches, and weights declared in the semantics | 13 |
 | test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | 4 |
 | test_missing_structure.py | The three shuffles keep SR1 main's missing-data design | 5 |
-| test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 43 |
+| test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 42 |
 | test_statistical_background.py | `example_data/Statistical_background/`: the committed tables reproduce, interrater gives the page's numbers, and a wrong page value fails | 3 |
+| test_made_up_ratings.py | `example_data/made_up_ratings.py`: counts come back exactly, names and ids are kept, short rows get empty slots, a subject rated once is refused | 4 |
 | conftest.py | Dataset-loading fixtures, shared analyzer config builders | -- |
 
-**Total: 94 tests.** Counts here are from `pytest --collect-only`; if you
+**Total: 97 tests.** Counts here are from `pytest --collect-only`; if you
 change a file, re-derive rather than adjust by hand.
 
 
@@ -95,7 +96,7 @@ change a file, re-derive rather than adjust by hand.
 
 Tests against datasets with externally published reference values.
 
-### Fleiss 1971 (nij pathway, 6 raters, 5 categories, balanced)
+### Fleiss 1971 (6 made-up rater slots, 5 categories, balanced)
 
 | Test | Analyzer | Expected | Source |
 |------|----------|----------|--------|
@@ -103,13 +104,13 @@ Tests against datasets with externally published reference values.
 | test_gwet_ac1 | GwetAC1Analyzer | 0.448 | V2 validated |
 | test_brennan_prediger | BrennanPredigerAnalyzer | 0.444 | V2 validated, Pe = 1/5 |
 
-### Gwet cont3x3 (ratings + nij pathways, 2 raters, 3 categories, balanced)
+### Gwet cont3x3 (2 raters, 3 categories, balanced)
 
 | Test | Analyzer | Expected | Source |
 |------|----------|----------|--------|
 | test_cohen_kappa_ratings | CohenKappaAnalyzer | 0.796 | irrCAC: 0.79641 |
 | test_gwet_ac1_ratings | GwetAC1Analyzer | 0.849 | irrCAC: 0.84933 |
-| test_krippendorff_alpha_nij | KrippendorffAlphaAnalyzer | 0.797 | V2 validated |
+| test_krippendorff_alpha_ratings | KrippendorffAlphaAnalyzer | 0.797 | V2 validated |
 
 ### Synthetic 2-rater (ratings pathway, 2 raters, 3 categories, balanced)
 
@@ -156,19 +157,19 @@ AC1, B-P) default to `False`.
 |------|----------|----------|-------|
 | test_gwet_ac1 | GwetAC1Analyzer | 0.782 | AC1 on near-balanced, 3 categories |
 
-### SR3 FIS Psych (ratings, 3 raters, K=2, balanced, ~90% skew)
+### SR3 (ratings, 3 raters, K=2, balanced, ~90% skew)
 
 | Test | Analyzer | Expected | Notes |
 |------|----------|----------|-------|
 | test_brennan_prediger | BrennanPredigerAnalyzer | 0.886 | B-P on binary, 3 raters |
 
-### SR4 FIS CVD (ratings, 4 raters, K=2, balanced, ~82% skew)
+### SR4 (ratings, 4 raters, K=2, balanced, ~82% skew)
 
 | Test | Analyzer | Expected | Notes |
 |------|----------|----------|-------|
 | test_gwet_ac1 | GwetAC1Analyzer | 0.879 | AC1 on binary, 4 raters |
 
-### SR5 Cocaine Cardio (ratings, 3 raters, K=2, balanced, ~88% skew)
+### SR5 (ratings, 3 raters, K=2, balanced, ~88% skew)
 
 | Test | Analyzer | Expected | Notes |
 |------|----------|----------|-------|
@@ -192,8 +193,8 @@ Tests both bootstrap methods to verify the CI width relationship.
 
 ## test_subset_permutation.py (5 tests)
 
-Subset permutation on SR1 main, the only shipped dataset where a subset's
-**measurable pool** and its **complete cases** differ.
+Subset permutation on SR1 main, where a subset's **measurable pool** and its
+**complete cases** differ by hundreds of subjects.
 
 A subject contributes to a subset's agreement only if at least two of that
 subset's raters rated it. Before 2.0.1 the bootstrap drew from the complete
@@ -302,30 +303,17 @@ checks are in `tests/test_analyzers/test_resampling_functions.py`.
 
 ## Not yet covered
 
-**Unbalanced nij.** The `unbalanced_nij` fixture exists in `conftest.py` and
-**no test uses it.** This section previously listed two tests against it with
-`TBD` expected values, as though they were written and awaiting numbers. They
-were never written. Writing them means establishing reference values for
-`Unbalanced_nij` first, since there are none published.
-
-Keeping the fixture is reasonable -- the nij pathway on unbalanced data is a
-real gap -- but a table of tests that do not exist is worse than an admission
-that they do not.
+Nothing listed.
 
 
 ## conftest.py
 
 ### Data loading
 
-Two helpers handle file → object conversion:
-
-- **`_load_ratings(data_path, semantics_path, cleaner_config_path)`** --
-  Full RatingsCleaner pipeline.  Reads the data file into a DataFrame,
-  builds `RatingsSemantics` and `CleanerConfig` from their YAML files,
-  and returns `RatingsCleaner(df, semantics, config).ratings`.
-
-- **`_load_nij(data_path, *, index_col, sep)`** -- Reads a counts file
-  into `NijMatrix(array)`.
+**`_load_ratings(data_path, semantics_path, cleaner_config_path)`** runs the
+full RatingsCleaner pipeline. It reads the data file into a DataFrame, builds
+`RatingsSemantics` and `CleanerConfig` from their YAML files, and returns
+`RatingsCleaner(df, semantics, config).ratings`.
 
 **Header detection** uses the file extension: `.csv` → `header=0`,
 `.txt` → `header=None`.  This is a property of the file format, NOT of
@@ -342,18 +330,17 @@ positional, not named).
 
 | Fixture | What it provides |
 |---------|------------------|
-| fleiss1971_nij | NijMatrix from Fleiss1971_psychiatric_data_nij.csv |
+| fleiss1971_counts | The published counts, Fleiss1971_psychiatric_data_nij.csv |
+| fleiss1971_ratings | Ratings built in memory from those counts by `example_data/made_up_ratings.py` (made-up rater slots) |
 | gwet_ratings | Ratings from gwet_cont3x3_data.csv (via cleaner) |
-| gwet_nij | NijMatrix from gwet_cont3x3_data_nij.csv |
 | synthetic_ratings | Ratings from synthetic_2raters_data.txt (via cleaner) |
 | sr1_prelim_ratings | Ratings from SR1_prelim_data.csv (via cleaner) |
 | sr1_prelim_with_semantics | Callable: the SR1 prelim data read under another semantics file, for checking that two declarations of the same thing agree |
 | sr1_main_ratings | Ratings from SR1_main_data.txt (via cleaner) |
 | sr2_ratings | Ratings from SR2_data.txt (via cleaner) |
-| sr3_ratings | Ratings from SR_FIS_Psych_data.txt (via cleaner) |
-| sr4_ratings | Ratings from SR_FIS_CVD_data.txt (via cleaner) |
-| sr5_ratings | Ratings from SR_cocaine_cardio_data.txt (via cleaner) |
-| unbalanced_nij | NijMatrix from unbalanced_data_nij.txt |
+| sr3_ratings | Ratings from SR3_data.txt (via cleaner) |
+| sr4_ratings | Ratings from SR4_data.txt (via cleaner) |
+| sr5_ratings | Ratings from SR5_data.txt (via cleaner) |
 
 ### Config builders
 
@@ -400,17 +387,17 @@ they are.
 
 | Dataset | Source | Format | Raters | K | Balance | Tests |
 |---------|--------|--------|--------|---|---------|-------|
-| Fleiss 1971 | Fleiss (1971) | nij (csv) | 6 | 5 | Balanced | 3 |
-| Gwet cont3x3 | Gwet (2014) Table 4.1 | ratings (csv) + nij (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
+| Fleiss 1971 | Fleiss (1971) | counts (csv), turned into Ratings in memory | 6 | 5 | Balanced | 3 |
+| Gwet cont3x3 | Gwet (2014) Table 4.1 | ratings (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
 | Synthetic 2-rater | Synthetic | ratings (txt) | 2 | 3 | Balanced | 2 + 1 weighted |
 | SR1 prelim | OSF 2018 | ratings (csv) | 4 | 3 | Balanced | 4 + 11 weighted + 4 pairwise |
 | SR1 main | OSF 2018 | ratings (txt) | 4 | 3 | Partially crossed | 2 + 5 subset |
 | SR2 | JSRC 2019 | ratings (txt) | 4 | 3 | Nearly balanced | 1 |
-| SR3 FIS Psych | JGIM 2019 | ratings (txt) | 3 | 2 | Balanced | 1 |
-| SR4 FIS CVD | -- | ratings (txt) | 4 | 2 | Balanced | 1 |
-| SR5 CocCardio | -- | ratings (txt) | 3 | 2 | Balanced | 1 |
-| Unbalanced nij | Synthetic | nij (txt) | variable | 3 | Unbalanced | **0 -- fixture unused** |
+| SR3 | JGIM 2019 | ratings (txt) | 3 | 2 | Balanced | 1 |
+| SR4 | -- | ratings (txt) | 4 | 2 | Balanced | 1 |
+| SR5 | -- | ratings (txt) | 3 | 2 | Balanced | 1 |
 | Statistical background | Synthetic, from the page's tables | ratings (csv) | 2 to 32 | 2 | Balanced and unbalanced | 3 |
 
-**Total: 94 tests** (11 reference + 10 research + 5 subset + 13 weighted + 4
-pairwise + 5 missing structure + 43 example configs + 3 statistical background)
+**Total: 97 tests** (11 reference + 10 research + 5 subset + 13 weighted + 4
+pairwise + 5 missing structure + 42 example configs + 3 statistical background
++ 4 made-up ratings)

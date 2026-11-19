@@ -9,9 +9,8 @@ from .group_analyzer import GroupAnalyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.estimator_parts import Weights, NijMatrix
+    from ..intermediates.estimator_parts import Weights
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
-    from ..intermediates.not_computed import NotComputed
     from .configs import WeightableGroupConfig
 
 _ERROR_PREFIX = "[WeightableGroupAnalyzer] Error"
@@ -26,36 +25,29 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
     - Config must be WeightableGroupConfig
     - Weights come from ``ratings.semantics.categories`` (unordered: none;
       ordered: linear or quadratic; weighted: the declared matrix)
-    - Built from a NijMatrix there are no semantics, so no weights
 
     Attributes
     ----------
-    ratings : Ratings | None
-        The ratings data (from Analyzer, can be None if initialized from nij_matrix).
+    ratings : Ratings
+        The ratings data (from Analyzer).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. NotComputed when built
-        from an nij_matrix, which carries no rater identity.
+        rated, how much each pair overlapped.
     config : WeightableGroupConfig
         Must be an instance of WeightableGroupConfig or a subclass
         (FleissKappaConfig, etc.)
-    nij_matrix : NijMatrix | None
-        The counts matrix (from GroupAnalyzer, populated if built from nij_matrix).
     weights : Weights | None
-        The weights declared by the semantics. None for unordered categories
-        and for the NijMatrix path (unweighted).
+        The weights declared by the semantics. None for unordered categories.
     """
 
     # Attribute declaration
 
     # Populated at parent class Analyzer
-    ratings: Ratings | None
+    ratings: Ratings
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
-    # Populated at parent class GroupAnalyzer
-    nij_matrix: NijMatrix | None
+    rater_profile: RaterProfile
     # Checked at this level
     config: WeightableGroupConfig
     # Populated at this level
@@ -96,50 +88,9 @@ class WeightableGroupAnalyzer(GroupAnalyzer, ABC):
         from ..intermediates.estimator_parts import Weights
         self.weights = Weights.build_from_categories(self.ratings.semantics.categories)
 
-    @classmethod
-    def build_from_nij_matrix(
-        cls, nij: NijMatrix, config: WeightableGroupConfig
-    ) -> WeightableGroupAnalyzer:
-        """
-        Build weightable group analyzer from NijMatrix directly.
-
-        Calls parent build_from_nij_matrix() to set ratings, config,
-        balance_profile, and nij_matrix, then resolves Weights from config.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-        config : WeightableGroupConfig
-            The analysis configuration for a weightable group coefficient.
-
-        Returns
-        -------
-        WeightableGroupAnalyzer
-            An initialized analyzer with weights resolved.
-
-        Raises
-        ------
-        TypeError
-            If config is not WeightableGroupConfig.
-        ValueError
-        """
-        # Call parent build_from_nij_matrix (sets ratings, config, balance_profile, nij_matrix)
-        # Wrap to propagate errors with WeightableGroupAnalyzer context
-        try:
-            instance = super().build_from_nij_matrix(nij, config)
-        except (TypeError, ValueError) as e:
-            raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
-
-        # Validate config type. Counts carry no semantics, so no weights.
-        instance._validate_weightable_config()
-        instance.weights = None
-
-        return instance
-
     # Public API ------------------------------------------------------------- #
 
-    # estimate() and estimate_from_nij_matrix() inherited from GroupAnalyzer
+    # estimate() inherited from GroupAnalyzer
     # (abstract, implemented by leaf classes)
 
     # Private helpers -------------------------------------------------------- #

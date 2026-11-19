@@ -77,15 +77,15 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
     are always None; WeightableIndividualAnalyzer resolves them for coefficients
     that support weighting.
 
-    There is no NijMatrix path. Counts discard rater identity, which is exactly
-    what individual marginal coefficients need to keep. If you have only counts,
+    Counts discard rater identity, which is exactly what individual marginal
+    coefficients need to keep. If you have only counts,
     you want a group coefficient (Fleiss, Scott, etc.), not Cohen or Conger.
 
     Attributes
     ----------
     ratings : Ratings
-        Always required -- never None. Individual marginal coefficients cannot
-        be computed from counts alone.
+        The ratings data. Individual marginal coefficients read which rater
+        gave which rating.
     config : IndividualMarginalConfig
         Must be an instance of IndividualMarginalConfig or a subclass
         (WeightableIndividualConfig, NoWeightIndividualConfig,
@@ -125,28 +125,16 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         Parameters
         ----------
         ratings : Ratings
-            The ratings data to analyze. Required -- there is no NijMatrix path
-            for individual marginal coefficients.
+            The ratings data to analyze.
         config : IndividualMarginalConfig
             The analysis configuration for an individual marginal coefficient.
 
         Raises
         ------
         TypeError
-            If config is not IndividualMarginalConfig.
-        ValueError
-            If ratings is None.
+            If ratings is not a Ratings object, or config is not
+            IndividualMarginalConfig.
         """
-        # Individual marginal coefficients always need Ratings (no NijMatrix path)
-        if ratings is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ratings is required for individual marginal "
-                f"coefficients. Counts (NijMatrix) discard rater identity, "
-                f"which is what individual marginal coefficients need to keep. "
-                f"Use a group coefficient (FleissKappaAnalyzer, etc.) for "
-                f"counts data."
-            )
-
         # Call parent __init__ (validates ratings and config, computes BalanceProfile)
         try:
             super().__init__(ratings, config)

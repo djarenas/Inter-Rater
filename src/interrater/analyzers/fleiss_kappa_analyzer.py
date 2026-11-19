@@ -50,18 +50,15 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
 
     Attributes
     ----------
-    ratings : Ratings | None
-        The ratings data (from Analyzer, can be None if initialized from nij_matrix).
+    ratings : Ratings
+        The ratings data (from Analyzer).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. NotComputed when built
-        from an nij_matrix, which carries no rater identity.
+        rated, how much each pair overlapped.
     config : FleissKappaConfig
         The analysis configuration for Fleiss' kappa.
-    nij_matrix : NijMatrix | None
-        The counts matrix (from GroupAnalyzer, populated if built from nij_matrix).
     weights : Weights | None
         The weights object (from WeightableGroupAnalyzer).
     is_exact : bool
@@ -72,11 +69,9 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
     # Attribute declaration
 
     # Populated at parent class Analyzer
-    ratings: Ratings | None
+    ratings: Ratings
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
-    # Populated at parent class GroupAnalyzer
-    nij_matrix: NijMatrix | None
+    rater_profile: RaterProfile
     # Populated at parent class WeightableGroupAnalyzer
     weights: Weights | None
     # Checked at this level
@@ -137,49 +132,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         self.is_exact = self.balance_profile.is_balanced
         self._refuse_parametric_null_if_invalid(allow_weights=False)
 
-    @classmethod
-    def build_from_nij_matrix(
-        cls, nij, config: FleissKappaConfig
-    ) -> FleissKappaAnalyzer:
-        """
-        Build Fleiss' kappa analyzer from NijMatrix directly.
-
-        Calls parent build_from_nij_matrix() to set ratings, config,
-        balance_profile, nij_matrix, and weights, then sets is_exact flag.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-        config : FleissKappaConfig
-            The analysis configuration for Fleiss' kappa.
-
-        Returns
-        -------
-        FleissKappaAnalyzer
-            An initialized analyzer ready to call estimate_from_nij_matrix().
-
-        Raises
-        ------
-        TypeError
-            If config is not FleissKappaConfig.
-        ValueError
-            If config is invalid.
-        """
-        # Call parent build_from_nij_matrix (sets ratings, config, balance_profile, nij_matrix, weights)
-        # Wrap to propagate errors with FleissKappaAnalyzer context
-        try:
-            instance = super().build_from_nij_matrix(nij, config)
-        except (TypeError, ValueError) as e:
-            raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
-
-        # Validate config type and compute is_exact flag
-        instance._validate_fleiss_config()
-        instance.is_exact = instance.balance_profile.is_balanced
-        instance._refuse_parametric_null_if_invalid(allow_weights=False)
-
-        return instance
-
     # Public API ------------------------------------------------------------- #
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -201,7 +153,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         ------
         ValueError
             If config.hypothesis_test_config is None.
-            If method="permutation" but ratings is None.
         """
         from ..intermediates.results import HypothesisTestResult
 
@@ -251,9 +202,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             )
 
         elif ht_config.method == "permutation":
-            # Guard: permutation requires Ratings
-            self._check_permutation_available()
-
             # Select permutation scheme
             from .resampling_functions.permutation_resampling import (
                 within_rater_shuffle,
@@ -327,31 +275,10 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
             )
 
     def _get_nij(self) -> NijMatrix:
-        """
-        Get the NijMatrix from whichever data source is available.
-
-        Returns NijMatrix from self.nij_matrix if available,
-        otherwise computes it from self.ratings.
-
-        Returns
-        -------
-        NijMatrix
-
-        Raises
-        ------
-        ValueError
-            If neither ratings nor nij_matrix is available.
-        """
-        if self.nij_matrix is not None:
-            return self.nij_matrix
-        elif self.ratings is not None:
-            n_categories = self.ratings.semantics.n_categories
-            nij_array = category_counts(self.ratings.category_index, n_categories)
-            return NijMatrix(matrix=nij_array)
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: neither ratings nor nij_matrix is available."
-            )
+        """The counts matrix of my ratings, with K from the semantics."""
+        n_categories = self.ratings.semantics.n_categories
+        nij_array = category_counts(self.ratings.category_index, n_categories)
+        return NijMatrix(matrix=nij_array)
 
     def _compute_pj(self, nij: NijMatrix) -> np.ndarray:
         """
@@ -379,8 +306,8 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
         Fleiss' kappa from a counts matrix.
 
         The only coefficient-specific step in my resampling. Everything that
-        draws samples -- bootstrap or jackknife, from ratings or from counts
-        -- is written once on my base classes in terms of this.
+        draws samples, bootstrap or jackknife, is written once on my base
+        classes in terms of this.
         """
         return fleiss_kappa(NijMatrix(matrix=nij_array), weights=self.weights)
 

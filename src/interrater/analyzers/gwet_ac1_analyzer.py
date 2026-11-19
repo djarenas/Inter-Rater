@@ -57,25 +57,23 @@ class GwetAC1Analyzer(GroupAnalyzer):
 
     Attributes
     ----------
-    ratings : Ratings | None
+    ratings : Ratings
         The validated ratings data (inherited from Analyzer).
-        None if initialized from NijMatrix via build_from_nij_matrix().
     config : GwetAC1Config
         The analysis configuration for Gwet's AC1.
     balance_profile : BalanceProfile
         Describes the balance structure of the data (inherited from Analyzer).
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. NotComputed when built
-        from an nij_matrix, which carries no rater identity.
+        rated, how much each pair overlapped.
     """
 
     # Attribute declaration
 
     # Populated at parent class Analyzer
-    ratings: Ratings | None
+    ratings: Ratings
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
+    rater_profile: RaterProfile
     # Checked at this level
     config: GwetAC1Config
 
@@ -119,48 +117,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
         # Validate config is GwetAC1Config
         self._validate_gwet_config()
 
-    @classmethod
-    def build_from_nij_matrix(
-        cls, nij: NijMatrix, config: GwetAC1Config
-    ) -> GwetAC1Analyzer:
-        """
-        Build AC1 analyzer from NijMatrix (counts matrix) directly.
-
-        This alternate constructor is useful for analyzing published data that
-        only provides the counts matrix without the original ratings.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-        config : GwetAC1Config
-            The analysis configuration for Gwet's AC1.
-
-        Returns
-        -------
-        GwetAC1Analyzer
-            An initialized analyzer ready to call estimate_from_nij_matrix().
-
-        Raises
-        ------
-        TypeError
-            If config is not GwetAC1Config.
-        ValueError
-            If config.balanced_data_only=True but nij indicates unbalanced data.
-        """
-        # Delegate to parent's build_from_nij_matrix (handles __new__,
-        # Analyzer.__init__ with None, stores nij, computes BalanceProfile,
-        # validates group config and balance constraint)
-        try:
-            instance = super().build_from_nij_matrix(nij, config)
-        except (TypeError, ValueError) as e:
-            raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
-
-        # Validate config is GwetAC1Config
-        instance._validate_gwet_config()
-
-        return instance
-
     # Public API ------------------------------------------------------------- #
 
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -183,7 +139,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
         ValueError
             If hypothesis_test_config is None.
             If method is not "permutation".
-            If ratings is None (permutation requires raw ratings).
         """
         from ..intermediates.results import HypothesisTestResult
         from ..intermediates.estimator_parts import NijMatrix
@@ -210,9 +165,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
                 f"for hypothesis testing. Got '{ht_config.method}'. "
                 f"There is no parametric null variance formula for AC1."
             )
-
-        # Permutation requires raw ratings
-        self._check_permutation_available()
 
         n_categories = self.ratings.semantics.n_categories
 
@@ -289,8 +241,8 @@ class GwetAC1Analyzer(GroupAnalyzer):
         Gwet's AC1 from a counts matrix.
 
         The only coefficient-specific step in my resampling. Everything that
-        draws samples -- bootstrap or jackknife, from ratings or from counts
-        -- is written once on my base classes in terms of this.
+        draws samples, bootstrap or jackknife, is written once on my base
+        classes in terms of this.
 
         AC1 takes no weights: Gwet (2008) defines it as unweighted.
         """

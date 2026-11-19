@@ -177,14 +177,14 @@ class TestSR2:
         _assert_brackets_point(result)
 
 
-# ── SR3 FIS Psych (ratings, 3 raters, K=2, balanced) ──────────────────── #
+# ── SR3 (ratings, 3 raters, K=2, balanced) ───────────────────────────── #
 #
-# Source: SR1 full-text screening, FIS + Psych databases (770 subjects).
+# Source: Arenas et al. 2019, J Gen Intern Med (770 subjects).
 # Binary include/exclude only (no uncertain category).
 
 
 class TestSR3:
-    """SR3 FIS Psych data (770 subjects, 3 raters, K=2, balanced)."""
+    """SR3 data (770 subjects, 3 raters, K=2, balanced)."""
 
     def test_brennan_prediger(self, sr3_ratings, fast_bp_config):
         """Brennan-Prediger = 0.886 (V2 validated, binary 3 raters)."""
@@ -195,14 +195,15 @@ class TestSR3:
         _assert_brackets_point(result)
 
 
-# ── SR4 FIS CVD (ratings, 4 raters, K=2, balanced) ────────────────────── #
+# ── SR4 (ratings, 4 raters, K=2, balanced) ────────────────────────────── #
 #
-# Source: SR1 full-text screening, FIS CVD database (787 subjects).
+# Source: abstract screening shared by Beltrán et al. 2020, Beltrán et al. 2022
+# and Arenas et al. 2022 (787 subjects).
 # Binary include/exclude only (no uncertain category).
 
 
 class TestSR4:
-    """SR4 FIS CVD data (787 subjects, 4 raters, K=2, balanced)."""
+    """SR4 data (787 subjects, 4 raters, K=2, balanced)."""
 
     def test_gwet_ac1(self, sr4_ratings, fast_gwet_config):
         """Gwet AC1 = 0.879 (V2 validated, binary 4 raters)."""
@@ -213,14 +214,14 @@ class TestSR4:
         _assert_brackets_point(result)
 
 
-# ── SR5 Cocaine Cardio (ratings, 3 raters, K=2, balanced) ─────────────── #
+# ── SR5 (ratings, 3 raters, K=2, balanced) ────────────────────────────── #
 #
-# Source: SR2 full-text screening, Cocaine-Cardio database (881 subjects).
+# Source: Arenas et al. 2020, Sci Rep (881 subjects).
 # Binary include/exclude only (no uncertain category).
 
 
 class TestSR5:
-    """SR5 Cocaine Cardio data (881 subjects, 3 raters, K=2, balanced)."""
+    """SR5 data (881 subjects, 3 raters, K=2, balanced)."""
 
     def test_brennan_prediger(self, sr5_ratings, fast_bp_config):
         """Brennan-Prediger = 0.788 (V2 validated, binary 3 raters)."""

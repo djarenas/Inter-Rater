@@ -14,7 +14,6 @@ from .prevalence_bias_index import PrevalenceBiasIndex
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
-    from ..estimator_parts.nij_matrix import NijMatrix
 
 _ERROR_PREFIX = "[AgreementProfile] Error"
 _TOL = 1e-9
@@ -25,11 +24,11 @@ class AgreementProfile:
     """
     I describe agreement in the data itself, before any coefficient: how
     often each category was used, how often raters agreed on each one, how
-    each rater used the categories, and -- for two raters and two
-    categories -- the prevalence and bias indices.
+    each rater used the categories. In the case of two raters and two
+    categories, I also hold information on the prevalence and bias indices.
 
-    A coefficient is one number. I am what a reader needs to understand it:
-    kappa falls when one category dominates, or when raters differ in how
+    This information helps a reader understand the context of agreement
+    coefficients. For example, kappa falls when one category dominates, or when raters differ in how
     often they use a category, even if they agree on almost every subject.
 
     I am computed from the subjects every coefficient uses: those rated at
@@ -57,10 +56,9 @@ class AgreementProfile:
         On balanced data, Po = Sum_j p_j * specific_agreement_j; on
         unbalanced data that identity does not hold, because Po averages
         per subject and this pools pairs.
-    rater_marginals : dict[str, dict[str, float]] | NotComputed
+    rater_marginals : dict[str, dict[str, float]]
         For each rater, the share of their ratings (on these subjects) in
-        each category. NotComputed from category counts, which do not say
-        who rated what.
+        each category.
     prevalence_bias : PrevalenceBiasIndex | NotComputed
         Only for two raters and two categories; otherwise NotComputed with
         the reason.
@@ -71,7 +69,7 @@ class AgreementProfile:
     n_ratings: int
     prevalence: dict
     specific_agreement: dict
-    rater_marginals: dict | NotComputed
+    rater_marginals: dict
     prevalence_bias: PrevalenceBiasIndex | NotComputed
 
     # Constructor ------------------------------------------------------------ #
@@ -112,9 +110,7 @@ class AgreementProfile:
                     f"{value}, outside [0, 1]"
                 )
 
-        if isinstance(self.rater_marginals, NotComputed):
-            pass
-        elif isinstance(self.rater_marginals, dict) and self.rater_marginals:
+        if isinstance(self.rater_marginals, dict) and self.rater_marginals:
             for rater, shares in self.rater_marginals.items():
                 # A rater who rated none of these subjects has no shares
                 if all(math.isnan(v) for v in shares.values()):
@@ -127,8 +123,8 @@ class AgreementProfile:
                 _check_shares(f"rater {rater!r}", shares, names, True)
         else:
             raise TypeError(
-                f"{_ERROR_PREFIX}: rater_marginals must be a non-empty dict or "
-                f"NotComputed, got {type(self.rater_marginals).__name__}"
+                f"{_ERROR_PREFIX}: rater_marginals must be a non-empty dict, "
+                f"got {type(self.rater_marginals).__name__}"
             )
 
         if isinstance(self.prevalence_bias, PrevalenceBiasIndex):
@@ -201,41 +197,7 @@ class AgreementProfile:
                 f"defined for two raters and two categories; this data has "
                 f"{len(rater_names)} raters and {k} categories"
             )
-        return cls._from_counts(counts, tuple(category_names), marginals, prevalence_bias)
-
-    @classmethod
-    def build_from_nij_matrix(cls, nij: NijMatrix) -> AgreementProfile:
-        """
-        Build from category counts per subject.
-
-        A nij matrix says how many raters chose each category, not which
-        rater chose what, and it carries no category names: categories are
-        labelled by column, and rater marginals and the bias index are
-        NotComputed.
-        """
-        counts = np.asarray(nij.matrix, dtype=np.int64)
-        k = counts.shape[1]
-        names = tuple(f"column {j}" for j in range(k))
-        per_subject = counts.sum(axis=1)
-        pool = counts[per_subject >= 2]
-
-        marginals = NotComputed(
-            "rater marginals need each rater's ratings; this was built from "
-            "category counts only, which do not say who rated what"
-        )
-        if k == 2 and (per_subject <= 2).all():
-            prevalence_bias = PrevalenceBiasIndex.build_from_counts(counts, names)
-        else:
-            prevalence_bias = NotComputed(
-                "defined for two raters and two categories; these counts have "
-                f"{k} categories and up to {int(per_subject.max())} ratings "
-                f"per subject"
-            )
-        return cls._from_counts(pool, names, marginals, prevalence_bias)
-
-    @classmethod
-    def _from_counts(cls, counts, names, marginals, prevalence_bias):
-        """The parts every path shares, from counts on the pool subjects."""
+        names = tuple(category_names)
         counts = counts.astype(np.float64)
         n_i = counts.sum(axis=1)
         n_subjects = int(counts.shape[0])
@@ -269,10 +231,7 @@ class AgreementProfile:
             )
             return f"    {label:<{label_width}}  {cells}"
 
-        raters = (
-            [] if isinstance(self.rater_marginals, NotComputed)
-            else list(self.rater_marginals)
-        )
+        raters = list(self.rater_marginals)
         label_width = max([len("overall")] + [len(r) for r in raters])
         header = row("", names, label_width)
 
@@ -284,13 +243,8 @@ class AgreementProfile:
             header,
             row("overall", [self.prevalence[c] for c in names], label_width),
         ]
-        if isinstance(self.rater_marginals, NotComputed):
-            lines.append(
-                f"    per rater: not computed ({self.rater_marginals.reason})"
-            )
-        else:
-            for rater, shares in self.rater_marginals.items():
-                lines.append(row(rater, [shares[c] for c in names], label_width))
+        for rater, shares in self.rater_marginals.items():
+            lines.append(row(rater, [shares[c] for c in names], label_width))
 
         lines += [
             "",
@@ -322,11 +276,7 @@ class AgreementProfile:
             "n_ratings": self.n_ratings,
             "prevalence": dict(self.prevalence),
             "specific_agreement": dict(self.specific_agreement),
-            "rater_marginals": (
-                plain(self.rater_marginals)
-                if isinstance(self.rater_marginals, NotComputed)
-                else {r: dict(s) for r, s in self.rater_marginals.items()}
-            ),
+            "rater_marginals": {r: dict(s) for r, s in self.rater_marginals.items()},
             "prevalence_bias": plain(self.prevalence_bias),
         }
 

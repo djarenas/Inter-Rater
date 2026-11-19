@@ -7,15 +7,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..contracts import MIN_RATINGS_PER_SUBJECT
 from .analyzer import Analyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates import AnalysisResult
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
-    from ..intermediates.not_computed import NotComputed
-    from ..intermediates.estimator_parts import NijMatrix
     from .configs import GroupCoefficientConfig
 
 _ERROR_PREFIX = "[GroupAnalyzer] Error"
@@ -26,43 +22,33 @@ class GroupAnalyzer(Analyzer, ABC):
     I am the abstract base for group coefficients (Fleiss, AC1, BP, Scott, Krippendorff).
 
     Group coefficients read a counts matrix (NijMatrix) that discards rater
-    identity. I add validation specific to group analysis and support two
-    initialization paths:
-    - Ratings-based: __init__(ratings, config) computes nij internally
-    - NijMatrix-based: build_from_nij_matrix(nij, config) uses nij directly
-
-    I add validation specific to group analysis:
+    identity. I add validation specific to group analysis:
     - Config must be GroupCoefficientConfig
     - If config.balanced_data_only=True, ratings must have constant raters per subject
     - If config.balanced_data_only=False, allow unbalanced data
 
     Attributes
     ----------
-    ratings : Ratings | None
-        The ratings data (from Analyzer, can be None if initialized from nij_matrix).
+    ratings : Ratings
+        The ratings data (from Analyzer).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. NotComputed when built
-        from an nij_matrix, which carries no rater identity.
+        rated, how much each pair overlapped.
     config : GroupCoefficientConfig
         Must be an instance of GroupCoefficientConfig or a subclass
         (NoWeightGroupConfig, WeightableGroupConfig, FleissKappaConfig, etc.)
-    nij_matrix : NijMatrix | None
-        The counts matrix (populated at this level if built from nij_matrix).
     """
 
     # Attribute declaration
 
     # Populated at parent class Analyzer
-    ratings: Ratings | None
+    ratings: Ratings
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
+    rater_profile: RaterProfile
     # Checked at this level
     config: GroupCoefficientConfig
-    # Populated at this level
-    nij_matrix: NijMatrix | None
 
 
     # Constructors ----------------------------------------------------------- #
@@ -92,9 +78,6 @@ class GroupAnalyzer(Analyzer, ABC):
         except (TypeError, ValueError) as e:
             raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
 
-        # Set nij_matrix to None (Ratings-based path)
-        self.nij_matrix = None
-
         # Validate config type and balance constraint
         self._validate_group_config()
         self._validate_balance_constraint()
@@ -102,129 +85,7 @@ class GroupAnalyzer(Analyzer, ABC):
         # Weights arrive with the semantics; refuse them if unusable here
         self._refuse_weights_if_unsupported()
 
-    @classmethod
-    def build_from_nij_matrix(
-        cls, nij: NijMatrix, config: GroupCoefficientConfig
-    ) -> GroupAnalyzer:
-        """
-        Build group analyzer from NijMatrix (counts matrix) directly.
-
-        This alternate constructor is useful for analyzing published data that only
-        provides the counts matrix (nij) without the original ratings.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-        config : GroupCoefficientConfig
-            The analysis configuration for a group coefficient.
-
-        Returns
-        -------
-        GroupAnalyzer
-            An initialized analyzer ready to call estimate_from_nij_matrix().
-
-        Raises
-        ------
-        TypeError
-            If config is not GroupCoefficientConfig.
-        ValueError
-            If a row of nij holds fewer than MIN_RATINGS_PER_SUBJECT (2)
-            ratings, the same rule Ratings applies.
-        ValueError
-            If config.balanced_data_only=True but nij indicates unbalanced data.
-        """
-        from ..intermediates.data_profiles import BalanceProfile
-
-        # Same rule as Ratings: a subject with fewer than two ratings joins no
-        # comparison. Checked here and not in NijMatrix, which internal steps
-        # build from pairs, subsets and draws.
-        rated = np.asarray(nij.matrix).sum(axis=1)
-        short = np.flatnonzero(rated < MIN_RATINGS_PER_SUBJECT)
-        if short.size:
-            unrated = int((rated[short] == 0).sum())
-            once    = short.size - unrated
-            found   = []
-            if unrated:
-                found.append(f"{unrated:,} rated by nobody")
-            if once:
-                found.append(f"{once:,} rated by only one rater")
-            raise ValueError(
-                f"{_ERROR_PREFIX}: needs at least {MIN_RATINGS_PER_SUBJECT} "
-                f"ratings per subject; the counts matrix has "
-                f"{' and '.join(found)} (rows {short[:3].tolist()}). A subject "
-                f"with fewer than two ratings joins no comparison; remove these "
-                f"rows."
-            )
-
-        # Create instance via __new__ (bypass normal __init__)
-        instance = cls.__new__(cls)
-
-        # Call parent __init__ with None for ratings
-        # Wrap to propagate errors with GroupAnalyzer context
-        try:
-            Analyzer.__init__(instance, None, config)
-        except (TypeError, ValueError) as e:
-            raise type(e)(f"{_ERROR_PREFIX}: {str(e)}") from e
-
-        # Store nij_matrix
-        instance.nij_matrix = nij
-
-        # Compute BalanceProfile from nij_matrix
-        instance.balance_profile = BalanceProfile.build_from_nij_matrix(nij)
-
-        # Validate config type and balance constraint
-        instance._validate_group_config()
-        instance._validate_balance_constraint()
-
-        return instance
-
     # Public API ------------------------------------------------------------- #
-
-    def estimate_from_nij_matrix(self) -> AnalysisResult:
-        """
-        Compute the group coefficient from the counts matrix and return it.
-
-        The counts-path twin of ``estimate()``, written once for every group
-        coefficient: the point from the counts, the interval (bootstrap over
-        rows, or the null variance for ``parametric_null``), then the
-        coefficient's own ``_result``. Only the source differs from
-        ``estimate()``; the coefficient and its result are the same methods.
-
-        Returns
-        -------
-        AnalysisResult
-            The coefficient with point estimate, CI, and metadata.
-
-        Raises
-        ------
-        ValueError
-            If this analyzer was built from Ratings: use ``estimate()``.
-        """
-        if self.nij_matrix is None:
-            raise ValueError(
-                f"[{type(self).__name__}] Error: estimate_from_nij_matrix() "
-                f"needs a counts matrix, but this analyzer was built from "
-                f"Ratings. Use estimate() instead."
-            )
-
-        nij_array = self.nij_matrix.matrix
-        point = self._estimate_from_nij(nij_array)
-
-        if self.config.ci_method == "parametric_null":
-            ci = self._parametric_null_interval(point)
-            bootstrap_distribution = None
-        else:
-            bootstrap_distribution = self._bootstrap_distribution_from_nij(
-                nij_array
-            )
-            ci = self._compute_ci(
-                bootstrap_distribution,
-                point,
-                lambda: self._jackknife_estimates_from_nij(nij_array),
-            )
-
-        return self._result(point, ci, bootstrap_distribution)
 
     # Resampling ------------------------------------------------------------- #
 
@@ -235,8 +96,7 @@ class GroupAnalyzer(Analyzer, ABC):
 
         This is the one step that differs between group coefficients. My
         subclasses implement this and nothing else about resampling: the
-        bootstrap and the jackknife, over either entry path, are written once
-        in terms of it.
+        bootstrap and the jackknife are written once in terms of it.
 
         Parameters
         ----------
@@ -258,10 +118,9 @@ class GroupAnalyzer(Analyzer, ABC):
         """
         Satisfy Analyzer's contract by counting, then deferring to nij.
 
-        A group coefficient reads a counts matrix, so the ratings path is the
-        nij path with one step in front of it. Writing that step here means
-        the five group analyzers implement one method rather than two, and
-        the two paths cannot drift apart.
+        A group coefficient reads a counts matrix, so counting is the one step
+        in front of it. Writing that step here means the five group analyzers
+        implement one method rather than two.
         """
         from ..array_utils import category_counts
 
@@ -269,95 +128,33 @@ class GroupAnalyzer(Analyzer, ABC):
             category_counts(category_index, self._n_categories())
         )
 
-    def _bootstrap_distribution_from_nij(
-        self, nij_array: np.ndarray
-    ) -> np.ndarray:
-        """
-        Resample subjects (rows) with replacement and recompute my coefficient.
-
-        The nij counterpart of ``Analyzer._bootstrap_distribution``, for the
-        path that was built from a counts matrix and has no Ratings to draw
-        from.
-
-        Returns
-        -------
-        np.ndarray
-            Shape (n_resamples,). NaN entries mark resamples whose coefficient
-            was undefined, and are kept so they can be counted.
-        """
-        from .resampling_functions import subject_bootstrap_from_nij_matrix
-
-        return np.array([
-            self._estimate_from_nij(resampled)
-            for resampled in subject_bootstrap_from_nij_matrix(
-                nij_array,
-                n_resamples=self.config.n_resamples,
-                random_state=self.config.random_state,
-            )
-        ], dtype=np.float64)
-
-    def _jackknife_estimates_from_nij(
-        self, nij_array: np.ndarray
-    ) -> np.ndarray:
-        """
-        Recompute my coefficient with each subject (row) left out in turn.
-
-        The nij counterpart of ``Analyzer._jackknife_estimates``. BCa's
-        acceleration is computed from values like these.
-
-        Returns
-        -------
-        np.ndarray
-            Shape (n_subjects,). NaN entries mark leave-one-out subsets whose
-            coefficient was undefined.
-        """
-        from .resampling_functions import subject_jackknife_from_nij_matrix
-
-        return np.array([
-            self._estimate_from_nij(subset)
-            for subset in subject_jackknife_from_nij_matrix(nij_array)
-        ], dtype=np.float64)
-
     # Private helpers -------------------------------------------------------- #
 
     def _nij_array(self) -> np.ndarray:
         """
-        The counts matrix, from whichever source I was built from.
-
-        Lets ``_result`` and ``_parametric_null_interval`` serve both
-        ``estimate()`` and ``estimate_from_nij_matrix()``.
+        The counts matrix of my ratings, for ``_result`` and
+        ``_parametric_null_interval``.
         """
         from ..array_utils import category_counts
 
-        if self.ratings is not None:
-            return category_counts(
-                self.ratings.category_index, self._n_categories()
-            )
-        return self.nij_matrix.matrix
+        return category_counts(self.ratings.category_index, self._n_categories())
 
     def _agreement_profile(self):
         """
-        My agreement profile, from whichever source I was built from.
-
-        From counts it has no per-rater marginals: counts do not say who
-        gave which rating.
+        My agreement profile, from my ratings.
         """
         from ..intermediates.data_profiles import AgreementProfile
 
-        if self.ratings is not None:
-            return AgreementProfile.build_from_ratings(self.ratings)
-        return AgreementProfile.build_from_nij_matrix(self.nij_matrix)
+        return AgreementProfile.build_from_ratings(self.ratings)
 
     def _n_categories(self) -> int:
         """
-        K, from whichever source I was built from.
+        K, from the semantics.
 
         Never inferred from the values: a matrix whose largest observed
         category is 2 may still have been declared over five.
         """
-        if self.ratings is not None:
-            return self.ratings.semantics.n_categories
-        return self.nij_matrix.n_categories
+        return self.ratings.semantics.n_categories
 
     def _validate_group_config(self) -> None:
         """

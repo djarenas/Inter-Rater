@@ -54,22 +54,6 @@ Leave-one-subject-out. Yields n_subjects modified arrays, each with one subject 
 
 **Why BCa needs it:** acceleration is the standardised skewness of these leave-one-out values (Efron & Tibshirani 1986, eq. 8.5). It measures how fast the coefficient's standard error changes as the coefficient itself changes, which is a property of the data and cannot be recovered from a bootstrap distribution -- that describes the spread at one value only.
 
-#### `subject_jackknife_from_nij_matrix(nij_matrix)`
-
-Leave-one-subject-out over a counts matrix. Yields n_subjects matrices, each with one row removed.
-
-**Supports:** Group coefficients that operate on nij matrices.
-
-**Use for:** BCa acceleration on the nij pathway. The counterpart of `subject_jackknife`, for analyzers built from a counts matrix rather than from Ratings.
-
-#### `subject_bootstrap_from_nij_matrix(nij_matrix, n_resamples=1000, random_state=42)`
-
-Resample *subjects* with replacement from the nij_matrix (the category-counts matrix, shape n_subjects x n_categories). Yields n_resamples resampled nij matrices.
-
-**Supports:** Group coefficients that operate on nij matrices (Fleiss' kappa, Scott's pi, Gwet's AC1).
-
-**Use for:** Confidence intervals when working directly with nij matrices rather than raw ratings. Same bootstrap logic as `subject_bootstrap`, but on the aggregated representation.
-
 ### Permutation Resampling
 
 These generate null distributions by shuffling without replacement. Conceptually different from bootstrap: they destroy chosen structure rather than resample it.
@@ -133,8 +117,7 @@ here never build a result.
 ```
 resampling_functions/
   __init__.py
-  subject_resampling.py       # subject_bootstrap, subject_jackknife,
-                              # subject_bootstrap_from_nij_matrix, subject_jackknife_from_nij_matrix
+  subject_resampling.py       # subject_bootstrap, subject_jackknife
   permutation_resampling.py   # within_rater_shuffle, within_subject_shuffle, pool_and_redistribute
   README.md
 ```

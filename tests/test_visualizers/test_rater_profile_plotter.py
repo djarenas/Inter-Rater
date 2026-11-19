@@ -105,13 +105,6 @@ class TestConstruction:
         plotter = RaterProfilePlotter.build_from_result(result)
         assert plotter.rater_profile is result.rater_profile
 
-    def test_result_from_counts_refused_when_built(self, gappy):
-        result = KrippendorffAlphaAnalyzer.build_from_nij_matrix(
-            gappy.to_nij_matrix(), KrippendorffAlphaConfig(n_resamples=20, random_state=42),
-        ).estimate_from_nij_matrix()
-        with pytest.raises(ValueError, match="built from counts: no rater identity"):
-            RaterProfilePlotter.build_from_result(result)
-
     def test_not_a_result_refused(self, gappy):
         with pytest.raises(TypeError, match="PointEstimateResult or a PermutationResult"):
             RaterProfilePlotter.build_from_result(gappy)

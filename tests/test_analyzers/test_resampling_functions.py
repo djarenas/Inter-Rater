@@ -1,8 +1,7 @@
 """Tests for the resampling_functions sub-package.
 
 One test file covering the exported functions across the two modules:
-  - subject_resampling: subject_bootstrap, subject_jackknife,
-    subject_bootstrap_from_nij_matrix, subject_jackknife_from_nij_matrix
+  - subject_resampling: subject_bootstrap, subject_jackknife
   - permutation_resampling: within_rater_shuffle, within_subject_shuffle,
     pool_and_redistribute
 
@@ -18,7 +17,6 @@ import pytest
 
 from interrater.analyzers.resampling_functions.subject_resampling import (
     subject_bootstrap,
-    subject_bootstrap_from_nij_matrix,
     subject_jackknife,
 )
 from interrater.analyzers.resampling_functions.permutation_resampling import (
@@ -52,14 +50,6 @@ def ratings_with_missing():
     """4 subjects, 3 raters, some missing (-1)."""
     return np.array(
         [[0, 1, -1], [1, -1, 0], [-1, 0, 1], [1, 1, 1]], dtype=np.int8
-    )
-
-
-@pytest.fixture
-def nij_matrix_4x3():
-    """4 subjects, 3 categories."""
-    return np.array(
-        [[2, 1, 0], [0, 2, 1], [1, 0, 2], [1, 1, 1]], dtype=np.int64
     )
 
 
@@ -192,87 +182,6 @@ class TestSubjectJackknifeBehavior:
         draws = list(subject_jackknife(data))
         assert len(draws) == 2
         assert draws[0].shape == (1, 2)
-
-
-# ================================================================== #
-#                                                                      #
-#   subject_bootstrap_from_nij_matrix                                  #
-#                                                                      #
-# ================================================================== #
-
-
-class TestSubjectBootstrapNijValidation:
-    """Type and value checks for subject_bootstrap_from_nij_matrix."""
-
-    def test_nij_matrix_not_ndarray(self):
-        with pytest.raises(TypeError, match="nij_matrix must be np.ndarray"):
-            list(subject_bootstrap_from_nij_matrix([[1, 2]], n_resamples=1))
-
-    def test_n_resamples_not_int(self, nij_matrix_4x3):
-        with pytest.raises(TypeError, match="n_resamples must be int"):
-            list(subject_bootstrap_from_nij_matrix(nij_matrix_4x3, n_resamples=5.0))
-
-    def test_random_state_not_int_or_none(self, nij_matrix_4x3):
-        with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(subject_bootstrap_from_nij_matrix(
-                nij_matrix_4x3, random_state="bad"
-            ))
-
-    def test_nij_matrix_not_2d(self):
-        with pytest.raises(ValueError, match="nij_matrix must be 2D"):
-            list(subject_bootstrap_from_nij_matrix(
-                np.array([1, 2, 3]), n_resamples=1
-            ))
-
-    def test_n_resamples_zero(self, nij_matrix_4x3):
-        with pytest.raises(ValueError, match="n_resamples must be >= 1"):
-            list(subject_bootstrap_from_nij_matrix(
-                nij_matrix_4x3, n_resamples=0
-            ))
-
-
-class TestSubjectBootstrapNijBehavior:
-    """Functional tests for subject_bootstrap_from_nij_matrix."""
-
-    def test_yields_correct_count(self, nij_matrix_4x3):
-        draws = list(subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=7
-        ))
-        assert len(draws) == 7
-
-    def test_each_draw_has_correct_shape(self, nij_matrix_4x3):
-        for draw in subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=5
-        ):
-            assert draw.shape == (4, 3)
-
-    def test_draws_contain_original_rows(self, nij_matrix_4x3):
-        original_set = {tuple(row) for row in nij_matrix_4x3}
-        for draw in subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=10
-        ):
-            for row in draw:
-                assert tuple(row) in original_set
-
-    def test_reproducibility_same_seed(self, nij_matrix_4x3):
-        draws_a = list(subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=5, random_state=42
-        ))
-        draws_b = list(subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=5, random_state=42
-        ))
-        for a, b in zip(draws_a, draws_b):
-            np.testing.assert_array_equal(a, b)
-
-    def test_default_random_state_is_42(self, nij_matrix_4x3):
-        draws_default = list(subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=5
-        ))
-        draws_42 = list(subject_bootstrap_from_nij_matrix(
-            nij_matrix_4x3, n_resamples=5, random_state=42
-        ))
-        for a, b in zip(draws_default, draws_42):
-            np.testing.assert_array_equal(a, b)
 
 
 # ================================================================== #

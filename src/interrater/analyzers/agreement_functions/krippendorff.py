@@ -25,7 +25,7 @@ six raters offers fifteen pairs and one rated by two offers a single pair.
 **Missing data is handled rather than excluded.** There is no assumption that
 every subject was rated the same number of times, and none that raters were
 assigned by any particular design. A subject rated once contributes no pairs
-and so contributes nothing, but it is not dropped by a rule -- it simply has
+and so contributes nothing, but it is not dropped by a rule. It simply has
 nothing to offer. That is why alpha is the coefficient usually reached for when
 the data is ragged.
 
@@ -37,7 +37,7 @@ gives a finite-sample correction with an ``n - 1`` in it. On small datasets
 that correction is visible; on large ones it vanishes.
 
 Expect alpha and Fleiss' kappa to be close but not equal, and to separate as
-the data gets thinner or more unbalanced. Neither is approximating the other.
+the data gets thinner or more unbalanced. 
 
 References
 - Krippendorff2004: Krippendorff, Klaus. *Content Analysis: An Introduction to

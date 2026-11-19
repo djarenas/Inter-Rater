@@ -20,9 +20,7 @@ it. SR1 main is partially crossed, and there the two differ enormously:
     (1, 2, 3)              967                      1
 
 Three of those four subsets had nothing to resample at all, and the fourth
-rested on two subjects. This is the only place in the suite where the
-distinction is visible: every other shipped dataset is balanced or near
-enough that the pools coincide.
+rested on two subjects.
 
 **Which tests here actually catch the bug.** Only the two that look at the
 bootstrap: ``test_every_subset_brackets_its_own_estimate`` and

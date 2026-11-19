@@ -1,11 +1,11 @@
 # Tests
 
-2297 tests across nine packages and two top-level files, run with `pytest tests/`.
+2223 tests across nine packages and two top-level files, run with `pytest tests/`.
 
 Every count in this file is a **collected** count -- what `pytest` prints, not
 what you get by counting `def test_` in the source. The two differ because
 `@pytest.mark.parametrize` runs one function once per input and pytest counts
-each run separately; right now 1968 functions expand to 2297 collected tests.
+each run separately; right now 1907 functions expand to 2223 collected tests.
 Collected is the number used throughout because it is the number you can check
 in one command, so it cannot drift unnoticed:
 
@@ -68,7 +68,7 @@ RatingsCleaner pipeline.
 | conftest.py | Shared fixtures: UnorderedCategories (K=2), RatingsSemantics (ann, bob), CLEAN_DF (4x2 no problems), MESSY_DF (4x2 with null/missing/typo), default CleanerConfig | -- |
 
 
-## test_intermediates/ (708 tests)
+## test_intermediates/ (689 tests)
 
 Tests for the intermediates layer: estimator parts, data profiles, utility
 functions, and the full analysis-result hierarchy. One test file per
@@ -95,16 +95,16 @@ appear here only as inputs, built by the `_ci()` helper at the top of
 | File | What it tests | Tests |
 |------|---------------|-------|
 | test_estimator_parts.py | NijMatrix (construction, validation, properties, build_from_ratings, equality, error prefix), Weights (identity/linear/quadratic/custom, validation, equality, error prefix), EstimatorInput (construction, validation, properties, subsetting, equality, error prefix) | 106 |
-| test_data_profiles.py | BalanceProfile (build_from_nij_matrix, n_subjects/n_categories/n_raters, is_balanced, rater_counts, summary, equality, error prefix), RaterSharedMatrix (build_from_nij_matrix, shape, values, symmetry, self-counts, equality, error prefix) | 63 |
+| test_data_profiles.py | BalanceProfile (n_subjects/n_categories/n_raters, is_balanced, rater_counts, summary, equality, error prefix), RaterSharedMatrix (shape, values, symmetry, self-counts, equality, error prefix) | 60 |
 | test_agreement_parts.py | AgreementParts: observed and chance terms rebuild the coefficient, agreement vs disagreement kinds, validation | 19 |
-| test_agreement_profile.py | AgreementProfile: prevalence equals the p_j the chance terms use, per-category agreement, per-rater marginals, build_from_ratings vs build_from_nij_matrix | 21 |
-| test_prevalence_bias_index.py | PrevalenceBiasIndex (Byrt, Bishop and Carlin 1993): the four cells, prevalence and bias indices, positive category and rater order | 17 |
+| test_agreement_profile.py | AgreementProfile: prevalence equals the p_j the chance terms use, per-category agreement, per-rater marginals | 18 |
+| test_prevalence_bias_index.py | PrevalenceBiasIndex (Byrt, Bishop and Carlin 1993): the four cells, prevalence and bias indices, positive category and rater order | 11 |
 | test_not_computed.py | NotComputed: carries a reason, no truth value, repr, equality | 8 |
-| test_analysis_results.py | PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 474 |
+| test_analysis_results.py | PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 467 |
 | conftest.py | Shared fixtures: BALANCED_NIJ (4x3x3, all rows sum to 3), UNBALANCED_NIJ (4x2, variable row sums), SIMPLE_INDEX (2x3, for index-based tests), SIMPLE_SHARED (3x3 symmetric, for shared-matrix tests) | -- |
 
 
-## test_injectors/ (153 tests)
+## test_injectors/ (151 tests)
 
 Tests for the injection pipeline: configs and injectors that add synthetic
 raters to a Ratings object for sensitivity analysis.
@@ -115,7 +115,7 @@ classes that use them.
 | File | What it tests | Tests |
 |------|---------------|-------|
 | test_injector_configs.py | InjectorConfig (defaults, validation, build_from_dict, build_from_yaml, summary), DistributionInjectorConfig (prevalences validation, uniform/custom modes), WithinSubjectInjectorConfig (noise_rate validation) | 82 |
-| test_injectors.py | RaterInjector (input validation, name building, inject output shape/columns/subject IDs), DistributionInjector (config type, prevalences mismatch, uniform/custom generation, reproducibility), WithinSubjectInjector (config type, pure copy, unanimous rows, noise fallback, reproducibility) | 71 |
+| test_injectors.py | RaterInjector (input validation, name building, inject output shape/columns/subject IDs), DistributionInjector (config type, prevalences mismatch, uniform/custom generation, reproducibility), WithinSubjectInjector (config type, pure copy, unanimous rows, noise fallback, reproducibility) | 69 |
 | conftest.py | Shared fixtures: simple Ratings, category objects, injector configs | -- |
 
 
@@ -130,7 +130,7 @@ during cleaning and analysis.
 | conftest.py | Shared fixtures: DropPass instances, MatchingReport instances | -- |
 
 
-## test_analyzers/ (877 tests)
+## test_analyzers/ (824 tests)
 
 Tests for the analyzer layer: the classes that wire agreement functions,
 CI methods, bootstrap loops, and hypothesis tests into a single `estimate()`
@@ -154,16 +154,16 @@ call. Built bottom-up along the inheritance tree:
 |------|---------------|-------|
 | test_configs.py | AnalyzerConfig (defaults, custom, CI methods, random_state, frozen, validation, error prefix, summary, build_from_dict), HypothesisTestConfig (defaults, custom, methods/schemes, frozen, validation, error prefix), GroupCoefficientConfig (defaults, type guards, error prefix), NoWeightGroupConfig / WeightableGroupConfig (validation, error prefix), FleissKappaConfig / ScottsConfig / GwetAC1Config / BrennanPredigerConfig / KrippendorffAlphaConfig (defaults, parametric_null accepted or rejected per coefficient, parametric_null warning, error prefix), IndividualMarginalConfig / NoWeightIndividualConfig / WeightableIndividualConfig (defaults, validation, error prefix), CohenKappaConfig / CongerKappaConfig / LightKappaConfig (defaults, parametric_null, auto-correction, error prefix), PermutationBootstrapMeanConfig (methods, validation, error prefix), PermutationConfig / PairwisePermutationConfig / SubsetPermutationConfig (construction, validation, build_from_dict, cross-validation, error prefix) | 203 |
 | test_agreement_functions.py | Fleiss' kappa (observed agreement, category proportions, chance, kappa value, unweighted/linear/quadratic weights, NijMatrix/EstimatorInput paths), Krippendorff's alpha, Cohen's kappa, Brennan-Prediger, Scott's pi, Gwet's AC1, Conger's kappa (point estimates against hand-computed expected values from Fleiss 1971 and 2-rater datasets) | 131 |
-| test_analyzer_classes.py | Error prefixes (all 8 leaf analyzers), class hierarchy (isinstance checks), config type validation (wrong config rejected for each analyzer), constructor paths (from Ratings, from NijMatrix), estimate guards (missing ratings/nij), rater constraints (2-rater enforcement for Scott's/Cohen), hypothesis test guards, smoke estimates (point estimate + CI for all 8), balance profile propagation, CI method in result, ParametricCIResult disclosure (config warning, construction warning, validation-before-warning, bootstrap path stays silent) | 251 |
+| test_analyzer_classes.py | Error prefixes (all 8 leaf analyzers), class hierarchy (isinstance checks), config type validation (wrong config rejected for each analyzer), no counts constructor on any analyzer, rater constraints (2-rater enforcement for Scott's/Cohen), hypothesis test guards, smoke estimates (point estimate + CI for all 8), balance profile propagation, CI method in result, ParametricCIResult disclosure (config warning, construction warning, validation-before-warning, bootstrap path stays silent) | 208 |
 | test_ci_methods.py | Error prefixes, percentile_ci (normal, edge alpha, sorted, empty, scalar), _acceleration (formula, sign, degenerate input, noise gate), bca_ci (normal, edge cases, jackknife required, fallback to percentile and its disclosure), TestEfronLawSchool (reproduces the published acceleration, z0, and central 90% interval from Efron & Tibshirani 1986 Example 3), cross-method consistency | 54 |
 | test_permutation_analysis.py | PermutationAnalysis (construction, validation, weights, _compute_ci, all 7 estimators), PairwisePermutationAnalysis (construction, observed values, per-pair bootstrap, mean bootstrap correlated/independent, result fields, Fleiss 1971 15-pair), SubsetPermutationAnalysis (construction, observed values, measurable pool per subset, per-subset bootstrap, mean bootstrap, result fields, distribution threshold), MultiKSubsetResult (construction, validation, container API, __str__, summary) | 129 |
-| test_resampling_functions.py | subject_bootstrap (count, shape, dtype, rows-from-original, reproducibility, seeds), subject_jackknife (count, shape, leave-one-out), subject_bootstrap_from_nij_matrix (count, shape, row sums, reproducibility), within_rater_shuffle / within_subject_shuffle / pool_and_redistribute (count, shape, multiset preservation, missing values, reproducibility, changes data) | 70 |
+| test_resampling_functions.py | subject_bootstrap (count, shape, dtype, rows-from-original, reproducibility, seeds), subject_jackknife (count, shape, leave-one-out), within_rater_shuffle / within_subject_shuffle / pool_and_redistribute (count, shape, multiset preservation, missing values, reproducibility, changes data) | 60 |
 | test_shared_subjects.py | A point and its interval describe the same subjects: pairs and subsets resample the pool they were computed on (the measurable pool), on balanced and partially crossed data | 12 |
 | test_variance_functions.py | fleiss_null_variance (K=2 equal/skewed, K=3 uniform, hand-computed, validation), cohen_null_variance unweighted/weighted (symmetric, asymmetric, identity=None, positive, validation), cross-consistency (Fleiss=Cohen for 2-rater identical marginals) | 27 |
 | conftest.py | Shared fixtures: Fleiss 1971 (NijMatrix + expanded Ratings), 2-rater (10x2, K=2), 3-rater (10x3, K=2), expected-value dicts, minimal configs for all 8 coefficients, PairwisePermutationConfig instances | -- |
 
 
-## test_example_data/ (94 tests)
+## test_example_data/ (97 tests)
 
 Integration tests. Every other package tests one layer with data built for the
 purpose; this package loads the datasets shipped in `example_data/` and runs
@@ -196,13 +196,14 @@ with their provenance and shapes, are in `example_data/README.md`.
 | test_pairwise_permutation.py | PairwisePermutationAnalysis on SR1 prelim: per-pair point estimates, per-pair intervals, and the mean bootstrap | 4 |
 | test_subset_permutation.py | SubsetPermutationAnalysis on SR1 main at k=3 and k=2, including the regression that pins subset bootstrapping to the measurable pool rather than to complete cases | 5 |
 | test_missing_structure.py | The three shuffles on SR1 main's partially crossed design (half the cells empty): every draw keeps the empty cells in place, and each shuffle keeps what it promises -- each reviewer's answer mix, each abstract's answers, or the overall mix | 5 |
-| test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 43 |
+| test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 42 |
 | test_statistical_background.py | `example_data/Statistical_background/`: the committed tables reproduce, interrater gives the statistical background page's numbers, and a wrong page value fails | 3 |
-| conftest.py | 11 dataset fixtures (3 nij, 8 ratings), 8 single-coefficient configs at 250 resamples, and builders for the subset, pairwise, weighted, unbalanced and BCa configs | -- |
+| test_made_up_ratings.py | `example_data/made_up_ratings.py`: counts come back exactly, names and ids are kept, short rows get empty slots, a subject rated once is refused | 4 |
+| conftest.py | 10 dataset fixtures (the Fleiss 1971 counts, the Ratings built from them, 8 ratings), the loader for `example_data/made_up_ratings.py`, 8 single-coefficient configs at 250 resamples, and builders for the subset, pairwise, weighted, unbalanced and BCa configs | -- |
 | README.md | Which datasets are validated against which source, and what each test asserts | -- |
 
 
-## test_visualizers/ (64 tests)
+## test_visualizers/ (61 tests)
 
 Tests for the plots, on the Agg backend. Each test reads the figure back
 (legend labels, tick labels, bar heights, captions) and checks that it states
@@ -214,8 +215,8 @@ how it looks.
 | test_plot_bootstrap_distribution.py | Draws, point and interval drawn; for BCa also the percentile interval and z0 and a in words; one bar per value on discrete data | 12 |
 | test_plot_null_distribution.py | Shuffles, observed value, the tail counted toward p coloured, the p-value's arithmetic in the caption | 13 |
 | test_plot_permutation.py | Pairwise and subset plots: the legend says the independent mean's interval ignores the correlation between combinations sharing raters, wherever it is drawn | 10 |
-| test_rater_profile_plotter.py | draw_overlap (shared counts, white diagonal outside the colouring, thin-pair label) and draw_counts (subjects per rater), built from ratings or a result | 18 |
-| test_balance_profile_plotter.py | One bar per rater count from fewest to most, built from ratings, a nij matrix or a result | 11 |
+| test_rater_profile_plotter.py | draw_overlap (shared counts, white diagonal outside the colouring, thin-pair label) and draw_counts (subjects per rater), built from ratings or a result | 17 |
+| test_balance_profile_plotter.py | One bar per rater count from fewest to most, built from ratings or a result | 9 |
 
 
 ## test_exports.py (3 tests)
@@ -247,6 +248,7 @@ on. These files exist to pin a specific piece of arithmetic.
 | scruffy_ratings_generator.py | A generator for deliberately damaged ratings, with every corruption recorded so a cleaner can be checked against an answer known in advance | test_cleaners/test_scruffy.py |
 | scruffy_ratings_example.csv | One 40x5 output of that generator, checked in so the file can be read without running the generator | -- |
 | scruffy_cleaner_config.yaml | A config permissive enough to clean that file all the way through. The same file raises under the strict defaults, which is the point of the fixture: what is fatal is decided by the config, not by the data | test_cleaners/test_scruffy.py |
+| from_counts.py | `ratings_from_counts(counts, category_names=None)`: Ratings whose per-subject counts are the given table, with made-up rater slots. Built by hand, since the cleaner's minimum per rater would drop the last slots of unbalanced counts | test_intermediates/ |
 | through_cleaner.py | `clean_ratings(category_index, semantics, subject_ids=None)`: builds test Ratings the way users get them, by writing the codes as a labelled table and running it through `RatingsCleaner`. Fails if the cleaner would change anything. Importable as `fixtures.through_cleaner` because `pyproject.toml` puts `tests/` on pytest's path | most test files outside test_data_objects/ |
 
 `test_cleaners/test_scruffy.py` runs the generator and the config end to

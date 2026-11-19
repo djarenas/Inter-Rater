@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from ..intermediates import AnalysisResult
     from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
-    from ..intermediates.not_computed import NotComputed
     from .configs.analyzer_config import AnalyzerConfig
 
 _ERROR_PREFIX = "[Analyzer] Error"
@@ -38,62 +37,54 @@ class Analyzer(ABC):
     (e.g., GroupAnalyzer checks balanced_data_only, WeightableGroupAnalyzer
     builds Weights, FleissKappaAnalyzer validates ratings type).
 
-    Some subclasses may provide alternate constructors (classmethods) that accept
-    NijMatrix directly instead of Ratings.
-
     Attributes
     ----------
-    ratings : Ratings | None
+    ratings : Ratings
         The validated ratings data. Type varies by analyzer:
         FleissKappaAnalyzer may require BalancedRatings if config.balanced_data_only=True.
-        None if initialized from NijMatrix via alternate constructor.
     config : AnalyzerConfig
         The analysis configuration (FleissKappaConfig, etc.).
         Defines bootstrap resamples, confidence level, CI method, weights, etc.
     balance_profile : BalanceProfile
-        Computed from ratings or nij_matrix. Describes how subjects were rated 
+        Computed from ratings. Describes how subjects were rated 
         (constant n per subject, distribution of subjects by rater count, etc.). 
         Stored here for access by all analyzers and included in results.
-    rater_profile : RaterProfile | NotComputed
+    rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. NotComputed when built
-        from an nij_matrix, which carries no rater identity.
+        rated, how much each pair overlapped.
     """
 
     # Attribute declaration
 
     # Populated at this level
-    ratings: Ratings | None
+    ratings: Ratings
     config: AnalyzerConfig
     balance_profile: BalanceProfile
-    rater_profile: RaterProfile | NotComputed
+    rater_profile: RaterProfile
 
-    def __init__(
-        self, ratings: Ratings | None, config: AnalyzerConfig
-    ) -> None:
+    def __init__(self, ratings: Ratings, config: AnalyzerConfig) -> None:
         """
         Initialize analyzer: validate inputs and compute BalanceProfile.
 
         Parameters
         ----------
-        ratings : Ratings | None
-            The ratings data to analyze. Can be None if subclass provides
-            alternate constructor that uses NijMatrix directly.
+        ratings : Ratings
+            The ratings data to analyze.
         config : AnalyzerConfig
             The analysis configuration.
 
         Raises
         ------
         TypeError
-            If ratings is not a Ratings object (when provided) or config is not AnalyzerConfig.
+            If ratings is not a Ratings object or config is not AnalyzerConfig.
         ValueError
             If config is None.
         """
         from ..data_objects.ratings import Ratings as RatingsBase
         from .configs import AnalyzerConfig as AnalyzerConfigClass
 
-        # Validate ratings type if provided
-        if ratings is not None and not isinstance(ratings, RatingsBase):
+        # Validate ratings type
+        if not isinstance(ratings, RatingsBase):
             raise TypeError(
                 f"{_ERROR_PREFIX}: ratings must be a Ratings object, "
                 f"got {type(ratings).__name__}"
@@ -117,18 +108,11 @@ class Analyzer(ABC):
         # Apply injection pipeline (before BalanceProfile)
         self.apply_injection()
 
-        # Compute BalanceProfile from ratings if available
+        # Compute the profiles from the (possibly injected) ratings
         from ..intermediates.data_profiles import BalanceProfile, RaterProfile
-        from ..intermediates.not_computed import NotComputed
 
-        if self.ratings is not None:
-            self.balance_profile = BalanceProfile.build_from_ratings(self.ratings)
-            self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
-        else:
-            # BalanceProfile will be computed by subclass from nij_matrix
-            self.balance_profile = None  # type: ignore
-            # Counts carry no rater identity, so there is no rater profile
-            self.rater_profile = NotComputed("built from counts: no rater identity")
+        self.balance_profile = BalanceProfile.build_from_ratings(self.ratings)
+        self.rater_profile = RaterProfile.build_from_ratings(self.ratings)
 
     # Public API ------------------------------------------------------------- #
 
@@ -148,20 +132,7 @@ class Analyzer(ABC):
         AnalysisResult
             Subclass-specific result (FleissKappaResult, CohenKappaResult, etc.)
             holding point estimate, confidence interval, and relevant metadata.
-
-        Raises
-        ------
-        ValueError
-            If this analyzer was built from an NijMatrix: use
-            ``estimate_from_nij_matrix()``.
         """
-        if self.ratings is None:
-            raise ValueError(
-                f"[{type(self).__name__}] Error: estimate() needs ratings, but "
-                f"this analyzer was built from an NijMatrix. Use "
-                f"estimate_from_nij_matrix() instead."
-            )
-
         point = self._estimate_from_array(self.ratings.category_index)
 
         if self.config.ci_method == "parametric_null":
@@ -199,8 +170,7 @@ class Analyzer(ABC):
         NotImplementedError
             If called on the abstract base class.
         ValueError
-            If config.hypothesis_test_config is None, or if it asks for
-            permutation but ratings is None.
+            If config.hypothesis_test_config is None.
         """
         raise NotImplementedError(
             f"[Analyzer] Error: hypothesis_test() must be implemented by subclass, "
@@ -218,21 +188,13 @@ class Analyzer(ABC):
         next. The new Ratings validates itself through its own constructor.
 
         I update ``self.ratings`` in place. If ``self.config.injection``
-        is None I do nothing; if it is set and ``self.ratings`` is None
-        (NijMatrix path), I raise, since injection needs individual ratings.
+        is None I do nothing.
 
         Called automatically in ``__init__`` before BalanceProfile is built,
         so all downstream computation sees the injected data.
         """
         if self.config.injection is None:
             return
-        if self.ratings is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: injection needs individual ratings: it "
-                f"builds a new rater from the real raters' answers, and a nij "
-                f"matrix holds only counts per subject. Build the analyzer "
-                f"from Ratings, or remove injection from the config."
-            )
 
         from ..injectors.registry import get_injector_class
 
@@ -295,7 +257,6 @@ class Analyzer(ABC):
         """
         from .resampling_functions import subject_bootstrap
 
-        self._require_ratings("_bootstrap_distribution")
         return np.array([
             self._estimate_from_array(resampled)
             for resampled in subject_bootstrap(
@@ -327,7 +288,6 @@ class Analyzer(ABC):
         """
         from .resampling_functions import subject_jackknife
 
-        self._require_ratings("_jackknife_estimates")
         return np.array([
             self._estimate_from_array(subset)
             for subset in subject_jackknife(self.ratings.category_index)
@@ -389,53 +349,6 @@ class Analyzer(ABC):
 
     # Private helpers -------------------------------------------------------- #
 
-    def _require_ratings(self, caller: str) -> None:
-        """
-        Guard: resampling over subjects requires Ratings.
-
-        My subject-level resamplers read ``self.ratings.category_index``,
-        which is absent when I was built from a counts matrix. The public
-        entry points already check this, so reaching here means a caller took
-        the ratings path on an analyzer that has no ratings -- which is a
-        mistake about which method to call, not about the data.
-
-        Parameters
-        ----------
-        caller : str
-            The method that needs ratings, named in the message so the error
-            points at the call rather than at me.
-
-        Raises
-        ------
-        ValueError
-            If self.ratings is None.
-        """
-        if self.ratings is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: {caller}() requires Ratings data, but this "
-                f"analyzer was built from an NijMatrix. Use the "
-                f"_from_nij_matrix variant instead."
-            )
-
-    def _check_permutation_available(self) -> None:
-        """
-        Guard: permutation hypothesis test requires Ratings.
-
-        Permutation tests shuffle individual rating assignments to build the
-        null distribution. This requires the original Ratings object -- it
-        cannot be done from an NijMatrix because rater identity is lost.
-
-        Raises
-        ------
-        ValueError
-            If self.ratings is None (initialized from NijMatrix).
-        """
-        if self.ratings is None:
-            raise ValueError(
-                "[Analyzer] Error: method='permutation' requires Ratings data. "
-                "Use method='parametric_null' when initialized from NijMatrix."
-            )
-
     # Weights ---------------------------------------------------------------- #
 
     _ACCEPTS_WEIGHTS: bool = False
@@ -449,7 +362,7 @@ class Analyzer(ABC):
         ratings. A coefficient that cannot use them must say so rather than
         quietly compute the unweighted number under a weighted declaration.
         """
-        if self._ACCEPTS_WEIGHTS or self.ratings is None:
+        if self._ACCEPTS_WEIGHTS:
             return
         from ..semantics.categories import DistanceCategories
 

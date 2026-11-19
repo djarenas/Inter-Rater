@@ -1,4 +1,4 @@
-raters: 2
+raters: ['Rater1', 'Rater2']
 categories:
     kind: unordered
     names: ['Ectopic', 'AIU', 'NIU']

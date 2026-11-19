@@ -22,7 +22,7 @@ from interrater.intermediates.data_profiles import (
     AgreementProfile,
     PrevalenceBiasIndex,
 )
-from interrater.intermediates.estimator_parts import EstimatorInput, NijMatrix
+from interrater.intermediates.estimator_parts import EstimatorInput
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
@@ -132,39 +132,6 @@ class TestPrevalenceBias:
         assert "3 raters and 3 categories" in profile.prevalence_bias.reason
 
 
-class TestFromCounts:
-
-    def test_counts_only(self):
-        counts = np.array([[2, 0], [1, 1], [0, 2], [2, 0], [1, 0]])
-        profile = AgreementProfile.build_from_nij_matrix(NijMatrix(counts))
-        assert profile.category_names == ("column 0", "column 1")
-        assert profile.n_subjects == 4
-        assert isinstance(profile.rater_marginals, NotComputed)
-        assert isinstance(profile.prevalence_bias, PrevalenceBiasIndex)
-        assert profile.prevalence_bias.prevalence_index == pytest.approx((2 - 1) / 4)
-        assert isinstance(profile.prevalence_bias.bias_index, NotComputed)
-
-    def test_more_than_two_ratings_per_subject(self):
-        counts = np.array([[3, 0], [1, 2], [2, 1]])
-        profile = AgreementProfile.build_from_nij_matrix(NijMatrix(counts))
-        assert isinstance(profile.prevalence_bias, NotComputed)
-        assert "up to 3 ratings per subject" in profile.prevalence_bias.reason
-
-    def test_counts_and_ratings_agree(self):
-        """The same data as counts or as ratings gives the same numbers."""
-        from_ratings = _profile(UNBALANCED, "abc")
-        data, _ = _pool_input(UNBALANCED)
-        from_counts = AgreementProfile.build_from_nij_matrix(data.nij)
-        np.testing.assert_allclose(
-            list(from_ratings.prevalence.values()), list(from_counts.prevalence.values())
-        )
-        np.testing.assert_allclose(
-            list(from_ratings.specific_agreement.values()),
-            list(from_counts.specific_agreement.values()),
-        )
-        assert from_ratings.n_subjects == from_counts.n_subjects
-
-
 class TestSelfChecks:
 
     def _kwargs(self, **overrides):
@@ -206,9 +173,10 @@ class TestSelfChecks:
         with pytest.raises(ValueError, match="positive first"):
             AgreementProfile(**self._kwargs(prevalence_bias=wrong))
 
-    def test_missing_rater_marginals_must_say_why(self):
-        with pytest.raises(TypeError, match="NotComputed"):
-            AgreementProfile(**self._kwargs(rater_marginals=None))
+    def test_rater_marginals_are_required(self):
+        for missing in (None, {}, NotComputed("no raters")):
+            with pytest.raises(TypeError, match="non-empty dict"):
+                AgreementProfile(**self._kwargs(rater_marginals=missing))
 
 
 class TestOutputs:

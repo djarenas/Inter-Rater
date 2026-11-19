@@ -38,8 +38,7 @@ raters.draw_counts()       # bar per rater
 BalanceProfilePlotter.build_from_result(result).draw()
 ```
 
-- **`RaterProfilePlotter`** needs rater identity. `build_from_result` on a
-  result built from counts refuses when built, not when drawn.
+- **`RaterProfilePlotter`** draws the result's rater profile.
   - `draw_overlap()`: the full matrix in declared rater order. The diagonal
     is each rater's own total, white and outside the colour scale, so the
     colours compare pairs only. A pair sharing fewer than 2 subjects is
@@ -47,8 +46,7 @@ BalanceProfilePlotter.build_from_result(result).draw()
     the cell numbers on large panels.
   - `draw_counts()`: one bar per rater, in the heatmap's order, with a dashed
     line at all subjects.
-- **`BalanceProfilePlotter`** works from counts too, since a balance profile
-  is subject-side only. `draw()` has one bar for every count of raters from
+- **`BalanceProfilePlotter`** draws the subject side. `draw()` has one bar for every count of raters from
   the fewest to the most, so a count no subject had shows as a zero bar, and
   each bar's count is written on it.
 

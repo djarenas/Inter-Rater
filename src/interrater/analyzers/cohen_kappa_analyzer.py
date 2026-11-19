@@ -47,8 +47,8 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
     - Confidence interval (bootstrap or parametric null)
     - Return CohenKappaResult with all metadata
 
-    There is no NijMatrix path. Cohen's kappa reads rater identity -- who said
-    what -- and counts discard that. If you have only counts, you want Fleiss'
+    Cohen's kappa reads rater identity -- who said what -- and counts discard
+    that. If you have only counts, you want Fleiss'
     kappa or Scott's pi, not Cohen's.
 
     There is no balance_profile or is_exact distinction. Cohen operates on the

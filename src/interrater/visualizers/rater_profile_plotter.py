@@ -11,7 +11,6 @@ from matplotlib.patches import Patch, Rectangle
 
 from ..contracts import MIN_OVERLAP_HARD
 from ..intermediates.data_profiles import RaterProfile
-from ..intermediates.not_computed import NotComputed
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
@@ -40,9 +39,8 @@ class RaterProfilePlotter:
     the declared order (the heatmap's order), with a dashed line at all
     subjects.
 
-    I need rater identity, so I am built from Ratings or from a result that
-    has a RaterProfile. A result built from counts has none, and I say so
-    when built rather than when drawn.
+    I am built from Ratings or from a result, which always carries a
+    RaterProfile.
 
     Attributes
     ----------
@@ -114,9 +112,6 @@ class RaterProfilePlotter:
         ------
         TypeError
             If result is neither kind of result.
-        ValueError
-            If the result was built from counts, which carry no rater
-            identity.
         """
         from ..intermediates.results import PermutationResult, PointEstimateResult
 
@@ -124,12 +119,6 @@ class RaterProfilePlotter:
             raise TypeError(
                 f"{_ERROR_PREFIX}: result must be a PointEstimateResult or a "
                 f"PermutationResult, got {type(result).__name__}"
-            )
-        if isinstance(result.rater_profile, NotComputed):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: this result has no rater profile "
-                f"({result.rater_profile.reason}). Build the plotter from "
-                f"the Ratings instead."
             )
         return cls(result.rater_profile, annotate=annotate)
 

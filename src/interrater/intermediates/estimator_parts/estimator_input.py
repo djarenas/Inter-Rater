@@ -19,7 +19,7 @@ class EstimatorInput:
     exist so that those three cannot be separated. 
     
     This abstraction serves to prevent a possible bug: if K were read off the data instead
-    of carried alongside, a bootstrap draw that happens to miss a rare category would be computed
+      of carried alongside, a bootstrap draw that happens to miss a rare category would be computed
     against a smaller K than the rating task had, and AC1 and
     Brennan-Prediger, whose chance terms count categories, would move from
     bootstrap-draw to draw for no reason but the inference.

@@ -69,22 +69,8 @@ def _config():
 
 class TestConstruction:
 
-    def test_from_ratings_and_from_counts_agree(self, gappy):
-        from_ratings = BalanceProfilePlotter.build_from_ratings(gappy)
-        from_counts = BalanceProfilePlotter.build_from_nij_matrix(gappy.to_nij_matrix())
-        assert from_ratings.balance_profile.subject_counts == {2: 5, 4: 1}
-        assert from_counts.balance_profile.subject_counts == {2: 5, 4: 1}
-
     def test_from_point_estimate_result(self, gappy):
         result = KrippendorffAlphaAnalyzer(gappy, _config()).estimate()
-        plotter = BalanceProfilePlotter.build_from_result(result)
-        assert plotter.balance_profile is result.balance_profile
-
-    def test_from_result_built_from_counts(self, gappy):
-        """Unlike the rater profile, a counts matrix has a balance profile."""
-        result = KrippendorffAlphaAnalyzer.build_from_nij_matrix(
-            gappy.to_nij_matrix(), _config(),
-        ).estimate_from_nij_matrix()
         plotter = BalanceProfilePlotter.build_from_result(result)
         assert plotter.balance_profile is result.balance_profile
 

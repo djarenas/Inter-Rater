@@ -1,13 +1,16 @@
 """
 Coefficients for many raters, computed from how many raters chose each category.
 
-Every function here reads the same thing: for each subject, how many raters
-placed it in each category. None of them care *which* rater said what, which is
-what separates them from the pairwise family -- Cohen's kappa cannot be
-computed from these counts at all, because the counts have thrown away the
-identity of the raters.
+(dumbest docstring ever, why take nij matrix fuck)
+I am ashamed I pushed this as V2.1.0
 
-They also share a skeleton. Observed agreement is computed once and identically
+
+Every function here reads the same thing: for each subject, how many raters
+placed it in each category. They use
+pooled marginals, which means they do not care *which* rater said what. This
+separates them from the ones that use individual marginals, like Cohen's kappa. 
+
+The functions here also share a skeleton. Observed agreement is computed once and identically
 for all of them; only the chance term differs:
 
     coefficient = (Po - Pe) / (1 - Pe)
@@ -64,7 +67,7 @@ import numpy as np
 
 from ...intermediates.estimator_parts import NijMatrix, Weights
 
-_ERROR_PREFIX = "[scotts_pi] Error"
+_SCOTT_ERROR_PREFIX = "[scotts_pi] Error"
 
 # Shared parts -----------------------------------------------------------  #
 # These are methods shared by different kappa statistics. 
@@ -221,6 +224,8 @@ def chance_gwet_ac1(nij: NijMatrix) -> float:
     Note K appearing explicitly. That is why an unused category cannot be
     quietly dropped from the scheme: doing so changes this number, while
     leaving Fleiss' untouched. NijMatrix is K columns wide for that reason.
+
+    WHERE WHERE WHERE Does K appear explicitly
 
     **Takes no weights, because there is no weighted form of it here.** The
     weighted version of AC1 is Gwet's AC2, a separate coefficient with a
@@ -392,7 +397,7 @@ def scotts_pi(nij: NijMatrix, weights: Weights | None = None) -> float:
     # Scott's pi is unweighted; reject non-identity weights
     if weights is not None and not weights.is_identity:
         raise ValueError(
-            f"{_ERROR_PREFIX}: Scott's pi is defined for nominal (unweighted) data only. "
+            f"{_SCOTT_ERROR_PREFIX}: Scott's pi is defined for nominal (unweighted) data only. "
             f"weights must be None or identity, got {weights.kind}."
         )
     

@@ -22,13 +22,10 @@ class RaterProfile:
     I describe the raters: who they are, how much each one rated, and how
     much each pair of them overlapped.
 
-    I need rater identity, so I am built only from Ratings. A counts matrix
-    keeps how many raters chose each category, not who they were, so a
-    result built from one holds NotComputed in my place. What a counts
-    matrix does know -- how many ratings each subject got -- is
-    BalanceProfile.
+    I need rater identity, so I am built from Ratings. How many ratings each
+    subject got, without who gave them, is BalanceProfile.
 
-    I am the place a result's rater names come from: the printed tables,
+    Result objects use me to get rater names -> The printed tables,
     to_frame, summaries and plots of pairs and subsets name raters as I do.
 
     Attributes

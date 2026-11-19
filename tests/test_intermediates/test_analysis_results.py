@@ -65,7 +65,7 @@ from interrater.intermediates.results.ci_results import (
     BootstrapCIResult,
     ParametricCIResult,
 )
-from interrater.intermediates.estimator_parts.nij_matrix import NijMatrix
+from fixtures.from_counts import ratings_from_counts
 from interrater.intermediates.data_profiles.balance_profile import BalanceProfile
 from interrater.intermediates.data_profiles.agreement_profile import AgreementProfile
 from interrater.intermediates.data_profiles.rater_profile import RaterProfile
@@ -83,19 +83,7 @@ from .conftest import BALANCED_NIJ, UNBALANCED_NIJ
 # -- Helpers ----------------------------------------------------------------- #
 
 
-_PROFILE = AgreementProfile.build_from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
-
-# The fields every point estimate carries that most tests here are not
-# about. The parts, kappa_max and rater profile say they were left out; the
-# agreement profile is a small real one. Tests about these fields build
-# their own.
-_NOT_UNDER_TEST = dict(
-    parts=NotComputed("not under test"),
-    kappa_max=NotComputed("not under test"),
-    agreement_profile=_PROFILE,
-    rater_profile=NotComputed("not under test"),
-)
-
+_PROFILE = AgreementProfile.build_from_ratings(ratings_from_counts(BALANCED_NIJ))
 
 def _raters(
     n_raters: int = 3, n_per_rater=None, n_subjects: int = 4, names=None,
@@ -116,6 +104,18 @@ def _raters(
     )
 
 
+# The fields every point estimate carries that most tests here are not
+# about. The parts and kappa_max say they were left out; the agreement and
+# rater profiles are small real ones. Tests about these fields build their
+# own.
+_NOT_UNDER_TEST = dict(
+    parts=NotComputed("not under test"),
+    kappa_max=NotComputed("not under test"),
+    agreement_profile=_PROFILE,
+    rater_profile=_raters(3),
+)
+
+
 def _fields(point: float, pe: float, weighted: bool = False) -> dict:
     """
     The three fields at ``point`` for a coefficient with chance term ``pe``.
@@ -130,7 +130,7 @@ def _fields(point: float, pe: float, weighted: bool = False) -> dict:
         ),
         kappa_max=NotComputed("no limit below 1"),
         agreement_profile=_PROFILE,
-        rater_profile=NotComputed("built from counts: no rater identity"),
+        rater_profile=_raters(3),
     )
 
 
@@ -211,7 +211,7 @@ def _alpha(point: float, weighted: bool = False) -> dict:
         ),
         kappa_max=NotComputed("no limit below 1"),
         agreement_profile=_PROFILE,
-        rater_profile=NotComputed("built from counts: no rater identity"),
+        rater_profile=_raters(3),
     )
 
 
@@ -269,12 +269,12 @@ def _pe(point, ci=None) -> PointEstimateResult:
 
 def _bp() -> BalanceProfile:
     """Balanced profile: 4 subjects, 3 categories, 3 raters each."""
-    return BalanceProfile.build_from_nij_matrix(NijMatrix(BALANCED_NIJ.copy()))
+    return BalanceProfile.build_from_ratings(ratings_from_counts(BALANCED_NIJ))
 
 
 def _unbalanced_bp() -> BalanceProfile:
     """Unbalanced profile: 4 subjects, 2 categories, variable raters."""
-    return BalanceProfile.build_from_nij_matrix(NijMatrix(UNBALANCED_NIJ.copy()))
+    return BalanceProfile.build_from_ratings(ratings_from_counts(UNBALANCED_NIJ))
 
 
 # -- Pairs and subsets: each one is its coefficient's own result ----------- #
@@ -707,15 +707,14 @@ class TestPointEstimateResultStr:
 
 
 class TestPointEstimateResultRaterProfile:
-    """The raters, or NotComputed; and the two profiles must agree."""
+    """The raters are required, and the two profiles must agree."""
 
-    def test_not_computed_accepted(self):
-        r = PointEstimateResult(0.5, None, None, _bp(), **_NOT_UNDER_TEST)
-        assert isinstance(r.rater_profile, NotComputed)
-
-    def test_wrong_type_refused(self):
-        with pytest.raises(TypeError, match="rater_profile must be RaterProfile or NotComputed"):
-            PointEstimateResult(0.5, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=None))
+    def test_missing_raters_refused(self):
+        for missing in (None, NotComputed("no raters")):
+            with pytest.raises(TypeError, match="rater_profile must be RaterProfile, got"):
+                PointEstimateResult(
+                    0.5, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=missing),
+                )
 
     def test_both_profiles_describe_the_same_subjects(self):
         with pytest.raises(ValueError, match="rater_profile has 5 subjects but balance_profile has 4"):
@@ -3364,14 +3363,6 @@ class TestIndividualMarginalResult:
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             IndividualMarginalResult(0.6, None, None, None, **_PANEL_NOT_UNDER_TEST)
 
-    def test_counts_without_raters_rejected(self):
-        """Built from counts there is no RaterProfile -- rejected."""
-        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
-            IndividualMarginalResult(
-                0.6, None, None, _bp(),
-                **dict(_PANEL_NOT_UNDER_TEST, rater_profile=NotComputed("built from counts: no rater identity")),
-            )
-
     def test_error_prefix(self):
         with pytest.raises(
             ValueError, match=r"\[IndividualMarginalResult\] Error"
@@ -3388,12 +3379,6 @@ class TestIndividualMarginalResult:
 
 class TestIndividualMarginalResultProfile:
     """These coefficients need each rater's marginals, one row per rater."""
-
-    def test_profile_from_counts_refused(self):
-        with pytest.raises(TypeError, match="rater_marginals must be computed"):
-            IndividualMarginalResult(
-                0.6, None, None, _bp(), **dict(_NOT_UNDER_TEST, rater_profile=_raters(3)),
-            )
 
     def test_rater_count_must_match(self):
         fields = dict(_NOT_UNDER_TEST, agreement_profile=_PAIR, rater_profile=_raters(3))
@@ -3437,15 +3422,6 @@ class TestCohenKappaResult:
                 0.7, None, None, None,
                 ci_method="bca", weights_type="identity",
                 **_cohen(0.7),
-            )
-
-    def test_counts_without_raters_rejected(self):
-        """Inherited from IndividualMarginalResult: no RaterProfile, rejected."""
-        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
-            CohenKappaResult(
-                0.7, None, None, _bp(),
-                ci_method="bca", weights_type="identity",
-                **dict(_cohen(0.7), rater_profile=NotComputed("built from counts: no rater identity")),
             )
 
     def test_parametric_null_allowed(self):
@@ -3626,14 +3602,6 @@ class TestCongerKappaResult:
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             CongerKappaResult(0.6, None, None, None, ci_method="bca", **_conger(0.6))
 
-    def test_counts_without_raters_rejected(self):
-        """Inherited from IndividualMarginalResult: no RaterProfile, rejected."""
-        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
-            CongerKappaResult(
-                0.6, None, None, _bp(), ci_method="bca",
-                **dict(_conger(0.6), rater_profile=NotComputed("built from counts: no rater identity")),
-            )
-
     def test_parametric_null_not_allowed(self):
         bp = _bp()
         with pytest.raises(ValueError, match="ci_method must be"):
@@ -3749,14 +3717,6 @@ class TestLightKappaResult:
             LightKappaResult(
                 0.55, None, None, None, n_pairs=3, ci_method="bca",
                 **_light(0.55),
-            )
-
-    def test_counts_without_raters_rejected(self):
-        """Light's kappa requires a RaterProfile (rater identity needed)."""
-        with pytest.raises(ValueError, match="rater_profile must be a RaterProfile"):
-            LightKappaResult(
-                0.55, None, None, _bp(), n_pairs=3, ci_method="bca",
-                **dict(_light(0.55), rater_profile=NotComputed("built from counts: no rater identity")),
             )
 
     def test_n_pairs_must_match(self):
@@ -3917,15 +3877,7 @@ class TestPrintedForm:
         lines = str(r).splitlines()
         assert lines[0] == "Fleiss' κ = 0.600 [0.500, 0.700] (95% CI, percentile, n=1000)"
         assert lines[1] == f"  {r.parts}; κ_max not computed (pooled shares)"
-        assert lines[2] == "  4 subjects; at least 3 raters; unweighted; exact formula"
-
-    def test_counts_only_say_at_least(self):
-        """Built from counts, the rater count is a lower bound."""
-        r = FleissKappaResult(
-            0.6, None, None, _bp(), ci_method="bca", weights_type="identity", **_pooled(0.6),
-        )
-        assert isinstance(r.rater_profile, NotComputed)
-        assert "at least 3 raters" in str(r)
+        assert lines[2] == "  4 subjects; 3 raters; unweighted; exact formula"
 
     def test_cohen_ceiling_and_both_raters(self):
         r = CohenKappaResult(
@@ -3937,7 +3889,7 @@ class TestPrintedForm:
 
     def test_every_subject_is_used(self):
         """A subject the coefficient left out is an error, not a printed count."""
-        fewer = AgreementProfile.build_from_nij_matrix(NijMatrix(BALANCED_NIJ[:3].copy()))
+        fewer = AgreementProfile.build_from_ratings(ratings_from_counts(BALANCED_NIJ[:3]))
         with pytest.raises(
             ValueError, match="the data has 4 subjects, but the agreement profile uses 3",
         ):

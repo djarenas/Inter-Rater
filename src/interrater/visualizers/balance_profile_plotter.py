@@ -68,22 +68,6 @@ class BalanceProfilePlotter:
         return cls(BalanceProfile.build_from_ratings(ratings))
 
     @classmethod
-    def build_from_nij_matrix(cls, nij: NijMatrix) -> BalanceProfilePlotter:
-        """
-        Build me from a counts matrix.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix (n_subjects x n_categories).
-
-        Returns
-        -------
-        BalanceProfilePlotter
-        """
-        return cls(BalanceProfile.build_from_nij_matrix(nij))
-
-    @classmethod
     def build_from_result(
         cls, result: PointEstimateResult | PermutationResult,
     ) -> BalanceProfilePlotter:

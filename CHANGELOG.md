@@ -3,6 +3,42 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [semver](https://semver.org/).
 
+## [Unreleased]
+
+### Breaking
+
+- Analyzers are built from `Ratings` only. `build_from_nij_matrix()` and
+  `estimate_from_nij_matrix()` are removed from every group analyzer, as are
+  `BalanceProfile.build_from_nij_matrix()`,
+  `AgreementProfile.build_from_nij_matrix()`,
+  `BalanceProfilePlotter.build_from_nij_matrix()`,
+  `PrevalenceBiasIndex.build_from_counts()` and the resampling functions
+  `subject_bootstrap_from_nij_matrix()` and
+  `subject_jackknife_from_nij_matrix()`. The counts route was a second copy
+  of every group analyzer's setup, kept in step by hand, and it read K from
+  the width of the table it was given rather than from a declared
+  semantics. Results on the ratings route are unchanged.
+- Passing `None` as ratings now raises `TypeError` in every analyzer.
+- What only the counts route produced is gone with it: a result's
+  `rater_profile` must be a `RaterProfile` (no longer `NotComputed`),
+  `AgreementProfile.rater_marginals` is always a dict, and
+  `PrevalenceBiasIndex` always has both raters and both one-sided counts.
+  `PrevalenceBiasIndex.n_disagree` is now worked out from those counts
+  instead of passed in. A printed result says "3 raters", never "at least
+  3 raters".
+
+### Changed
+
+- Example data: `Gwet_example/gwet_cont3x3_data_nij.csv`,
+  `Synthetic_2raters/synthetic_2raters_data_nij.csv` and `Unbalanced_nij/`
+  are removed; the first two duplicated ratings files already there. Fleiss
+  (1971) is published as counts only, so `example_data/made_up_ratings.py`
+  turns its counts into Ratings in memory, with made-up rater slots. It is
+  not part of the package, and no file of made-up ratings is kept.
+- Example data: SR3, SR4 and SR5 files renamed to `SR3_*`, `SR4_*` and
+  `SR5_*`; `SR5_CocCardio/` renamed to `SR5_SciRep2020/`. Each systematic
+  review dataset now cites its paper.
+
 ## [2.1.0] - 2026-11-12
 
 ### Breaking

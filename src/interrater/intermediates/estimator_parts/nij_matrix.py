@@ -26,7 +26,7 @@ class NijMatrix:
     I allow rows with fewer than two ratings. Pairs, subsets and resampling
     draws build me from part of the data, and a subject can keep only one
     rating there. Data coming in from outside is held to two ratings per
-    subject by Ratings and by GroupAnalyzer.build_from_nij_matrix, not by me.
+    subject by Ratings, not by me.
 
     Attributes
     ----------

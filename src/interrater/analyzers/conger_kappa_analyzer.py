@@ -52,8 +52,8 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     - Bootstrap confidence interval (percentile or BCa -- no parametric null)
     - Return CongerKappaResult with all metadata
 
-    There is no NijMatrix path. Conger's kappa reads rater identity -- who said
-    what -- and counts discard that. If you have only counts, you want Fleiss'
+    Conger's kappa reads rater identity -- who said what -- and counts discard
+    that. If you have only counts, you want Fleiss'
     kappa, not Conger's.
 
     There is no weighted form. Conger (1980) defined the coefficient for nominal
@@ -116,9 +116,9 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         TypeError
             If config is not CongerKappaConfig.
         ValueError
-            If ratings is None, or any rating is missing (after injection).
+            If any rating is missing (after injection).
         """
-        # Call parent __init__ (validates ratings not None, validates config is
+        # Call parent __init__ (validates ratings and checks that config is
         # IndividualMarginalConfig, computes BalanceProfile, builds
         # EstimatorInput with weights=None)
         try:

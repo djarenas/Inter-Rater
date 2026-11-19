@@ -2,27 +2,20 @@
 Shared fixtures for test_example_data/.
 
 Integration tests that load the shipped example datasets and run analyzers
-end-to-end.  Each fixture returns either a Ratings (via RatingsCleaner) or
-a NijMatrix (via pd.read_csv + NijMatrix), depending on the data format.
-
-Construction recipe for ratings pathway:
+end-to-end.  Each fixture returns a Ratings, built the way a user builds one:
     YAML -> RatingsSemantics.build_from_yaml
     YAML -> CleanerConfig.build_from_yaml
     csv/txt -> pd.read_csv -> RatingsCleaner(df, semantics, config) -> .ratings
-
-Construction recipe for nij pathway:
-    csv/txt -> pd.read_csv -> np.ndarray -> NijMatrix
 """
 
+import importlib.util
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from interrater import (
     CleanerConfig,
-    NijMatrix,
     OrderedCategories,
     Ratings,
     RatingsCleaner,
@@ -54,8 +47,7 @@ SR1_DIR        = EXAMPLE_DATA_DIR / "SR1_OSF2018"
 SR2_DIR        = EXAMPLE_DATA_DIR / "SR2_JSRC2019"
 SR3_DIR        = EXAMPLE_DATA_DIR / "SR3_JGIM2019"
 SR4_DIR        = EXAMPLE_DATA_DIR / "SR4_FIS_CVD"
-SR5_DIR        = EXAMPLE_DATA_DIR / "SR5_CocCardio"
-UNBALANCED_DIR = EXAMPLE_DATA_DIR / "Unbalanced_nij"
+SR5_DIR        = EXAMPLE_DATA_DIR / "SR5_SciRep2020"
 
 
 # -- Resample count --------------------------------------------------------- #
@@ -113,37 +105,6 @@ def _load_ratings(data_path: Path, semantics_path: Path,
     return rc.ratings
 
 
-def _load_nij(data_path: Path, *, index_col: int | str | None = None,
-              sep: str | None = None) -> NijMatrix:
-    """
-    Load an nij (counts) file into a NijMatrix.
-
-    Parameters
-    ----------
-    data_path : Path
-        CSV or TXT file with subject rows x category columns.
-    index_col : int | str | None
-        Column to use as the row index (subject IDs).  Pass 0 for the
-        Fleiss CSV (unnamed first column), ``"Subject"`` for Gwet nij,
-        or ``None`` for headerless TXT files.
-    sep : str | None
-        Separator; inferred from extension if None.
-    """
-    if sep is None:
-        sep = "," if data_path.suffix == ".csv" else "\t"
-
-    has_header = data_path.suffix == ".csv"
-
-    df = pd.read_csv(
-        data_path,
-        sep=sep,
-        header=0 if has_header else None,
-        index_col=index_col,
-    )
-
-    return NijMatrix(df.values.astype(np.int32))
-
-
 def _integration_config(config_cls, **overrides):
     """
     Build an analyzer config for integration testing.
@@ -197,35 +158,30 @@ def _bca_config(config_cls, **overrides):
     return config_cls(**defaults)
 
 
-# -- NijMatrix fixtures ----------------------------------------------------- #
-
-@pytest.fixture(scope="module")
-def fleiss1971_nij():
-    """NijMatrix from Fleiss (1971) psychiatric diagnosis data (30x5, 6 raters)."""
-    return _load_nij(
-        FLEISS_DIR / "Fleiss1971_psychiatric_data_nij.csv",
-        index_col=0,
-    )
-
-
-@pytest.fixture(scope="module")
-def gwet_nij():
-    """NijMatrix from Gwet cont3x3 data (100x3, 2 raters)."""
-    return _load_nij(
-        GWET_DIR / "gwet_cont3x3_data_nij.csv",
-        index_col="Subject",
-    )
-
-
-@pytest.fixture(scope="module")
-def unbalanced_nij():
-    """NijMatrix from unbalanced synthetic data (variable raters)."""
-    return _load_nij(
-        UNBALANCED_DIR / "unbalanced_data_nij.txt",
-    )
-
-
 # -- Ratings fixtures ------------------------------------------------------- #
+
+@pytest.fixture(scope="module")
+def build_made_up_ratings():
+    """The counts-to-Ratings helper, loaded by path: it is not in the package."""
+    spec = importlib.util.spec_from_file_location(
+        "made_up_ratings", EXAMPLE_DATA_DIR / "made_up_ratings.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build_made_up_ratings
+
+
+@pytest.fixture(scope="module")
+def fleiss1971_counts():
+    """Fleiss (1971) as published: 30 subjects x 5 categories, 6 ratings each."""
+    return pd.read_csv(FLEISS_DIR / "Fleiss1971_psychiatric_data_nij.csv", index_col=0)
+
+
+@pytest.fixture(scope="module")
+def fleiss1971_ratings(fleiss1971_counts, build_made_up_ratings):
+    """Fleiss (1971) as Ratings with 6 made-up rater slots, built in memory."""
+    return build_made_up_ratings(fleiss1971_counts)
+
 
 @pytest.fixture(scope="module")
 def gwet_ratings():
@@ -300,31 +256,31 @@ def sr2_ratings():
 
 @pytest.fixture(scope="module")
 def sr3_ratings():
-    """Ratings from SR3 FIS Psych data (770 subjects, 3 raters, K=2, balanced)."""
+    """Ratings from SR3 data (770 subjects, 3 raters, K=2, balanced)."""
     return _load_ratings(
-        SR3_DIR / "SR_FIS_Psych_data.txt",
-        SR3_DIR / "SR_FIS_Psych_semantics.yaml",
-        SR3_DIR / "SR_FIS_Psych_cleaner_config.yaml",
+        SR3_DIR / "SR3_data.txt",
+        SR3_DIR / "SR3_semantics.yaml",
+        SR3_DIR / "SR3_cleaner_config.yaml",
     )
 
 
 @pytest.fixture(scope="module")
 def sr4_ratings():
-    """Ratings from SR4 FIS CVD data (787 subjects, 4 raters, K=2, balanced)."""
+    """Ratings from SR4 data (787 subjects, 4 raters, K=2, balanced)."""
     return _load_ratings(
-        SR4_DIR / "SR_FIS_CVD_data.txt",
-        SR4_DIR / "SR_FIS_CVD_semantics.yaml",
-        SR4_DIR / "SR_FIS_CVD_cleaner_config.yaml",
+        SR4_DIR / "SR4_data.txt",
+        SR4_DIR / "SR4_semantics.yaml",
+        SR4_DIR / "SR4_cleaner_config.yaml",
     )
 
 
 @pytest.fixture(scope="module")
 def sr5_ratings():
-    """Ratings from SR5 Cocaine Cardio data (881 subjects, 3 raters, K=2, balanced)."""
+    """Ratings from SR5 data (881 subjects, 3 raters, K=2, balanced)."""
     return _load_ratings(
-        SR5_DIR / "SR_cocaine_cardio_data.txt",
-        SR5_DIR / "SR_cocaine_cardio_semantics.yaml",
-        SR5_DIR / "SR_cocaine_cardio_cleaner_config.yaml",
+        SR5_DIR / "SR5_data.txt",
+        SR5_DIR / "SR5_semantics.yaml",
+        SR5_DIR / "SR5_cleaner_config.yaml",
     )
 
 

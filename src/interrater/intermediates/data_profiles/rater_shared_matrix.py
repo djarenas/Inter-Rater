@@ -21,18 +21,11 @@ class RaterSharedMatrix:
     """
     I count, for every pair of raters, how many subjects both of them rated.
 
-    Every pairwise coefficient rests on one of my off-diagonal cells. Two
-    raters who co-rated eight subjects produce a kappa, and it is worth
-    almost nothing; two who co-rated four hundred produce one worth reading.
-    Nothing in the coefficient itself says which you are looking at, which is
-    why I am worth keeping beside it.
-
-    My diagonal is each rater's own total -- the number of subjects that rater
-    rated at all, since a rater trivially shares every one of them with
-    themselves. That makes it redundant with ``n_per_rater``, but it is the
-    natural value for the cell and it is useful to have to hand: no pair can
-    share more subjects than either of its members rated, which is a check
-    worth being able to make.
+    My diagonal is each rater's own total, the number of subjects that rater
+    rated at all. That makes it redundant with ``n_per_rater``, but it is the
+    natural value for the cell and it is useful to have to hand. Since no pair can
+    share more subjects than either of its members rated, the diagonal terms
+    helps with validation.
 
     Every question I answer is about pairs, so I never report a cell twice and
     never report the diagonal. Pairs come back as ``(a, b, value)`` with
@@ -49,7 +42,7 @@ class RaterSharedMatrix:
     Attributes
     ----------
     shared:
-        (n_raters, n_raters) integer, symmetric. Cell (a, b) is how many
+        (n_raters, n_raters) matrix, integers, symmetric. Cell (a, b) is how many
         subjects both a and b rated.
 
     Examples
@@ -246,8 +239,8 @@ class RaterSharedMatrix:
 
         Two views, because they answer different questions. The grid shows a
         whole row at once, which is how you notice a rater who is thin against
-        *everybody* rather than thin against one partner -- a difference the
-        sorted list hides. The list shows the weak pairs first and stays
+        *everybody* rather than thin against one partner (a difference the
+        sorted list hides). The list shows the weak pairs first and stays
         readable at any number of raters, which the grid does not.
 
         Names are a parameter rather than something I hold: whoever has the
