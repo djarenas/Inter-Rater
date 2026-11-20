@@ -195,7 +195,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         if not getattr(self.config.config_of_coefficient, "balanced_data_only", False):
             return
-        from ..agreement_functions.rater_combinations import rater_subsets
+        from .rater_combinations import rater_subsets
         from ...contracts import EMPTY
 
         present = self.ratings.category_index != EMPTY
@@ -361,7 +361,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         tuple[dict, dict, float]
             (subset_values, subjects_per_subset, mean_over_subsets)
         """
-        from ..agreement_functions.rater_combinations import (
+        from .rater_combinations import (
             mean_over_subsets,
             estimate_subsets,
             subjects_per_subset,
@@ -450,7 +450,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         # Every draw and jackknife value obeys the one rule for whether a
         # subset has a coefficient (subset_problem)
-        from ..agreement_functions.rater_combinations import estimate_subset
+        from .rater_combinations import estimate_subset
 
         # Spawn one child seed per subset for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
@@ -638,7 +638,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             Shape (n_subjects,). NaN entries mark leave-one-out data on which
             a defined subset became undefined.
         """
-        from ..agreement_functions.rater_combinations import (
+        from .rater_combinations import (
             mean_over_same_subsets,
             estimate_subsets,
         )
@@ -692,7 +692,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         np.ndarray
             Mean coefficient per draw, shape (n_resamples,).
         """
-        from ..agreement_functions.rater_combinations import (
+        from .rater_combinations import (
             mean_over_same_subsets,
             estimate_subsets,
         )

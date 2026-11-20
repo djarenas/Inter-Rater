@@ -20,6 +20,7 @@ from ...intermediates.data_profiles.balance_profile import BalanceProfile
 from ...intermediates.data_profiles.rater_profile import RaterProfile
 from ...intermediates.estimator_parts.estimator_input import EstimatorInput
 from ...intermediates.results.ci_results import BootstrapCIResult
+from .rater_combinations import Estimator
 from ..agreement_functions.group_agreement import (
     brennan_prediger, fleiss_kappa, gwet_ac1, scotts_pi,
 )
@@ -32,8 +33,6 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[PermutationAnalysis] Error"
 
-# Type alias matching rater_combinations.Estimator
-Estimator = Callable[[EstimatorInput], float]
 
 
 _WEIGHTABLE_COEFFICIENTS = frozenset(
@@ -411,7 +410,7 @@ class PermutationAnalysis:
         from ...contracts import EMPTY
         from ...intermediates.not_computed import NotComputed
         from ...semantics.ratings_semantics import RatingsSemantics
-        from ..agreement_functions.rater_combinations import subset_problem
+        from .rater_combinations import subset_problem
 
         semantics = self.ratings.semantics
         names = [str(semantics.raters[i]) for i in unit]

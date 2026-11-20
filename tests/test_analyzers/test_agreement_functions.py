@@ -1,9 +1,10 @@
 """
-Tests for the agreement_functions sub-package.
+Tests for the agreement_functions sub-package, and for
+permutation_analysis/rater_combinations.
 
-I cover the four modules -- group_agreement, individual_marginals,
-krippendorff, and rater_combinations -- with hand-computed expected
-values verified against the published formulas.
+I cover group_agreement, individual_marginals, krippendorff and
+rater_combinations with hand-computed expected values verified against the
+published formulas.
 
 Every expected value is a fraction rather than a rounded decimal, so a
 failing assertion points to a logic error rather than a tolerance
@@ -61,7 +62,7 @@ from interrater.analyzers.agreement_functions.krippendorff import (
 )
 
 # -- rater_combinations ----------------------------------------------------- #
-from interrater.analyzers.agreement_functions.rater_combinations import (
+from interrater.analyzers.permutation_analysis.rater_combinations import (
     estimate_subset,
     mean_over_same_subsets,
     mean_over_subsets,

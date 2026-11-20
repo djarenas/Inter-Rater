@@ -22,7 +22,6 @@ from interrater.cleaners.frame_layout import FrameLayout
 from interrater.cleaners.insufficient_data_policy import InsufficientDataPolicy
 from interrater.cleaners.ratings_cleaner import RatingsCleaner
 
-from interrater.intermediates.estimator_parts import (Weights, NijMatrix)
 from interrater.intermediates.not_computed import NotComputed
 from interrater.intermediates.data_profiles import (
     AgreementProfile,
@@ -170,8 +169,6 @@ __all__ = [
     "LightKappaConfig",
     "PairwisePermutationConfig",
     "SubsetPermutationConfig",
-    "Weights",
-    "NijMatrix",
     # Stands in for a value that does not apply, with the reason
     "NotComputed",
     # What an analysis hands back: results, their intervals and tests, and

@@ -256,5 +256,5 @@ or the panel without one rater computes its point, and resamples, only on
 the subjects still rated by at least two of its raters. With fewer than two
 such subjects, or a rater who rated none of them, it has no coefficient and
 says why. The rule is written once (`subset_problem` in
-`agreement_functions/rater_combinations.py`) and every such step calls it;
+`permutation_analysis/rater_combinations.py`) and every such step calls it;
 see `permutation_analysis/README.md`.

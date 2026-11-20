@@ -19,9 +19,11 @@ versioning follows [semver](https://semver.org/).
   the width of the table it was given rather than from a declared
   semantics. Results on the ratings route are unchanged.
 - Passing `None` as ratings now raises `TypeError` in every analyzer.
-- `rater_combinations`: `over_subsets`, `over_pairs`, `unit_problem` and
-  `estimate_unit` renamed to `estimate_subsets`, `estimate_pairs`,
-  `subset_problem` and `estimate_subset`. `leave_one_rater_out` and
+- `rater_combinations` moved from `agreement_functions/` to
+  `permutation_analysis/`, its only user; it computes no agreement.
+  `over_subsets`, `over_pairs`, `unit_problem` and `estimate_unit` renamed
+  to `estimate_subsets`, `estimate_pairs`, `subset_problem` and
+  `estimate_subset`. `leave_one_rater_out` and
   `subjects_per_leave_one_out` removed: nothing used them, and
   `leave_one_rater_out` skipped the rule every other subset goes through.
 - Every agreement coefficient function takes one `EstimatorInput` and

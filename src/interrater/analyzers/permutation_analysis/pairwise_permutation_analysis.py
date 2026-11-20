@@ -189,7 +189,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         tuple[dict, dict, float]
             (pairwise_values, subjects_per_pair, mean_over_pairs)
         """
-        from ..agreement_functions.rater_combinations import (
+        from .rater_combinations import (
             mean_over_subsets,
             estimate_pairs,
             subjects_per_subset,
@@ -254,7 +254,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         # Every draw and jackknife value obeys the one rule for whether a
         # pair has a coefficient (subset_problem)
-        from ..agreement_functions.rater_combinations import estimate_subset
+        from .rater_combinations import estimate_subset
 
         # Spawn one child seed per pair for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
@@ -433,7 +433,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             Shape (n_subjects,). NaN entries mark leave-one-out data on which
             a defined pair became undefined.
         """
-        from ..agreement_functions.rater_combinations import (
+        from .rater_combinations import (
             mean_over_same_subsets,
             estimate_pairs,
         )
@@ -483,7 +483,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         np.ndarray
             Mean coefficient per draw, shape (n_resamples,).
         """
-        from ..agreement_functions.rater_combinations import (
+        from .rater_combinations import (
             mean_over_same_subsets,
             estimate_pairs,
         )

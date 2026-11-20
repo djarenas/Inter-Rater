@@ -899,7 +899,7 @@ class TestMeanUsesTheSamePairs:
         return np.array(expected)
 
     def test_correlated_draw_that_loses_a_pair_fails(self):
-        from interrater.analyzers.agreement_functions.rater_combinations import estimate_pairs
+        from interrater.analyzers.permutation_analysis.rater_combinations import estimate_pairs
 
         analysis = PairwisePermutationAnalysis(self._ratings(), self._config("correlated"))
         result = analysis.run()
@@ -950,7 +950,7 @@ class TestMeanUsesTheSamePairs:
         assert np.isfinite(np.delete(jackknife, 1)).all()
 
     def test_subsets_follow_the_same_rule(self):
-        from interrater.analyzers.agreement_functions.rater_combinations import estimate_subsets
+        from interrater.analyzers.permutation_analysis.rater_combinations import estimate_subsets
 
         analysis = SubsetPermutationAnalysis(
             self._ratings(), self._config("correlated", SubsetPermutationConfig, subset_k=2)

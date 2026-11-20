@@ -45,12 +45,14 @@ def within_rater_shuffle(
     """
     Shuffle each rater's answers across the subjects that rater rated.
 
-    For each rater (column), I randomly reassign their answers among the
+    For each rater (column), randomly reassigns their answers among the
     subjects they rated, independently for each rater. This preserves each
-    rater's marginal distribution -- how often they use each category -- but
-    breaks the subject-rater pairing. Cells the rater was not shown stay
-    empty, so each rater keeps their workload. Called column_shuffle before
-    2.1.0.
+    rater's marginal distribution (how often they use each category), while
+    still breaking the subject-rater pairing. 
+    
+    Important note: Cells the rater did not rate stay empty -> each 
+    rater keeps their workload and hypotheses are not tested on made-up
+    distributions of rated subjects.
 
     **Null hypothesis tested:** "Raters agree no more than expected given
     their individual category-usage biases." This is the strongest test
@@ -150,7 +152,7 @@ def within_subject_shuffle(
     """
     Shuffle category assignments within each subject's row.
 
-    For each subject (row), I randomly permute the answers among the raters
+    For each subject (row), randomly permute the answers among the raters
     who rated it. This preserves the number of raters per subject and the
     count of each category within that subject, but breaks the association
     between rater identity and category choice. Cells not rated stay empty:
@@ -245,7 +247,7 @@ def pool_and_redistribute(
     """
     Pool all ratings and redistribute them randomly into the rated cells.
 
-    I collect all non-missing ratings into a single pool, shuffle them, and
+    Collects all non-missing ratings into a single pool, shuffle them, and
     deal them back out only into cells that were rated. No answer lands in a
     cell that was not rated, so every rater keeps their workload and every
     subject its number of ratings. Beyond that, this preserves only the

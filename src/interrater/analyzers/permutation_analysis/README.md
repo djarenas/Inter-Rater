@@ -24,6 +24,27 @@ is computed with them, and the result records them (`weights_type`,
 `weight_matrix`).
 
 
+## rater_combinations.py
+
+The helpers both analyses use to enumerate subsets and run a coefficient
+on each. The coefficient is an ``Estimator = Callable[[EstimatorInput], float]``.
+
+- ``rater_subsets(n_raters, size)``: every combination, as sorted index tuples.
+- ``estimate_subsets(data, estimator, size)``, ``estimate_pairs(data, estimator)``:
+  the estimator on each.
+- ``subset_problem(present, names)``: the one rule for when a subset has no
+  coefficient: fewer than two subjects rated by at least two of its raters,
+  or one of its raters rated none of those. ``estimate_subset`` applies it
+  (NaN), and every subset, bootstrap draw and jackknife value goes through it.
+- ``subjects_per_subset(data, size)``: the subjects each subset's value was
+  computed on.
+- ``mean_over_subsets(values)``: the mean, skipping NaN.
+  ``mean_over_same_subsets(values, subsets)``: the mean over exactly the
+  subsets defined at the point estimate, NaN if any is undefined in a draw.
+- ``GUARD_MAX_SUBSETS`` (in ``contracts``, 10,000) caps how many subsets one
+  call may compute.
+
+
 ## Three computations
 
 ### A: observed values (always, no bootstrap)
@@ -76,7 +97,7 @@ contain its own point.
 #### When a pair or subset has no number
 
 One rule, written once, in `subset_problem` in
-`agreement_functions/rater_combinations.py`. A pair or subset has no
+`permutation_analysis/rater_combinations.py`. A pair or subset has no
 coefficient when:
 
 - fewer than two of its subjects are usable (rated by at least two of its

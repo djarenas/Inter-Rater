@@ -36,14 +36,6 @@ from .krippendorff import (
     observed_disagreement,
     pairable_ratings,
 )
-from .rater_combinations import (
-    mean_over_same_subsets,
-    mean_over_subsets,
-    estimate_pairs,
-    estimate_subsets,
-    rater_subsets,
-    subjects_per_subset,
-)
 
 __all__ = [
     "observed_agreement",
@@ -65,12 +57,6 @@ __all__ = [
     "chance_conger",
     "cohen_kappa",
     "conger_kappa",
-    "rater_subsets",
-    "subjects_per_subset",
-    "estimate_subsets",
-    "estimate_pairs",
-    "mean_over_subsets",
-    "mean_over_same_subsets",
     "pairable_ratings",
     "observed_disagreement",
     "expected_disagreement",

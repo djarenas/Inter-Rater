@@ -10,15 +10,13 @@ The estimator is any coefficient function, since every one takes an
 ``EstimatorInput``. Analyzers pass the function itself, not a lambda,
 because these run inside resampling loops.
 
-**Each subset is computed on fewer subjects.** A subject left with fewer
-than two ratings in the subset drops out, and on sparse data how many
-varies by subset. In SR1 main (1,617 subjects, nearly all rated by two of
+**Each subset may be computed on fewer subjects.** Within a subset, a subject
+left with fewer than two ratings in the subset drops out,
+and on sparse data how many varies by subset. In SR1 main (1,617 subjects, nearly all rated by two of
 the four reviewers), removing one rater leaves 650 to 861 subjects with a
 single rating, depending on which rater. A difference between two subsets
 can therefore reflect how much data each kept rather than how the raters
-agree.
-
-That is why ``subjects_per_subset`` exists: it gives each subset's subject
+agree. This is the purpose of ``subjects_per_subset``: it gives each subset's subject
 count, keyed like ``estimate_subsets``, so an analyzer can report the two
 side by side.
 """
@@ -46,7 +44,7 @@ def rater_subsets(n_raters: int, size: int) -> list[tuple[int, ...]]:
     """
     Every combination of ``size`` rater columns, as sorted tuples of indices.
 
-    Indices are used instead of names. Code that render the result objects
+    Indices are used instead of names. Code that renders the result objects
     can use semantics to get names.
     
     Combinations, not permutations. Reporting (0, 1) and (1, 0) separately would 

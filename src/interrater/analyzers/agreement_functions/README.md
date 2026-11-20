@@ -7,7 +7,6 @@ Coefficient arithmetic. They should only be called by the analyzers, and not man
 | ``group_agreement`` | Fleiss, Scott, Gwet's AC1, Brennan-Prediger, percent agreement | ``EstimatorInput`` |
 | ``krippendorff`` | Krippendorff's alpha | ``EstimatorInput`` |
 | ``individual_marginals`` | Cohen, Conger, Light, kappa_max | ``EstimatorInput`` |
-| ``rater_combinations`` | a coefficient over subsets of the raters | ``EstimatorInput`` |
 
 
 ## Contract
@@ -106,26 +105,6 @@ Sum_j min(*p<sub>aj</sub>*, *p<sub>bj</sub>*) (Cohen 1960).
 a transportation problem, solved as a linear program by
 ``max_observed_agreement``. Defined for Cohen's kappa and each pair in
 Light's, not for Conger's at three or more raters.
-
-
-## rater_combinations
-
-The coefficient is an ``Estimator = Callable[[EstimatorInput], float]``.
-
-- ``rater_subsets(n_raters, size)``: every combination, as sorted index tuples.
-- ``estimate_subsets(data, estimator, size)``, ``estimate_pairs(data, estimator)``:
-  the estimator on each.
-- ``subset_problem(present, names)``: the one rule for when a subset has no
-  coefficient: fewer than two subjects rated by at least two of its raters,
-  or one of its raters rated none of those. ``estimate_subset`` applies it
-  (NaN), and every subset, bootstrap draw and jackknife value goes through it.
-- ``subjects_per_subset(data, size)``: the subjects each subset's value was
-  computed on.
-- ``mean_over_subsets(values)``: the mean, skipping NaN.
-  ``mean_over_same_subsets(values, subsets)``: the mean over exactly the
-  subsets defined at the point estimate, NaN if any is undefined in a draw.
-- ``GUARD_MAX_SUBSETS`` (in ``contracts``, 10,000) caps how many subsets one
-  call may compute.
 
 
 ## Validation
