@@ -37,13 +37,11 @@ from .krippendorff import (
     pairable_ratings,
 )
 from .rater_combinations import (
-    leave_one_rater_out,
     mean_over_same_subsets,
     mean_over_subsets,
-    over_pairs,
-    over_subsets,
+    estimate_pairs,
+    estimate_subsets,
     rater_subsets,
-    subjects_per_leave_one_out,
     subjects_per_subset,
 )
 
@@ -69,10 +67,8 @@ __all__ = [
     "conger_kappa",
     "rater_subsets",
     "subjects_per_subset",
-    "over_subsets",
-    "over_pairs",
-    "leave_one_rater_out",
-    "subjects_per_leave_one_out",
+    "estimate_subsets",
+    "estimate_pairs",
     "mean_over_subsets",
     "mean_over_same_subsets",
     "pairable_ratings",

@@ -62,16 +62,14 @@ from interrater.analyzers.agreement_functions.krippendorff import (
 
 # -- rater_combinations ----------------------------------------------------- #
 from interrater.analyzers.agreement_functions.rater_combinations import (
-    estimate_unit,
-    leave_one_rater_out,
+    estimate_subset,
     mean_over_same_subsets,
     mean_over_subsets,
-    over_pairs,
-    over_subsets,
+    estimate_pairs,
+    estimate_subsets,
     rater_subsets,
-    subjects_per_leave_one_out,
     subjects_per_subset,
-    unit_problem,
+    subset_problem,
 )
 
 
@@ -733,19 +731,6 @@ class TestSubjectsPerSubset:
         assert result == {(0, 1): 1}
 
 
-class TestSubjectsPerLeaveOneOut:
-    """I test subjects_per_leave_one_out: keyed by dropped rater."""
-
-    def test_complete_data(self):
-        result = subjects_per_leave_one_out(THREE_RATER_INPUT)
-        assert result == {0: 4, 1: 4, 2: 4}
-
-    def test_sparse_data(self):
-        # SPARSE_INPUT: 2 raters. Dropping either leaves 1 rater per subject.
-        # No subject has >= 2 ratings from 1 rater -- 0 each.
-        result = subjects_per_leave_one_out(SPARSE_INPUT)
-        assert result == {0: 0, 1: 0}
-
 
 # -- Test estimator for rater_combinations --------------------------------- #
 
@@ -756,33 +741,33 @@ def _po_estimator(data: EstimatorInput) -> float:
 
 
 class TestOverPairs:
-    """I test over_pairs: run an estimator on every rater pair."""
+    """I test estimate_pairs: run an estimator on every rater pair."""
 
     def test_three_rater_po(self):
         # Raters (0,1): Po=3/4. (0,2): Po=3/4. (1,2): Po=1/2.
-        result = over_pairs(THREE_RATER_INPUT, _po_estimator)
+        result = estimate_pairs(THREE_RATER_INPUT, _po_estimator)
         assert abs(result[(0, 1)] - 3 / 4) < TOL
         assert abs(result[(0, 2)] - 3 / 4) < TOL
         assert abs(result[(1, 2)] - 1 / 2) < TOL
 
     def test_result_keys_match_subsets(self):
-        result = over_pairs(THREE_RATER_INPUT, _po_estimator)
+        result = estimate_pairs(THREE_RATER_INPUT, _po_estimator)
         expected_keys = {(0, 1), (0, 2), (1, 2)}
         assert set(result.keys()) == expected_keys
 
 
 class TestOverSubsets:
-    """I test over_subsets: generalisation of over_pairs to any subset size."""
+    """I test estimate_subsets: generalisation of estimate_pairs to any subset size."""
 
     def test_size_two_equals_over_pairs(self):
-        pairs = over_pairs(THREE_RATER_INPUT, _po_estimator)
-        subsets = over_subsets(THREE_RATER_INPUT, _po_estimator, 2)
+        pairs = estimate_pairs(THREE_RATER_INPUT, _po_estimator)
+        subsets = estimate_subsets(THREE_RATER_INPUT, _po_estimator, 2)
         assert pairs.keys() == subsets.keys()
         for key in pairs:
             assert abs(pairs[key] - subsets[key]) < TOL
 
     def test_full_panel(self):
-        result = over_subsets(THREE_RATER_INPUT, _po_estimator, 3)
+        result = estimate_subsets(THREE_RATER_INPUT, _po_estimator, 3)
         # One subset: all 3 raters. Po = 2/3.
         assert len(result) == 1
         assert abs(result[(0, 1, 2)] - 2 / 3) < TOL
@@ -806,7 +791,7 @@ class TestUnitProblem:
 
     def _problem(self, unit):
         present = self.INDEX[:, list(unit)] != EMPTY
-        return unit_problem(present, ["abcd"[i] for i in unit])
+        return subset_problem(present, ["abcd"[i] for i in unit])
 
     def test_pair_with_subjects_has_none(self):
         assert self._problem((0, 1)) is None
@@ -820,7 +805,7 @@ class TestUnitProblem:
     def test_subset_whose_raters_have_too_few_subjects_together(self):
         """Each subject has one rating among x, y, z: none is usable."""
         present = np.array([[True, False, False], [False, True, False]])
-        assert unit_problem(present, ["x", "y", "z"]) == (
+        assert subset_problem(present, ["x", "y", "z"]) == (
             "raters x, y, z: 0 subjects rated by at least two of them"
         )
 
@@ -832,48 +817,26 @@ class TestUnitProblem:
         """x and y share both subjects; z rated neither. The subset is
         really the pair x, y, so it gets no number of its own."""
         present = np.array([[True, True, False], [True, True, False]])
-        assert unit_problem(present, ["x", "y", "z"]) == (
+        assert subset_problem(present, ["x", "y", "z"]) == (
             "rater z rated none of the 2 subjects the others share"
         )
 
     def test_estimate_unit_is_nan_when_there_is_a_problem(self):
         data = EstimatorInput(category_index=self.INDEX[:, [0, 2]], n_categories=2)
-        assert math.isnan(estimate_unit(data, _po_estimator))
+        assert math.isnan(estimate_subset(data, _po_estimator))
 
     def test_estimate_unit_runs_the_estimator_otherwise(self):
         data = EstimatorInput(category_index=self.INDEX[:, [0, 1]], n_categories=2)
-        assert estimate_unit(data, _po_estimator) == _po_estimator(data)
+        assert estimate_subset(data, _po_estimator) == _po_estimator(data)
 
     def test_over_subsets_follows_the_rule(self):
         """(0, 2) shares one subject: NaN, though Po on it would be 1."""
         data = EstimatorInput(category_index=self.INDEX, n_categories=2)
-        values = over_pairs(data, _po_estimator)
+        values = estimate_pairs(data, _po_estimator)
         assert math.isnan(values[(0, 2)])
         assert math.isnan(values[(2, 3)])
         assert values[(0, 1)] == pytest.approx(2 / 4, abs=TOL)
 
-
-class TestLeaveOneRaterOut:
-    """I test leave_one_rater_out: keyed by the dropped rater."""
-
-    def test_three_rater_po(self):
-        result = leave_one_rater_out(THREE_RATER_INPUT, _po_estimator)
-        # Drop 0 -- raters 1,2 -- Po = 1/2.
-        assert abs(result[0] - 1 / 2) < TOL
-        # Drop 1 -- raters 0,2 -- Po = 3/4.
-        assert abs(result[1] - 3 / 4) < TOL
-        # Drop 2 -- raters 0,1 -- Po = 3/4.
-        assert abs(result[2] - 3 / 4) < TOL
-
-    def test_result_keys_are_rater_indices(self):
-        result = leave_one_rater_out(THREE_RATER_INPUT, _po_estimator)
-        assert set(result.keys()) == {0, 1, 2}
-
-    def test_two_raters_raises(self):
-        # With 2 raters, leave-one-out needs subsets of size 1,
-        # which is below MIN_RATERS -- ValueError.
-        with pytest.raises(ValueError, match="at least"):
-            leave_one_rater_out(TWO_RATER_INPUT, _po_estimator)
 
 
 class TestMeanOverSubsets:
@@ -890,11 +853,6 @@ class TestMeanOverSubsets:
     def test_all_nan_returns_nan(self):
         values = {(0, 1): float("nan"), (0, 2): float("nan")}
         assert math.isnan(mean_over_subsets(values))
-
-    def test_leave_one_out_mean(self):
-        result = leave_one_rater_out(THREE_RATER_INPUT, _po_estimator)
-        # mean(1/2, 3/4, 3/4) = 2/3.
-        assert abs(mean_over_subsets(result) - 2 / 3) < TOL
 
 
 class TestMeanOverSameSubsets:

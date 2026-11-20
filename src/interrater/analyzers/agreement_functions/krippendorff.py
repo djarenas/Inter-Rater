@@ -1,43 +1,29 @@
 """
 Krippendorff's alpha, which is built the other way up.
 
-Every coefficient in the neighbouring modules measures agreement and corrects
-it for chance:
-
-    coefficient = (Po - Pe) / (1 - Pe)
-
 Alpha measures *disagreement* and compares it with the disagreement chance
 would produce:
 
     alpha = 1 - Do / De
 
-Those are not the same expression rearranged. Two differences make them
-genuinely separate, which is why alpha lives in its own module rather than
-being a fifth entry in ``group_agreement``.
+- Do, observed disagreement: the disagreeing pairs of ratings within each
+  subject rated at least twice, each subject divided by n_i - 1, summed and
+  divided by n:
 
-**The unit is a pair of ratings, not a subject.** Alpha pools every pairable
-pair of ratings across the whole dataset and asks how often those pairs
-disagree. Fleiss computes agreement within each subject and then averages over
-subjects, weighting every subject equally. On balanced data the two routes
-almost coincide; on unbalanced data they separate, because a subject rated by
-six raters offers fifteen pairs and one rated by two offers a single pair.
+      Do = (1/n) Sum_i Sum_{a,b} d_ab c_ia c_ib / (n_i - 1)
 
-**Missing data is handled rather than excluded.** There is no assumption that
-every subject was rated the same number of times, and none that raters were
-assigned by any particular design. A subject rated once contributes no pairs
-and so contributes nothing, but it is not dropped by a rule. It simply has
-nothing to offer. That is why alpha is the coefficient usually reached for when
-the data is ragged.
+- De, expected disagreement: how often two ratings drawn without
+  replacement from all the pairable ratings would differ:
 
-**The chance term is a sampling correction, not a model of rater behaviour.**
-Fleiss asks what agreement would look like if raters assigned at the observed
-rates and ignored the subject. Alpha asks what disagreement would look like if
-the same multiset of ratings were shuffled across subjects at random, which
-gives a finite-sample correction with an ``n - 1`` in it. On small datasets
-that correction is visible; on large ones it vanishes.
+      De = Sum_{a,b} d_ab n_a n_b / [ n (n - 1) ]
 
-Expect alpha and Fleiss' kappa to be close but not equal, and to separate as
-the data gets thinner or more unbalanced. 
+  c_ia: ratings of subject i in category a. n_a: pairable ratings in
+  category a. n: pairable ratings (``pairable_ratings``). d_ab: the cost of
+  confusing a with b, 1 - W_ab, zero on the diagonal.
+
+Two differences from the kappa family. Pairs are pooled across subjects, so
+a subject with more ratings weighs more. And De draws without replacement,
+which is where the n - 1 comes from.
 
 References
 - Krippendorff2004: Krippendorff, Klaus. *Content Analysis: An Introduction to
@@ -169,8 +155,7 @@ def krippendorff_alpha(data: EstimatorInput) -> float:
 
     Krippendorff (2004), chapter 11. Reaches 1 when every pair of ratings of a
     subject agrees, 0 when disagreement is what shuffling would have produced,
-    and goes negative when raters disagree more than chance -- which for alpha
-    means systematically, not merely badly.
+    and goes negative when raters disagree more than chance.
 
     Counts ``data`` once (``data.nij``, K wide) and reads ``data.weights``.
     Unlike the AC1 family it has a published weighted form:
@@ -178,16 +163,9 @@ def krippendorff_alpha(data: EstimatorInput) -> float:
     both terms identically. Identity weights give the nominal case.
 
     Returns NaN when expected disagreement is zero, which happens when every
-    pairable rating went to one category. That is not a failure to handle: if
-    shuffling the data could not have produced any disagreement, there is
-    nothing for the observed disagreement to be compared against. Bootstrap
+    pairable rating went to one category. Bootstrap
     draws reach this state on heavily skewed data, which is why the resampler
     counts NaNs rather than treating them as zeros.
-
-    **Expect a number close to Fleiss' kappa but not equal to it**, and expect
-    the gap to widen as the data thins or its rater counts vary. The two use
-    different units and different chance models; neither approximates the
-    other.
     """
     nij = data.nij
     do = observed_disagreement(nij, data.weights)

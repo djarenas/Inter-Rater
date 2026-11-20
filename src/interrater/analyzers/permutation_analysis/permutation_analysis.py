@@ -411,7 +411,7 @@ class PermutationAnalysis:
         from ...contracts import EMPTY
         from ...intermediates.not_computed import NotComputed
         from ...semantics.ratings_semantics import RatingsSemantics
-        from ..agreement_functions.rater_combinations import unit_problem
+        from ..agreement_functions.rater_combinations import subset_problem
 
         semantics = self.ratings.semantics
         names = [str(semantics.raters[i]) for i in unit]
@@ -420,7 +420,7 @@ class PermutationAnalysis:
         rows = np.flatnonzero(present.sum(axis=1) >= 2)
 
         # The same rule that made this unit's value NaN
-        reason = unit_problem(present, names)
+        reason = subset_problem(present, names)
         if reason is not None:
             if not np.isnan(point):
                 raise ValueError(
@@ -548,7 +548,7 @@ class PermutationAnalysis:
         Map coefficient name to the estimator callable.
 
         The estimator is a pure function (EstimatorInput -> float) used
-        by all three computations: A (observed values via over_pairs),
+        by all three computations: A (observed values via estimate_pairs),
         B (per-pair bootstrap loop in the child), and C (correlated
         global resample loop or independent sampling from B's output).
 

@@ -1,10 +1,10 @@
 """
 Coefficients that give each rater their own distribution.
 
-The functions in this file use individual marginals. Every function here reads which rater said what. This separates
-these functions from those in ``group_agreement``: those treat the raters as
-interchangeable and read only counts, while these ask how often a specific rater
-chose each category. 
+The functions in this file use individual marginals. Every function here 
+reads which rater said what. This separates these functions from those in 
+``group_agreement``, which treat the raters as
+interchangeable and read only counts.
 
 The distinction is one modelling choice appearing twice:
 
@@ -12,22 +12,23 @@ The distinction is one modelling choice appearing twice:
     two raters      Scott's pi            Cohen's kappa
     many raters     Fleiss' kappa         Conger's kappa
 
-Pooled treats the raters as one distribution, so a rater who says "include"
-twice as often as another is counted as disagreeing. Individual lets each rater
-keep their own rate and removes the difference first, treating a systematic
-gap in threshold as a known feature of the raters rather than as disagreement.
+Pooled and individual coefficients share Po; they differ only in Pe. 
+Pooled (Scott, Fleiss) computes chance from one category distribution 
+shared by all raters. Individual (Cohen, Conger) computes it from each rater's own. 
+When raters use a category at different rates, the individual Pe is lower 
+(for two raters, by Sum_j (p_aj - p_bj)^2 / 4), 
+so the coefficient is higher. When the rates match, both chance terms give
+the same value. This package takes the stand that neither is more correct and that different coefficients
+may be more appropriate in different situations.
 
-Neither is more correct. The gap between them is informative in its own right:
-zero when two raters use the categories at the same rate, and growing as their
-rates diverge, so it measures how differently two raters draw the line as
-distinct from how erratic they are. Those are different problems with different
-remedies, and a single coefficient cannot tell them apart.
+Like every coefficient function, these take an ``EstimatorInput``; unlike
+the group functions, they read the array column by column, because which
+rater said what matters here.
 
-These take an ``EstimatorInput`` rather than a projection of it, because the
-array is what they read and K and the weights travel with it. 
-
-Nothing here validates, and that is the contract. Cohen's kappa assumes it was
-handed exactly two rater columns and will return a number for any other shape;
+Nothing in this module validates. The contracts are that the analyzers perform
+the validation so that these functions do not have to redo it. This is relevant
+for bootstrapping and keeping the speed manageable. Therefore, the function here for Cohen's kappa 
+assumes it was handed exactly two rater columns and will return a number for any other shape;
 the analyser that calls it is responsible for the extraction. That is a mistake
 only a developer of this package can make, not a user, because nothing in this
 module is exported at the package top level.
@@ -40,9 +41,6 @@ References
   70.4 (1968): 213-220.
 - Conger1980: Conger, Anthony J. "Integration and generalization of kappas for
   multiple raters." Psychological Bulletin 88.2 (1980): 322-328.
-- Fleiss1969: Fleiss, Joseph L., Jacob Cohen, and Brian S. Everitt. "Large
-  sample standard errors of kappa and weighted kappa." Psychological Bulletin
-  72.5 (1969): 323-327.
 """
 
 from __future__ import annotations
@@ -66,7 +64,6 @@ def rater_marginals(data: EstimatorInput, rows: np.ndarray | None = None) -> np.
     Calculates p_rj.
     p_rj: how often each rater chose each category, as a proportion.
 
-
     p_rj is a numpy array of size n_raters by K. Row r is rater r's own distribution
     over the categories, summing to one across the categories they actually
     used.
@@ -78,8 +75,7 @@ def rater_marginals(data: EstimatorInput, rows: np.ndarray | None = None) -> np.
     shared subjects and lenient elsewhere would otherwise bring the wrong
     distribution to the comparison.
 
-    Empty cells contribute to neither numerator nor denominator, so this says
-    how a rater used the categories, not how much they covered.
+    Empty cells contribute to neither numerator nor denominator.
 
     Length K in every row, taken from the input rather than from the data, so a
     category this rater never chose is a zero rather than an absence.
@@ -127,9 +123,8 @@ def chance_cohen(
     between the two coefficients.
 
     They coincide exactly when the two raters use the categories at the same
-    rate, and diverge as those rates separate. Cohen's is the one that treats a
-    rater who is systematically stricter as a known feature to remove rather
-    than as disagreement to measure.
+    rate, and diverge as those rates separate. Cohen's chance term is the
+    lower of the two, so a systematic difference in rates costs it less.
 
     With weights the same model applies, but near misses earn partial credit
     too, so the term becomes p_a . W . p_b. Identity weights reduce it to the
@@ -146,14 +141,9 @@ def chance_conger(marginals: np.ndarray, weights: Weights | None = None) -> floa
 
     Conger's kappa is Fleiss' with individual marginals. The chance term takes
     the mean rate at which the panel used each category, as Fleiss does, and
-    then subtracts the variance of those rates across raters -- which is what
-    removes the effect of raters having different thresholds.
+    then subtracts the variance of those rates across raters.
 
         Pe = Sum_j p_bar_j^2  -  Sum_j var_r(p_rj) / n_raters
-
-    When every rater uses the categories identically the variance is zero and
-    this reduces to Fleiss' term exactly, which is why the two coefficients
-    agree on a panel with matched marginals and separate as the raters diverge.
 
     The variance uses the sample form, dividing by n_raters - 1, following
     Conger. With a single rater there is nothing to vary and the correction is
@@ -165,10 +155,7 @@ def chance_conger(marginals: np.ndarray, weights: Weights | None = None) -> floa
     """
     if weights is not None and not weights.is_identity:
         raise NotImplementedError(
-            "[chance_conger] weighted Conger's kappa is not implemented. Its "
-            "weighted form has a definition of its own, and applying a weight "
-            "matrix to the observed agreement while this term ignored it "
-            "would give a number that is neither."
+            "[chance_conger] weighted Conger's kappa is not implemented in the package."
         )
 
     n_raters = marginals.shape[0]
@@ -272,7 +259,7 @@ def cohen_kappa(data: EstimatorInput) -> float:
     term, not how agreement is measured. Two raters who use the categories
     identically give the same answer under both.
 
-    Returns NaN when the pair shares no subjects, which is legitimate rather
+    Returns NaN when the pair shares fewer than two subjects, which is legitimate rather
     than exceptional: disjoint assignment is a real design, just one that
     cannot produce a pairwise coefficient.
     """
@@ -314,12 +301,6 @@ def conger_kappa(data: EstimatorInput) -> float:
     the same thing the Cohen-minus-Scott gap measures for a pair: how much the
     raters differ in where they draw the line, as opposed to how erratic they
     are.
-
-    Conger motivated the coefficient as an approximation to the average of all
-    pairwise Cohen's kappas. It is not that average, and the two can be
-    computed separately and compared -- see ``rater_combinations`` -- so if
-    they diverge the approximation is not holding for that panel, which is
-    itself worth knowing.
 
     **Assumes every rater rated every subject, and does not check**, as
     nothing in this module does. Conger (1980) defines the coefficient for
@@ -364,16 +345,15 @@ def light_kappa(data: EstimatorInput) -> float:
     This keeps rater identity twice: once through Cohen's kappa (each pair
     uses its own marginals) and once through the averaging (every pair counts
     equally). Conger's kappa approximates this mean but is not identical to
-    it, and comparing the two tells you whether the approximation holds for
-    your panel.
-
+    it.
+    
     **Assumes every rater rated every subject, and does not check**, as
     nothing in this module does. Light (1971) defines the coefficient for that
     design; with missing ratings, pairs would be averaged over different
     subjects. The analysers refuse incomplete data before calling this.
 
     A pair whose kappa is undefined (every rating in one category, or fewer
-    than two subjects) is NaN from ``cohen_kappa`` and left out of the mean.
+    than two subjects) is NaN and left out of the mean.
     If every pair is NaN, the mean is NaN -- returned, not warned about, since
     a bootstrap can meet it in many draws.
 

@@ -347,7 +347,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         Computation A: observed values on actual data.
 
-        Calls ``over_subsets`` for per-subset coefficients,
+        Calls ``estimate_subsets`` for per-subset coefficients,
         ``subjects_per_subset`` for per-subset subject counts, and
         ``mean_over_subsets`` for the NaN-skipping mean across subsets.
 
@@ -363,11 +363,11 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_subsets,
-            over_subsets,
+            estimate_subsets,
             subjects_per_subset,
         )
 
-        subset_values = over_subsets(
+        subset_values = estimate_subsets(
             self.estimator_input, self.estimator, k
         )
         sps = subjects_per_subset(
@@ -402,7 +402,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         admits unbalanced subsets rather than demanding a complete
         rectangle. One rule, applied at every k.
 
-        That pool is also what Computation A measures: ``over_subsets``
+        That pool is also what Computation A measures: ``estimate_subsets``
         hands the whole array to the estimator and lets it handle the gaps.
         The bootstrap must resample that same pool, because an interval has
         to be around the thing the point estimate measured. Draw from the
@@ -449,8 +449,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         keep_draws = self.config.keep_draws
 
         # Every draw and jackknife value obeys the one rule for whether a
-        # subset has a coefficient (unit_problem)
-        from ..agreement_functions.rater_combinations import estimate_unit
+        # subset has a coefficient (subset_problem)
+        from ..agreement_functions.rater_combinations import estimate_subset
 
         # Spawn one child seed per subset for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
@@ -497,7 +497,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 resampled = rng.choice(
                     measurable, size=measurable.size, replace=True
                 )
-                draws[b] = estimate_unit(
+                draws[b] = estimate_subset(
                     subset_data.take_subjects(resampled), self.estimator
                 )
 
@@ -514,7 +514,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             # deviation representing no influence at all.
             def _jackknife(sd=subset_data, sh=measurable) -> np.ndarray:
                 return np.array([
-                    estimate_unit(
+                    estimate_subset(
                         sd.take_subjects(np.delete(sh, i)),
                         self.estimator,
                     )
@@ -627,7 +627,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Parameters
         ----------
         k : int
-            Subset size, passed through to over_subsets.
+            Subset size, passed through to estimate_subsets.
         defined_subsets : list
             The subsets defined at the point estimate; see
             ``mean_over_same_subsets``.
@@ -640,7 +640,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_same_subsets,
-            over_subsets,
+            estimate_subsets,
         )
 
         n_subjects = self.estimator_input.n_subjects
@@ -648,7 +648,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         return np.array([
             mean_over_same_subsets(
-                over_subsets(
+                estimate_subsets(
                     self.estimator_input.take_subjects(
                         np.delete(all_rows, i)
                     ),
@@ -694,7 +694,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_same_subsets,
-            over_subsets,
+            estimate_subsets,
         )
 
         n_subjects = self.estimator_input.n_subjects
@@ -707,7 +707,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
             resampled_data = self.estimator_input.take_subjects(
                 resampled_rows
             )
-            sub_values = over_subsets(
+            sub_values = estimate_subsets(
                 resampled_data, self.estimator, k
             )
             mean_draws[b] = mean_over_same_subsets(sub_values, defined_subsets)

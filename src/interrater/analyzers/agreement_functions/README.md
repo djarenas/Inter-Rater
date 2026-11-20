@@ -113,16 +113,14 @@ Light's, not for Conger's at three or more raters.
 The coefficient is an ``Estimator = Callable[[EstimatorInput], float]``.
 
 - ``rater_subsets(n_raters, size)``: every combination, as sorted index tuples.
-- ``over_subsets(data, estimator, size)``, ``over_pairs(data, estimator)``:
+- ``estimate_subsets(data, estimator, size)``, ``estimate_pairs(data, estimator)``:
   the estimator on each.
-- ``leave_one_rater_out(data, estimator)``: the estimator with each rater
-  removed, keyed by the rater removed.
-- ``unit_problem(present, names)``: the one rule for when a subset has no
+- ``subset_problem(present, names)``: the one rule for when a subset has no
   coefficient: fewer than two subjects rated by at least two of its raters,
-  or one of its raters rated none of those. ``estimate_unit`` applies it
+  or one of its raters rated none of those. ``estimate_subset`` applies it
   (NaN), and every subset, bootstrap draw and jackknife value goes through it.
-- ``subjects_per_subset``, ``subjects_per_leave_one_out``: the subjects each
-  value was computed on.
+- ``subjects_per_subset(data, size)``: the subjects each subset's value was
+  computed on.
 - ``mean_over_subsets(values)``: the mean, skipping NaN.
   ``mean_over_same_subsets(values, subsets)``: the mean over exactly the
   subsets defined at the point estimate, NaN if any is undefined in a draw.

@@ -899,14 +899,14 @@ class TestMeanUsesTheSamePairs:
         return np.array(expected)
 
     def test_correlated_draw_that_loses_a_pair_fails(self):
-        from interrater.analyzers.agreement_functions.rater_combinations import over_pairs
+        from interrater.analyzers.agreement_functions.rater_combinations import estimate_pairs
 
         analysis = PairwisePermutationAnalysis(self._ratings(), self._config("correlated"))
         result = analysis.run()
         defined = sorted(p for p, v in _points(result.pair_results).items() if not np.isnan(v))
         assert len(defined) == 3
         expected = self._expected_correlated(
-            analysis, defined, lambda d: over_pairs(d, analysis.estimator)
+            analysis, defined, lambda d: estimate_pairs(d, analysis.estimator)
         )
         draws = result.bootstrap_distribution_of_mean
         np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
@@ -950,7 +950,7 @@ class TestMeanUsesTheSamePairs:
         assert np.isfinite(np.delete(jackknife, 1)).all()
 
     def test_subsets_follow_the_same_rule(self):
-        from interrater.analyzers.agreement_functions.rater_combinations import over_subsets
+        from interrater.analyzers.agreement_functions.rater_combinations import estimate_subsets
 
         analysis = SubsetPermutationAnalysis(
             self._ratings(), self._config("correlated", SubsetPermutationConfig, subset_k=2)
@@ -958,7 +958,7 @@ class TestMeanUsesTheSamePairs:
         result = analysis.run()[2]
         defined = sorted(s for s, v in _points(result.subset_results).items() if not np.isnan(v))
         expected = self._expected_correlated(
-            analysis, defined, lambda d: over_subsets(d, analysis.estimator, 2)
+            analysis, defined, lambda d: estimate_subsets(d, analysis.estimator, 2)
         )
         draws = result.bootstrap_distribution_of_mean
         np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))

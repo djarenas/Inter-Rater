@@ -30,7 +30,7 @@ is computed with them, and the result records them (`weights_type`,
 
 The estimator on each pair, on the actual data:
 
-- `over_pairs(estimator_input, estimator)`: each pair's value (NaN for a
+- `estimate_pairs(estimator_input, estimator)`: each pair's value (NaN for a
   pair with no coefficient; see *When a pair or subset has no number*)
 - `subjects_per_subset(estimator_input, 2)`: each pair's subject count,
   checked against the subjects its result was built on
@@ -68,14 +68,14 @@ every k:
 
 **The bootstrap resamples that same pool**, so the interval is around what
 the point estimate measured. Computation A reaches the same subjects another
-way (`over_subsets` passes the whole array and the estimator skips the gaps).
+way (`estimate_subsets` passes the whole array and the estimator skips the gaps).
 Resampling the complete cases of a 3-rater subset instead changes the
 estimand; on partially crossed data it shows as an interval that does not
 contain its own point.
 
 #### When a pair or subset has no number
 
-One rule, written once, in `unit_problem` in
+One rule, written once, in `subset_problem` in
 `agreement_functions/rater_combinations.py`. A pair or subset has no
 coefficient when:
 
@@ -84,7 +84,7 @@ coefficient when:
 - one of its raters rated none of the usable subjects. The subset is really
   a smaller one.
 
-Every place that measures a unit goes through `estimate_unit`, which returns
+Every place that measures a unit goes through `estimate_subset`, which returns
 NaN when the rule says no: the observed value (A), every bootstrap draw and
 jackknife value (B), and every draw of the mean (C). A resample that leaves a
 rater idle fails like any other draw. The unit's result is `NotComputed` with

@@ -180,7 +180,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         """
         Computation A: observed values on actual data.
 
-        Calls ``over_pairs`` for per-pair coefficients,
+        Calls ``estimate_pairs`` for per-pair coefficients,
         ``subjects_per_subset`` for per-pair subject counts, and
         ``mean_over_subsets`` for the NaN-skipping mean across pairs.
 
@@ -191,11 +191,11 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_subsets,
-            over_pairs,
+            estimate_pairs,
             subjects_per_subset,
         )
 
-        pairwise_values = over_pairs(
+        pairwise_values = estimate_pairs(
             self.estimator_input, self.estimator
         )
         subjects_per_pair = subjects_per_subset(
@@ -253,8 +253,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         keep_draws = self.config.keep_draws
 
         # Every draw and jackknife value obeys the one rule for whether a
-        # pair has a coefficient (unit_problem)
-        from ..agreement_functions.rater_combinations import estimate_unit
+        # pair has a coefficient (subset_problem)
+        from ..agreement_functions.rater_combinations import estimate_subset
 
         # Spawn one child seed per pair for reproducibility
         ss = np.random.SeedSequence(coc.random_state)
@@ -300,7 +300,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 resampled = rng.choice(
                     shared, size=shared.size, replace=True
                 )
-                draws[b] = estimate_unit(
+                draws[b] = estimate_subset(
                     pair_data.take_subjects(resampled), self.estimator
                 )
 
@@ -316,7 +316,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             # would contribute a deviation representing no influence at all.
             def _jackknife(pd=pair_data, sh=shared) -> np.ndarray:
                 return np.array([
-                    estimate_unit(
+                    estimate_subset(
                         pd.take_subjects(np.delete(sh, i)),
                         self.estimator,
                     )
@@ -435,7 +435,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_same_subsets,
-            over_pairs,
+            estimate_pairs,
         )
 
         n_subjects = self.estimator_input.n_subjects
@@ -443,7 +443,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         return np.array([
             mean_over_same_subsets(
-                over_pairs(
+                estimate_pairs(
                     self.estimator_input.take_subjects(
                         np.delete(all_rows, i)
                     ),
@@ -485,7 +485,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         """
         from ..agreement_functions.rater_combinations import (
             mean_over_same_subsets,
-            over_pairs,
+            estimate_pairs,
         )
 
         n_subjects = self.estimator_input.n_subjects
@@ -498,7 +498,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             resampled_data = self.estimator_input.take_subjects(
                 resampled_rows
             )
-            pair_values = over_pairs(resampled_data, self.estimator)
+            pair_values = estimate_pairs(resampled_data, self.estimator)
             mean_draws[b] = mean_over_same_subsets(pair_values, defined_pairs)
 
         return mean_draws
