@@ -36,7 +36,8 @@ _ERROR_PREFIX = "[PermutationAnalysis] Error"
 
 
 _WEIGHTABLE_COEFFICIENTS = frozenset(
-    {"cohen_kappa", "fleiss_kappa", "brennan_prediger", "krippendorff_alpha"}
+    {"cohen_kappa", "fleiss_kappa", "gwet_ac1", "brennan_prediger",
+     "krippendorff_alpha"}
 )
 """Coefficients with a weighted form, matching the weightable analyzers."""
 

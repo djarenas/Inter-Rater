@@ -16,9 +16,9 @@ proportions) take that NijMatrix.
   its width.
 - Nothing here validates. The analyzer checks the data once, before; these
   functions run inside bootstrap loops.
-- Weights come from ``data.weights``. Fleiss, Brennan-Prediger and percent
-  agreement use them. Gwet's AC1 (whose weighted form is AC2) and Scott's pi
-  refuse non-identity weights.
+- Weights come from ``data.weights``. Fleiss, Gwet's AC1 (weighted, AC2),
+  Brennan-Prediger and percent agreement use them. Scott's pi refuses
+  non-identity weights.
 
 Formulas are in README.md.
 
@@ -26,7 +26,13 @@ References
 - Brennan, R. L., & Prediger, D. J. (1981). Educational and Psychological
   Measurement, 41(3), 687-699.
 - Fleiss, J. L. (1971). Psychological Bulletin, 76(5), 378-382.
+- Gwet, K. L. (2008). British Journal of Mathematical and Statistical
+  Psychology, 61, 29-48.
 - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
+- Gwet, K. L. (2016). Educational and Psychological Measurement, 76(4),
+  609-637.
+- Gwet, K. L. (2026). irrCAC: Computing the Extent of Agreement among Raters
+  with Chance-Corrected Agreement Coefficient (CAC). R package version 1.4.
 """
 
 from __future__ import annotations
@@ -36,7 +42,6 @@ import numpy as np
 from ...intermediates.estimator_parts import EstimatorInput, NijMatrix, Weights
 
 _SCOTT_ERROR_PREFIX = "[scotts_pi] Error"
-_GWET_ERROR_PREFIX = "[gwet_ac1] Error"
 
 # Shared parts -----------------------------------------------------------  #
 # These are methods shared by different kappa statistics. 
@@ -117,7 +122,13 @@ def category_proportions(nij: NijMatrix) -> np.ndarray:
     equally, so weighting Pe by rating instead would have the two halves of one
     formula disagree about what they are averaging over.
 
-    Subjects rated fewer than twice are skipped.
+    Gwet (2016, Appendix A) averages per subject too, for AC1 and Fleiss'
+    kappa with missing ratings.
+
+    Subjects rated fewer than twice are skipped. Gwet (2016, Appendix A)
+    includes them. Ratings refuses such subjects, so the two differ only in
+    subset permutation, where a subset of raters can leave a subject rated
+    once.
 
     Has one component per column of the NijMatrix, so a category nobody chose
     gets a zero, provided the matrix was built K wide. This is relevant for
@@ -162,9 +173,18 @@ def chance_fleiss(nij: NijMatrix, weights: Weights | None = None) -> float:
     return float(pj @ weights.matrix @ pj)
 
 
-def chance_gwet_ac1(nij: NijMatrix) -> float:
+def chance_gwet_ac1(nij: NijMatrix, weights: Weights | None = None) -> float:
     """
-    Pe as Gwet's AC1: the mean of p_j(1 - p_j), scaled by K - 1.
+    Pe as Gwet's AC1: the sum of p_j(1 - p_j), divided by K - 1.
+
+    Gwet (2008), Equation 38. With weights, it is multiplied by T_w / K, where
+    T_w is the sum of all the weights; this is AC2:
+
+        Pe = T_w / (K (K - 1)) * sum_j p_j (1 - p_j)
+
+    The weighted formula is the one in irrCAC 1.4 (``gwet.ac1.raw``), Gwet's
+    own package; it cites Gwet (2014), which was not consulted here. Identity
+    weights give T_w = K, which reduces it to AC1.
 
     Gwet's argument is that chance agreement happens when a rater is uncertain,
     and uncertainty is highest for categories used about half the time. A
@@ -175,14 +195,13 @@ def chance_gwet_ac1(nij: NijMatrix) -> float:
     This function is an example of why it is important that NijMatrix
     gets properly built from the analyzers with the right number of
     categories.
-
-    **Takes no weights, this package has no weighted form for it.** The
-    weighted version of AC1 is Gwet's AC2, a separate coefficient with a
-    published definition of its own.
     """
     pj = category_proportions(nij)
     k = nij.n_categories
-    return float((pj * (1.0 - pj)).sum() / (k - 1))
+    pe = (pj * (1.0 - pj)).sum() / (k - 1)
+    if weights is None or weights.is_identity:
+        return float(pe)
+    return float(weights.matrix.sum() / k * pe)
 
 
 def chance_brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> float:
@@ -274,19 +293,14 @@ def gwet_ac1(data: EstimatorInput) -> float:
     0.36 --
     and the gap is entirely the chance term.
 
-    **Unweighted only.** The weighted coefficient is Gwet's AC2, defined
-    separately and not implemented here, so non-identity weights raise
-    ValueError.
+    With weights this is Gwet's AC2: weighted Po, and the weighted chance
+    term of ``chance_gwet_ac1``. It matches irrCAC 1.4 on every weighted case
+    in ``analyses/external_validation/``.
     """
-    if data.is_weighted:
-        raise ValueError(
-            f"{_GWET_ERROR_PREFIX}: Gwet's AC1 has no weighted form here (the "
-            f"weighted coefficient is AC2). weights must be None or identity, "
-            f"got {data.weights.kind}."
-        )
     nij = data.nij
     return agreement_corrected_by_chance(
-        observed_agreement(nij), chance_gwet_ac1(nij)
+        observed_agreement(nij, data.weights),
+        chance_gwet_ac1(nij, data.weights),
     )
 
 

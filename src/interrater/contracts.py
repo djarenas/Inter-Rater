@@ -162,7 +162,6 @@ SUBJECT_BOOTSTRAP_COEFFICIENTS: frozenset[str] = frozenset([
     "krippendorff_alpha",
     "cohen_kappa",
     "conger_kappa",
-    # "gwet_ac2",  # Future: weighted form of AC1, also supports subject bootstrap
     # "percent_agreement",  # Future: needs an analyzer and config; the function exists
 ])
 """Coefficients that support subject bootstrap (resample subjects, never raters).
@@ -200,7 +199,7 @@ computed on pairs of raters. All agreement coefficients work on 2 raters:
 - Cohen's kappa (individual marginals, two raters)
 - Scott's pi (pooled marginals, two-rater group coefficient)
 - Conger's kappa (individual marginals, computed pairwise)
-- Gwet's AC1 (chance-adjusted, no-weight group coefficient)
+- Gwet's AC1 (chance-adjusted group coefficient; AC2 when weighted)
 - Fleiss' kappa (pooled marginals, group coefficient)
 - Brennan-Prediger (uniform chance, group coefficient)
 - Krippendorff's alpha (reliability coefficient, any number of raters)
@@ -214,7 +213,6 @@ SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([
     "gwet_ac1",
     "brennan_prediger",
     "krippendorff_alpha",
-    # "gwet_ac2",  # Future: weighted form of AC1, also supports subset permutation
     # "percent_agreement",  # Future: needs an analyzer and config; the function exists
 ])
 """Coefficients that support subset permutation (all k-subsets of raters).

@@ -34,6 +34,7 @@ Following Fleiss (1971):
 | *n<sub>ij</sub>* | raters who put subject *i* in category *j* |
 | *p<sub>j</sub>* | share of ratings in category *j* |
 | *W* | weight matrix, 1 on the diagonal |
+| *T<sub>w</sub>* | sum of all the weights in *W*; *K* when *W* = *I* |
 | *P<sub>o</sub>*, *P<sub>e</sub>* | observed and chance agreement |
 
 
@@ -55,10 +56,15 @@ With *W* = *I* this is Sum_j *n<sub>ij</sub>*(*n<sub>ij</sub>* - 1) / [*n<sub>i<
 | percent agreement | 0 | yes |
 | Fleiss' kappa | *p* . *W* . *p* | yes |
 | Scott's pi | Sum *p<sub>j</sub>*^2 | no, ValueError on non-identity |
-| Gwet's AC1 | Sum *p<sub>j</sub>*(1 - *p<sub>j</sub>*) / (*K* - 1) | no (the weighted form is AC2) |
+| Gwet's AC1 | Sum *p<sub>j</sub>*(1 - *p<sub>j</sub>*) / (*K* - 1), times *T<sub>w</sub>* / *K* weighted (AC2) | yes |
 | Brennan-Prediger | Sum(*W*) / *K*^2, which is 1/*K* unweighted | yes |
 
 At two raters Scott's pi equals Fleiss' kappa.
+
+AC1's Pe is Gwet (2008) Equation 38. The weighted form, AC2, is the one in
+Gwet's R package irrCAC 1.4 (``gwet.ac1.raw``), and the package matches it on
+every weighted case in ``analyses/external_validation/``. irrCAC cites Gwet
+(2014) for it, which was not consulted here.
 
 **p<sub>j</sub> is averaged per subject**, (1/*N*) Sum_i *n<sub>ij</sub>* / *n<sub>i</sub>*,
 not pooled per rating. Po is a mean over subjects, so Pe is too. On balanced
@@ -67,7 +73,10 @@ data the two are identical. On unbalanced data they can differ a lot;
 kappa is 0.35 one way and 0.88 the other.
 
 Subjects rated once form no pair and are left out of both Po and
-*p<sub>j</sub>*.
+*p<sub>j</sub>*. Gwet (2016, Appendix A) averages per subject too, but
+includes subjects rated once in *p<sub>j</sub>*. ``Ratings`` refuses such
+subjects, so the two can differ only in subset permutation, where a subset
+of raters can leave a subject rated once.
 
 
 ## krippendorff
@@ -126,8 +135,17 @@ Light's, not for Conger's at three or more raters.
   raters. *Psychological Bulletin*, 88(2), 322-328.
 - Fleiss, J. L. (1971). Measuring nominal scale agreement among many raters.
   *Psychological Bulletin*, 76(5), 378-382.
+- Gwet, K. L. (2008). Computing inter-rater reliability and its variance in
+  the presence of high agreement. *British Journal of Mathematical and
+  Statistical Psychology*, 61(1), 29-48.
 - Gwet, K. L. (2014). *Handbook of Inter-Rater Reliability* (4th ed.).
   Advanced Analytics.
+- Gwet, K. L. (2016). Testing the difference of correlated agreement
+  coefficients for statistical significance. *Educational and Psychological
+  Measurement*, 76(4), 609-637.
+- Gwet, K. L. (2026). *irrCAC: Computing the Extent of Agreement among Raters
+  with Chance-Corrected Agreement Coefficient (CAC)*. R package version 1.4.
+  https://CRAN.R-project.org/package=irrCAC
 - Krippendorff, K. (2004). *Content Analysis: An Introduction to Its
   Methodology.* 2nd ed., Sage, chapter 11.
 - Krippendorff, K. (2011). Computing Krippendorff's alpha-reliability.

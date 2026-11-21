@@ -158,7 +158,7 @@ class TestClassHierarchy:
         ("fleiss_kappa_analyzer", "FleissKappaAnalyzer", _GROUP, True),
         ("brennan_prediger_analyzer", "BrennanPredigerAnalyzer", _GROUP, True),
         ("krippendorff_alpha_analyzer", "KrippendorffAlphaAnalyzer", _GROUP, True),
-        ("gwet_ac1_analyzer", "GwetAC1Analyzer", _GROUP, False),
+        ("gwet_ac1_analyzer", "GwetAC1Analyzer", _GROUP, True),
         ("scotts_analyzer", "ScottsAnalyzer", _GROUP, False),
         ("cohen_kappa_analyzer", "CohenKappaAnalyzer", _INDIVIDUAL, True),
         ("conger_kappa_analyzer", "CongerKappaAnalyzer", _INDIVIDUAL, False),
@@ -532,7 +532,10 @@ def _three_cat_ratings(n_raters: int, ordered: bool = False, unbalanced: bool = 
 
 
 # The coefficients that take weights, with the panel size each one is run on
-_WEIGHTED = [("FleissKappa", 3), ("BrennanPrediger", 3), ("KrippendorffAlpha", 3), ("CohenKappa", 2)]
+_WEIGHTED = [
+    ("FleissKappa", 3), ("GwetAC1", 3), ("BrennanPrediger", 3),
+    ("KrippendorffAlpha", 3), ("CohenKappa", 2),
+]
 
 # A declared matrix that no weighting scheme gives
 _DECLARED = [[1.0, 0.8, 0.0], [0.8, 1.0, 0.5], [0.0, 0.5, 1.0]]
@@ -618,7 +621,7 @@ class TestAnalyzersReadWeightsFromSemantics:
     """
 
     @pytest.mark.parametrize("name, n_raters", [
-        ("ScottsAnalyzer", 2), ("GwetAC1", 3), ("CongerKappa", 3), ("LightKappa", 3),
+        ("ScottsAnalyzer", 2), ("CongerKappa", 3), ("LightKappa", 3),
     ])
     @pytest.mark.parametrize("kind", ["ordered", "weighted"])
     def test_no_weighted_form_refuses_distance_categories(self, name, n_raters, kind):

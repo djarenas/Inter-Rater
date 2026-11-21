@@ -20,27 +20,21 @@ class GwetAC1Config(GroupCoefficientConfig):
     """
     I am the configuration for Gwet's AC1 analysis.
 
-    Gwet's AC1 is an unweighted, chance-corrected agreement coefficient for
-    nominal data with any number of raters (n >= 2). It addresses the "kappa
-    paradox" -- the counter-intuitive collapse of Cohen/Fleiss kappa under
-    extreme prevalence -- by replacing kappa's marginal-based chance term with
-    a uniform-distribution-based term that reflects the information content
-    of the category set.
+    Gwet's AC1 is a chance-corrected agreement coefficient for nominal data
+    with any number of raters (n >= 2). It addresses the "kappa paradox" --
+    the counter-intuitive collapse of Cohen/Fleiss kappa under extreme
+    prevalence -- with a different chance term (Gwet 2008, Equation 38):
 
-    AC1 uses a chance-agreement probability:
+        Pe = sum_j p_j (1 - p_j) / (K - 1)
 
-        Pe(gamma) = Tw / (K - 1)
+    When prevalence is skewed (one category dominates), Pe is small and AC1
+    stays high -- matching the intuition that raters who mostly agree really
+    do agree, even when categories are imbalanced.
 
-    where Tw = 1 - sum(pj^2) measures category heterogeneity. When prevalence
-    is skewed (one category dominates), Tw is small, Pe(gamma) is small, and
-    AC1 stays high -- matching the intuition that raters who mostly agree
-    really do agree, even when categories are imbalanced.
-
-    Gwet's AC2, the weighted AC1, is not implemented.
+    With ordered or weighted categories in the semantics, the analyzer
+    computes AC2, the weighted AC1. Weights are not configured here.
 
     I inherit all fields from GroupCoefficientConfig and add no new ones.
-    The unweighted constraint is enforced by the analyzer, which refuses
-    ratings whose semantics declares ordered or weighted categories.
 
     References
     ----------
@@ -49,6 +43,9 @@ class GwetAC1Config(GroupCoefficientConfig):
       Statistical Psychology, 61(1), 29--48.
     - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
       Advanced Analytics, LLC.
+    - Gwet, K. L. (2026). irrCAC: Computing the Extent of Agreement among
+      Raters with Chance-Corrected Agreement Coefficient (CAC). R package
+      version 1.4. The AC2 formula used here.
     - Wongpakaran, N., et al. (2013). A comparison of Cohen's Kappa and
       Gwet's AC1 when calculating inter-rater reliability coefficients:
       a study conducted with personality disorder samples.

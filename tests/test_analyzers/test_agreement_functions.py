@@ -972,11 +972,22 @@ class TestEdgeCases:
             - krippendorff_alpha(_input(BALANCED_NIJ))
         ) < TOL
 
-    def test_gwet_ac1_rejects_weights(self):
-        # AC1 has no weighted form -- ValueError on non-identity weights.
+    def test_gwet_ac2_quadratic(self):
+        # AC2 by hand. Quadratic weights for K=3: 1, 3/4, 0; T_w = 6.
+        # pj = [1/2, 1/2, 0], sum pj(1-pj) = 1/2, Pe = 6 / (3 * 2) * 1/2 = 1/2.
+        # Po: subjects 1 and 2 agree (1 each); subject 3 splits 0/1, weight
+        # 3/4, so Po_3 = (1 + 1 + 2 * 3/4 - 2) / 2 = 3/4. Po = 11/12.
+        # AC2 = (11/12 - 1/2) / (1 - 1/2) = 5/6. Unweighted AC1 is 5/9.
         wq = Weights.quadratic(3)
-        with pytest.raises(ValueError, match="AC2"):
-            gwet_ac1(_input(THREE_CAT_NIJ, wq))
+        assert abs(chance_gwet_ac1(THREE_CAT_NIJ, wq) - 1 / 2) < TOL
+        assert abs(gwet_ac1(_input(THREE_CAT_NIJ, wq)) - 5 / 6) < TOL
+        assert abs(gwet_ac1(_input(THREE_CAT_NIJ)) - 5 / 9) < TOL
+
+    def test_gwet_ac2_identity_is_ac1(self):
+        # T_w = K under identity weights, so AC2 reduces to AC1 exactly.
+        wi = Weights.identity(3)
+        assert chance_gwet_ac1(THREE_CAT_NIJ, wi) == chance_gwet_ac1(THREE_CAT_NIJ)
+        assert gwet_ac1(_input(THREE_CAT_NIJ, wi)) == gwet_ac1(_input(THREE_CAT_NIJ))
 
     def test_conger_rejects_weights(self):
         # No weighted Conger's kappa -- NotImplementedError, not ignored.

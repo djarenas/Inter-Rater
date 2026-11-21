@@ -8,7 +8,7 @@ import numpy as np
 
 from .agreement_functions.group_agreement import chance_gwet_ac1, observed_agreement
 from .group_analyzer import GroupAnalyzer
-from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
+from ..intermediates.estimator_parts import EstimatorInput, NijMatrix, Weights
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.gwets_ac1_result import (
@@ -26,23 +26,24 @@ _ERROR_PREFIX = "[GwetAC1Analyzer] Error"
 
 class GwetAC1Analyzer(GroupAnalyzer):
     """
-    I am the analyzer for Gwet's AC1, the prevalence-robust agreement coefficient.
+    I am the analyzer for Gwet's AC1, the prevalence-robust agreement
+    coefficient, and for AC2, its weighted form.
 
     AC1 measures chance-corrected agreement among any number of raters (n >= 2)
     on nominal categorical data. It addresses the "kappa paradox" -- the
     collapse of Fleiss/Cohen kappa under skewed prevalence --
     by replacing kappa's marginal-based chance term with one derived from
-    category heterogeneity (also known as Simpson's Index of Diversity):
+    category heterogeneity (Gwet 2008, Equation 38):
 
-        Pe(gamma) = Tw / (K - 1),  where Tw = 1 - sum(pj^2)
+        Pe = sum_j p_j (1 - p_j) / (K - 1)
 
-    When prevalence is skewed, Tw is small, Pe is small, and AC1 stays high --
+    When prevalence is skewed, Pe is small and AC1 stays high --
     matching the intuition that raters who mostly agree really do agree.
 
-    AC1 is unweighted by definition. Gwet's AC2, the weighted form, is not
-    implemented. I refuse ratings whose semantics declares ordered or
-    weighted categories, and gwet_ac1() raises ValueError on non-identity
-    weights.
+    With ordered or weighted categories in the semantics I compute AC2: Po
+    credits near misses through the weights, and Pe is multiplied by
+    T_w / K, where T_w is the sum of the weights. The weighted formula is the
+    one in Gwet's irrCAC 1.4 (``gwet.ac1.raw``); see ``chance_gwet_ac1``.
 
     I validate that:
     - Config is GwetAC1Config
@@ -60,6 +61,8 @@ class GwetAC1Analyzer(GroupAnalyzer):
         The validated ratings data (inherited from Analyzer).
     config : GwetAC1Config
         The analysis configuration for Gwet's AC1.
+    weights : Weights | None
+        The weights object (from Analyzer).
     balance_profile : BalanceProfile
         Describes the balance structure of the data (inherited from Analyzer).
     rater_profile : RaterProfile
@@ -67,12 +70,16 @@ class GwetAC1Analyzer(GroupAnalyzer):
         rated, how much each pair overlapped.
     """
 
+    # Has a weighted form (AC2): Analyzer reads the weights from the semantics
+    _ACCEPTS_WEIGHTS = True
+
     # Attribute declaration
 
     # Populated at parent class Analyzer
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights: Weights | None
     # Checked at this level
     config: GwetAC1Config
 
@@ -230,13 +237,11 @@ class GwetAC1Analyzer(GroupAnalyzer):
 
     def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Gwet's AC1 from an EstimatorInput.
+        Gwet's AC1 (AC2 when weighted) from an EstimatorInput.
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples, bootstrap or jackknife, is written once on my base
         classes in terms of this.
-
-        AC1 takes no weights: Gwet (2008) defines it as unweighted.
         """
         from .agreement_functions.group_agreement import gwet_ac1
 
@@ -250,10 +255,10 @@ class GwetAC1Analyzer(GroupAnalyzer):
         that they rebuild the point estimate.
         """
         return AgreementParts(
-            observed=observed_agreement(nij),
-            chance=chance_gwet_ac1(nij),
+            observed=observed_agreement(nij, self.weights),
+            chance=chance_gwet_ac1(nij, self.weights),
             kind="agreement",
-            weighted=False,
+            weighted=self.weights is not None and not self.weights.is_identity,
         )
 
     def _result(
@@ -275,4 +280,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,
+            weights_type=self._weights_kind(),
+            weight_matrix=self._weight_matrix(),
         )

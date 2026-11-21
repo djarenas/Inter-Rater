@@ -62,7 +62,7 @@ the README's CI bounds.
 | Analyzer | Unweighted | Weighted | Total |
 |---|---|---|---|
 | FleissKappaAnalyzer | Fleiss 1971, SR1 prelim, SR1 main | SR1 prelim (quadratic) | 4 |
-| GwetAC1Analyzer | Fleiss 1971, SR2, SR4 | — (not weightable) | 3 |
+| GwetAC1Analyzer | Fleiss 1971, SR2, SR4, Gwet cont3x3 | Gwet cont3x3, SR1 prelim (linear, quadratic; AC2) | 8 |
 | BrennanPredigerAnalyzer | Fleiss 1971, SR3, SR5 | Synthetic 2-rater (linear) | 4 |
 | KrippendorffAlphaAnalyzer | Gwet cont3x3, SR1 main | SR1 prelim (linear) | 3 |
 | CohenKappaAnalyzer | Gwet cont3x3, Synthetic 2-rater | Gwet cont3x3 (quadratic) | 3 |
@@ -80,7 +80,7 @@ the README's CI bounds.
 | test_reference_data.py | Datasets with published reference values, plus the one end-to-end BCa test | 11 |
 | test_research_data.py | Original systematic review datasets (internal validation against README) | 10 |
 | test_subset_permutation.py | Subset permutation on partially crossed data -- the measurable-pool regression | 5 |
-| test_weighted.py | Weighted analysis (linear + quadratic) for group and individual-marginal analyzers, and weights declared in the semantics | 13 |
+| test_weighted.py | Weighted analysis (linear + quadratic) for group and individual-marginal analyzers, Gwet's AC2 against irrCAC, and weights declared in the semantics | 20 |
 | test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | 4 |
 | test_missing_structure.py | The three shuffles keep SR1 main's missing-data design | 5 |
 | test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 42 |
@@ -89,7 +89,7 @@ the README's CI bounds.
 | test_external_validation.py | The package against five other implementations, from saved values | 20 |
 | conftest.py | Dataset-loading fixtures, shared analyzer config builders | -- |
 
-**Total: 117 tests.** Counts here are from `pytest --collect-only`; if you
+**Total: 124 tests.** Counts here are from `pytest --collect-only`; if you
 change a file, re-derive rather than adjust by hand.
 
 
@@ -226,11 +226,11 @@ place by establishing that the two pools diverge here at all -- without that,
 the other two would prove nothing.
 
 
-## test_weighted.py (13 tests)
+## test_weighted.py (20 tests)
 
 Weighted analysis across multiple datasets. Tests that distance-based weighting
 changes the point estimate (weighted != unweighted), for the group analyzers
-with a weighted form (Fleiss, B-P, Krippendorff) and for Cohen.
+with a weighted form (Fleiss, Gwet's AC2, B-P, Krippendorff) and for Cohen.
 
 Weights only matter when K >= 3 -- with binary categories, linear and quadratic
 collapse to identity (there is only one distance). All datasets below have K=3.
@@ -248,6 +248,19 @@ collapse to identity (there is only one distance). All datasets below have K=3.
 |------|----------|---------|----------|-------|
 | test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | 0.892 | irrCAC: 0.89216 |
 
+### Gwet's AC2 against irrCAC
+
+The formula is the one in Gwet's irrCAC 1.4 (`gwet.ac1.raw`), so the
+references are its values, rounded to 5 decimals; checked to 5e-6.
+
+| Test | Data | Weights | irrCAC |
+|------|------|---------|--------|
+| test_matches_irrcac | Gwet cont3x3 | linear | 0.90002 |
+| test_matches_irrcac | Gwet cont3x3 | quadratic | 0.94024 |
+| test_matches_irrcac | SR1 prelim | linear | 0.85247 |
+| test_matches_irrcac | SR1 prelim | quadratic | 0.86749 |
+| test_unweighted_is_ac1 | Gwet cont3x3 | unordered: AC1, no AC2 in the printout | 0.84933 |
+
 ### Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal -1/0/1)
 
 | Test | Analyzer | Weights | Expected | Notes |
@@ -258,20 +271,20 @@ collapse to identity (there is only one distance). All datasets below have K=3.
 
 | Test | What it pins |
 |------|--------------|
-| test_file_and_inline_give_identical_results (x3: Fleiss, B-P, Krippendorff) | `weights_file` and an inline matrix give the same ratings and results |
-| test_quadratic_matrix_in_a_file_reproduces_ordered_quadratic (x3) | A weighted matrix equal to quadratic reproduces `ordered, quadratic` exactly |
+| test_file_and_inline_give_identical_results (x4: Fleiss, AC2, B-P, Krippendorff) | `weights_file` and an inline matrix give the same ratings and results |
+| test_quadratic_matrix_in_a_file_reproduces_ordered_quadratic (x4) | A weighted matrix equal to quadratic reproduces `ordered, quadratic` exactly |
 | test_loads_from_any_working_directory | A relative `weights_file` is read from the semantics file's folder |
 | test_pairs_use_the_semantics_weights | Pairwise permutation computes every pair with the semantics' weights |
 | test_subsets_use_the_semantics_weights | Subset permutation does the same |
 
 *Weighted values established by discovery run (V2 validated). Unweighted
 references for comparison: Fleiss 0.493, Krippendorff 0.493, Cohen 0.796,
-B-P 0.670. For Gwet cont3x3 weighted Cohen, irrCAC may provide an external
-cross-check.*
+B-P 0.670, AC1 0.849. The AC2 references are irrCAC's values, and irrCAC
+gives 0.89216 for Gwet cont3x3 weighted Cohen.*
 
 ### Structural assertions (all weighted tests)
 
-Each weighted test also checks:
+Each weighted test in the dataset sections above also checks:
 - `result.point != unweighted_point` (weights changed the estimate)
 - CI structure (lower < point < upper)
 - `result.weights_type` matches the requested type
@@ -312,7 +325,7 @@ saved values.
 | Test | What it checks |
 |---|---|
 | test_values_match (x9, one per dataset) | Every estimate and null SE another tool computed: within 5e-6 of irrCAC (it rounds to 5 decimals), within 1e-10 of the others |
-| test_refused_rows_still_refused | What only another tool computes (AC2, weighted Scott/Conger/Light, Conger and Light on incomplete data) is still refused |
+| test_refused_rows_still_refused | What only another tool computes (weighted Scott/Conger/Light, Conger and Light on incomplete data) is still refused |
 | test_irr_kripp_still_differs | The one known disagreement, irr's `kripp.alpha` on complete data with more than 2 raters, is the only one in `results.csv` |
 | test_matches_cleaning (x9) | Each file in `data/` is still what cleaning produces from `example_data/` |
 
@@ -418,6 +431,6 @@ they are.
 | SR5 | -- | ratings (txt) | 3 | 2 | Balanced | 1 |
 | Statistical background | Synthetic, from the page's tables | ratings (csv) | 2 to 32 | 2 | Balanced and unbalanced | 3 |
 
-**Total: 97 tests** (11 reference + 10 research + 5 subset + 13 weighted + 4
+**Total: 124 tests** (11 reference + 10 research + 5 subset + 20 weighted + 4
 pairwise + 5 missing structure + 42 example configs + 3 statistical background
-+ 4 made-up ratings)
++ 4 made-up ratings + 20 external validation)

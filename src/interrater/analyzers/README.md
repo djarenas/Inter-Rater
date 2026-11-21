@@ -23,7 +23,7 @@ Analyzer (ABC)
   │   ├── FleissKappaAnalyzer        (weighted form)
   │   ├── BrennanPredigerAnalyzer    (weighted form)
   │   ├── KrippendorffAlphaAnalyzer  (weighted form)
-  │   ├── GwetAC1Analyzer
+  │   ├── GwetAC1Analyzer            (weighted form, AC2)
   │   └── ScottsAnalyzer
   │
   └── IndividualMarginalAnalyzer (ABC)

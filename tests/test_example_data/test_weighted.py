@@ -2,7 +2,8 @@
 Integration tests for weighted analysis (linear + quadratic weights).
 
 Tests that distance-based weighting changes the point estimate, for the group
-analyzers with a weighted form (Fleiss, B-P, Krippendorff) and for Cohen.
+analyzers with a weighted form (Fleiss, Gwet's AC2, B-P, Krippendorff) and for
+Cohen.
 
 Weights only matter when K >= 3 -- with binary categories, linear and
 quadratic collapse to identity (there is only one distance). All datasets
@@ -33,6 +34,7 @@ import yaml
 
 from interrater import (
     FleissKappaAnalyzer,
+    GwetAC1Analyzer,
     KrippendorffAlphaAnalyzer,
     CohenKappaAnalyzer,
     BrennanPredigerAnalyzer,
@@ -156,9 +158,10 @@ class TestSR1PrelimWeightsFromSemantics:
 
     @pytest.mark.parametrize("analyzer_cls, config_name", [
         (FleissKappaAnalyzer, "fast_fleiss_config"),
+        (GwetAC1Analyzer, "fast_gwet_config"),
         (BrennanPredigerAnalyzer, "fast_bp_config"),
         (KrippendorffAlphaAnalyzer, "fast_krippendorff_config"),
-    ], ids=["fleiss", "brennan_prediger", "krippendorff"])
+    ], ids=["fleiss", "gwet_ac2", "brennan_prediger", "krippendorff"])
     def test_file_and_inline_give_identical_results(
         self, from_file, inline, analyzer_cls, config_name, request,
     ):
@@ -172,9 +175,10 @@ class TestSR1PrelimWeightsFromSemantics:
 
     @pytest.mark.parametrize("analyzer_cls, config_name, expected", [
         (FleissKappaAnalyzer, "fast_fleiss_config", 0.5929),
+        (GwetAC1Analyzer, "fast_gwet_config", 0.8675),
         (BrennanPredigerAnalyzer, "fast_bp_config", 0.7180),
         (KrippendorffAlphaAnalyzer, "fast_krippendorff_config", 0.5934),
-    ], ids=["fleiss", "brennan_prediger", "krippendorff"])
+    ], ids=["fleiss", "gwet_ac2", "brennan_prediger", "krippendorff"])
     def test_quadratic_matrix_in_a_file_reproduces_ordered_quadratic(
         self, tmp_path, sr1_prelim_with_semantics, ordered_ratings,
         analyzer_cls, config_name, expected, request,
@@ -253,6 +257,43 @@ class TestGwetCont3x3Weighted:
 
         # Result reports the correct weights type
         assert result.weights_type == "quadratic"
+
+
+# ── Gwet's AC2 against irrCAC ───────────────────────────────────────── #
+#
+# AC2 is AC1 with weights. The formula is the one in Gwet's R package
+# irrCAC 1.4 (gwet.ac1.raw), so the references are its values, which it
+# rounds to 5 decimals (analyses/external_validation/r_tools.csv).
+
+
+class TestGwetAC2:
+    """AC2 through the full pathway, against irrCAC 1.4."""
+
+    @pytest.mark.parametrize("dataset, weighting, irrcac", [
+        ("gwet", "linear", 0.90002),
+        ("gwet", "quadratic", 0.94024),
+        ("sr1_prelim", "linear", 0.85247),
+        ("sr1_prelim", "quadratic", 0.86749),
+    ])
+    def test_matches_irrcac(
+        self, ordered_ratings, fast_gwet_config, dataset, weighting, irrcac, request,
+    ):
+        result = GwetAC1Analyzer(ordered_ratings(dataset, weighting), fast_gwet_config).estimate()
+        assert result.point == pytest.approx(irrcac, abs=5e-6)
+        _assert_brackets_point(result)
+        unweighted = request.getfixturevalue(f"{dataset}_ratings")
+        assert result.point != pytest.approx(
+            GwetAC1Analyzer(unweighted, fast_gwet_config).estimate().point, abs=1e-6
+        )
+        assert result.weights_type == weighting
+        assert f"{weighting} weights (AC2)" in str(result)
+
+    def test_unweighted_is_ac1(self, gwet_ratings, fast_gwet_config):
+        """Unordered categories: no weights, AC1, and the data line says unweighted."""
+        result = GwetAC1Analyzer(gwet_ratings, fast_gwet_config).estimate()
+        assert result.point == pytest.approx(0.84933, abs=5e-6)
+        assert result.weights_type == "identity"
+        assert "AC2" not in str(result)
 
 
 # ── Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal) ────── #

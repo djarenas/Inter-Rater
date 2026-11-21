@@ -93,7 +93,7 @@ the config is built.
 |---|---|---|---|
 | FleissKappaConfig | yes | yes (Fleiss, Nee & Landis 1979, Eq. 12) | default **True** |
 | ScottsConfig | no | yes (= Fleiss at n = 2) | default False |
-| GwetAC1Config | no | no | default False |
+| GwetAC1Config | yes (AC2) | no | default False |
 | BrennanPredigerConfig | yes | no | default False |
 | KrippendorffAlphaConfig | yes | no | default False |
 | CohenKappaConfig | yes | yes (Fleiss, Cohen & Everitt 1969) | **True**; `false` refused |
@@ -212,4 +212,5 @@ alpha is alpha with `kind: ordered, weighting: quadratic` (for equally
 spaced categories); nominal alpha is alpha with `kind: unordered`. Ratio and
 ordinal distances can be given as a `weighted` matrix.
 
-Gwet's AC2, the weighted AC1, is not implemented. See Gwet (2014).
+Gwet's AC2 is AC1 with weights from the semantics, as for Fleiss' kappa.
+The formula is the one in Gwet's irrCAC 1.4; see `agreement_functions/README.md`.

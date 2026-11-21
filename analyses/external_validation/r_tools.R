@@ -11,8 +11,8 @@
 #   all the data. Cohen and Scott for two raters, and Light as the mean of
 #   the pairwise Cohen's kappas, each on the subjects the raters in question
 #   all rated. irrCAC reports estimates rounded to 5 decimals.
-#   With weights, gwet.ac1.raw computes AC2, which the package does not
-#   implement; those rows have no package value to compare with.
+#   With weights, gwet.ac1.raw computes AC2, the weighted AC1, which is
+#   the formula the package's AC2 follows.
 # - irr: kripp.alpha, nominal and interval (alpha with quadratic weights on
 #   1..K codes). kappam.fleiss (Fleiss, and Conger with exact = TRUE),
 #   kappam.light and kappa2 (Cohen, unweighted, linear and quadratic), on

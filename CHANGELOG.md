@@ -66,9 +66,17 @@ versioning follows [semver](https://semver.org/).
 
 ### Added
 
+- Gwet's AC2, the weighted AC1. `GwetAC1Analyzer` computes it when the
+  semantics declares ordered or weighted categories, as Fleiss' kappa does;
+  pairwise and subset permutation accept it too. The chance term is
+  T_w / (K (K - 1)) * sum_j p_j (1 - p_j), with T_w the sum of the weights,
+  the formula in Gwet's irrCAC 1.4 (`gwet.ac1.raw`). It matches irrCAC on all
+  10 weighted cases in `analyses/external_validation/`. `GwetsAC1Result`
+  gains `weights_type` and `weight_matrix`, and its data line says "(AC2)"
+  when weighted. Unweighted AC1 is unchanged.
 - `analyses/external_validation/`: the package compared with irrCAC and irr
   (R), and statsmodels, scikit-learn and krippendorff (Python), on the
-  shipped datasets. 182 estimates and null standard errors are compared; all
+  shipped datasets. 192 estimates and null standard errors are compared; all
   agree within the tool's rounding except irr's `kripp.alpha` on complete
   data with more than 2 raters, where the package, irrCAC and krippendorff
   agree with each other. `tests/test_example_data/test_external_validation.py`

@@ -339,22 +339,26 @@ class TestPermutationWeightsFromSemantics:
         assert result.weights_type == "identity"
         assert "weight" not in str(result).split("\n")[1]
 
-    def test_pairwise_gwet_refuses_ordered(self):
+    def test_pairwise_scott_refuses_ordered(self):
         config = PairwisePermutationConfig(
-            coefficient_to_compute="gwet_ac1",
-            config_of_coefficient=GwetAC1Config(n_resamples=20),
+            coefficient_to_compute="scotts_pi",
+            config_of_coefficient=ScottsConfig(n_resamples=20),
         )
-        with pytest.raises(ValueError, match="gwet_ac1 has no weighted form.*kind 'ordered'"):
+        with pytest.raises(ValueError, match="scotts_pi has no weighted form.*kind 'ordered'"):
             PairwisePermutationAnalysis(self._ordered(3), config)
 
-    def test_subset_gwet_refuses_ordered(self):
+    def test_subset_gwet_uses_the_weights(self):
+        """Every subset coefficient has a weighted form; Gwet's is AC2."""
+        ratings = self._ordered(3)
         config = SubsetPermutationConfig(
             coefficient_to_compute="gwet_ac1",
             config_of_coefficient=GwetAC1Config(n_resamples=20),
             subset_k=2,
         )
-        with pytest.raises(ValueError, match="gwet_ac1 has no weighted form.*kind 'ordered'"):
-            SubsetPermutationAnalysis(self._ordered(3), config)
+        result = SubsetPermutationAnalysis(ratings, config).run()
+        expected = ratings.semantics.categories.weight_matrix().tolist()
+        assert result.weights_type == "quadratic"
+        assert result.weight_matrix == expected
 
 
 class TestInjectionPipeline:

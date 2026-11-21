@@ -61,7 +61,7 @@ gwet,unweighted,scott,estimate,irrCAC,1.4,0.79624,0.7962396962119107,3.037880892
 gwet,unweighted,cohen,estimate,irrCAC,1.4,0.79641,0.7964094021839719,5.978160280140088e-07,5e-06,True,
 gwet,unweighted,light,estimate,irrCAC,1.4,0.79641,0.7964094021839719,5.978160280140088e-07,5e-06,True,
 gwet,linear,fleiss,estimate,irrCAC,1.4,0.8428,0.8428010003572703,-1.0003572703531916e-06,5e-06,True,
-gwet,linear,ac1,estimate,irrCAC,1.4,0.90002,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+gwet,linear,ac1,estimate,irrCAC,1.4,0.90002,0.9000227221086117,-2.7221086116302473e-06,5e-06,True,
 gwet,linear,bp,estimate,irrCAC,1.4,0.87625,0.8762499999999999,1.1102230246251565e-16,5e-06,True,
 gwet,linear,kripp,estimate,irrCAC,1.4,0.84359,0.8435869953554841,3.0046445158582458e-06,5e-06,True,
 gwet,linear,conger,estimate,irrCAC,1.4,0.8429,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
@@ -69,7 +69,7 @@ gwet,linear,scott,estimate,irrCAC,1.4,0.8428,,,5e-06,,"ValueError: [ScottsAnalyz
 gwet,linear,cohen,estimate,irrCAC,1.4,0.8429,0.8429020279920021,-2.0279920021071263e-06,5e-06,True,
 gwet,linear,light,estimate,irrCAC,1.4,0.8429,,,5e-06,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
 gwet,quadratic,fleiss,estimate,irrCAC,1.4,0.89211,0.8921092638909324,7.361090675894744e-07,5e-06,True,
-gwet,quadratic,ac1,estimate,irrCAC,1.4,0.94024,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+gwet,quadratic,ac1,estimate,irrCAC,1.4,0.94024,0.9402368792784962,3.120721503768742e-06,5e-06,True,
 gwet,quadratic,bp,estimate,irrCAC,1.4,0.9175,0.9175,0.0,5e-06,True,
 gwet,quadratic,kripp,estimate,irrCAC,1.4,0.89265,0.8926487175714776,1.2824285224866117e-06,5e-06,True,
 gwet,quadratic,conger,estimate,irrCAC,1.4,0.89216,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
@@ -94,13 +94,13 @@ sr1_main,unweighted,kripp,estimate,irrCAC,1.4,0.61822,0.6182222818072127,-2.2818
 sr1_main,unweighted,conger,estimate,irrCAC,1.4,0.61864,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: Conger's kappa needs every rater to rate every subject (Conger 1980); these data have 3,231 missing ratings in 1,617 subjects. For data with missing ratings us"
 sr1_main,unweighted,light,estimate,irrCAC,1.4,0.607048333333333,,,5e-06,,"ValueError: [LightKappaAnalyzer] Error: Light's kappa needs every rater to rate every subject (Light 1971); these data have 3,231 missing ratings in 1,617 subjects. For data with missing ratings use F"
 sr1_main,linear,fleiss,estimate,irrCAC,1.4,0.65638,0.6563838335827202,-3.833582720269568e-06,5e-06,True,
-sr1_main,linear,ac1,estimate,irrCAC,1.4,0.93236,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_main,linear,ac1,estimate,irrCAC,1.4,0.93236,0.9323626343651724,-2.6343651724491934e-06,5e-06,True,
 sr1_main,linear,bp,estimate,irrCAC,1.4,0.87036,0.8703617810760667,-1.7810760666314707e-06,5e-06,True,
 sr1_main,linear,kripp,estimate,irrCAC,1.4,0.65598,0.655983054181367,-3.054181367034836e-06,5e-06,True,
 sr1_main,linear,conger,estimate,irrCAC,1.4,0.65646,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
 sr1_main,linear,light,estimate,irrCAC,1.4,0.642658333333333,,,5e-06,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
 sr1_main,quadratic,fleiss,estimate,irrCAC,1.4,0.67709,0.677086166476543,3.833523457008603e-06,5e-06,True,
-sr1_main,quadratic,ac1,estimate,irrCAC,1.4,0.93613,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_main,quadratic,ac1,estimate,irrCAC,1.4,0.93613,0.9361304319029612,-4.319029611732361e-07,5e-06,True,
 sr1_main,quadratic,bp,estimate,irrCAC,1.4,0.84246,0.8424551638837353,4.8361162646726186e-06,5e-06,True,
 sr1_main,quadratic,kripp,estimate,irrCAC,1.4,0.67662,0.6766184958901669,1.5041098331280978e-06,5e-06,True,
 sr1_main,quadratic,conger,estimate,irrCAC,1.4,0.67714,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
@@ -114,13 +114,13 @@ sr1_prelim,unweighted,kripp,estimate,irrCAC,1.4,0.49327,0.4932693038971761,6.961
 sr1_prelim,unweighted,conger,estimate,irrCAC,1.4,0.49425,0.4942455704610765,4.429538923544918e-06,5e-06,True,
 sr1_prelim,unweighted,light,estimate,irrCAC,1.4,0.495545,0.4955431981721947,1.8018278052922554e-06,5e-06,True,
 sr1_prelim,linear,fleiss,estimate,irrCAC,1.4,0.55417,0.5541682661749622,1.733825037875114e-06,5e-06,True,
-sr1_prelim,linear,ac1,estimate,irrCAC,1.4,0.85247,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_prelim,linear,ac1,estimate,irrCAC,1.4,0.85247,0.852474207697535,-4.207697535063559e-06,5e-06,True,
 sr1_prelim,linear,bp,estimate,irrCAC,1.4,0.74843,0.748429648241206,3.517587940926603e-07,5e-06,True,
 sr1_prelim,linear,kripp,estimate,irrCAC,1.4,0.55473,0.5547283562928327,1.6437071672648074e-06,5e-06,True,
 sr1_prelim,linear,conger,estimate,irrCAC,1.4,0.55533,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
 sr1_prelim,linear,light,estimate,irrCAC,1.4,0.557493333333333,,,5e-06,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
 sr1_prelim,quadratic,fleiss,estimate,irrCAC,1.4,0.59288,0.5928787614722265,1.2385277734505706e-06,5e-06,True,
-sr1_prelim,quadratic,ac1,estimate,irrCAC,1.4,0.86749,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_prelim,quadratic,ac1,estimate,irrCAC,1.4,0.86749,0.8674909276421064,-9.276421064630114e-07,5e-06,True,
 sr1_prelim,quadratic,bp,estimate,irrCAC,1.4,0.71796,0.7179648241206028,-4.824120602764381e-06,5e-06,True,
 sr1_prelim,quadratic,kripp,estimate,irrCAC,1.4,0.59339,0.5933902203145984,-2.2031459845361923e-07,5e-06,True,
 sr1_prelim,quadratic,conger,estimate,irrCAC,1.4,0.59379,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
@@ -138,13 +138,13 @@ sr2,unweighted,kripp,estimate,irrCAC,1.4,0.41858,0.4185847731851763,-4.773185176
 sr2,unweighted,conger,estimate,irrCAC,1.4,0.42904,,,5e-06,,ValueError: [CongerKappaAnalyzer] Error: Conger's kappa needs every rater to rate every subject (Conger 1980); these data have 2 missing ratings in 1 subjects. For data with missing ratings use Fleiss
 sr2,unweighted,light,estimate,irrCAC,1.4,0.4065,,,5e-06,,ValueError: [LightKappaAnalyzer] Error: Light's kappa needs every rater to rate every subject (Light 1971); these data have 2 missing ratings in 1 subjects. For data with missing ratings use Fleiss' k
 sr2,linear,fleiss,estimate,irrCAC,1.4,0.4354,0.4353995519044059,4.4809559412994915e-07,5e-06,True,
-sr2,linear,ac1,estimate,irrCAC,1.4,0.75394,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr2,linear,ac1,estimate,irrCAC,1.4,0.75394,0.7539414927549438,-1.4927549437659948e-06,5e-06,True,
 sr2,linear,bp,estimate,irrCAC,1.4,0.59491,0.5949074074074072,2.592592592831622e-06,5e-06,True,
 sr2,linear,kripp,estimate,irrCAC,1.4,0.42273,0.4227271325954929,2.8674045071119814e-06,5e-06,True,
 sr2,linear,conger,estimate,irrCAC,1.4,0.43314,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
 sr2,linear,light,estimate,irrCAC,1.4,0.411148333333333,,,5e-06,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
 sr2,quadratic,fleiss,estimate,irrCAC,1.4,0.43753,0.4375253275699039,4.672430096053226e-06,5e-06,True,
-sr2,quadratic,ac1,estimate,irrCAC,1.4,0.73674,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr2,quadratic,ac1,estimate,irrCAC,1.4,0.73674,0.7367444997049649,-4.499704964966433e-06,5e-06,True,
 sr2,quadratic,bp,estimate,irrCAC,1.4,0.46451,0.4645061728395059,3.827160494074278e-06,5e-06,True,
 sr2,quadratic,kripp,estimate,irrCAC,1.4,0.42483,0.4248292101064241,7.898935758809955e-07,5e-06,True,
 sr2,quadratic,conger,estimate,irrCAC,1.4,0.43522,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
@@ -193,7 +193,7 @@ synthetic,unweighted,scott,estimate,irrCAC,1.4,0.64073,0.6407283416346862,1.6583
 synthetic,unweighted,cohen,estimate,irrCAC,1.4,0.64082,0.6408163265306123,3.6734693876772084e-06,5e-06,True,
 synthetic,unweighted,light,estimate,irrCAC,1.4,0.64082,0.6408163265306123,3.6734693876772084e-06,5e-06,True,
 synthetic,linear,fleiss,estimate,irrCAC,1.4,0.67801,0.6780057128018696,4.287198130392689e-06,5e-06,True,
-synthetic,linear,ac1,estimate,irrCAC,1.4,0.68349,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+synthetic,linear,ac1,estimate,irrCAC,1.4,0.68349,0.683485067642304,4.932357696052492e-06,5e-06,True,
 synthetic,linear,bp,estimate,irrCAC,1.4,0.65125,0.6512499999999999,1.1102230246251565e-16,5e-06,True,
 synthetic,linear,kripp,estimate,irrCAC,1.4,0.67962,0.6796156842378602,4.315762139772694e-06,5e-06,True,
 synthetic,linear,conger,estimate,irrCAC,1.4,0.67809,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
@@ -201,7 +201,7 @@ synthetic,linear,scott,estimate,irrCAC,1.4,0.67801,,,5e-06,,"ValueError: [Scotts
 synthetic,linear,cohen,estimate,irrCAC,1.4,0.67809,0.6780893042575286,6.957424714126859e-07,5e-06,True,
 synthetic,linear,light,estimate,irrCAC,1.4,0.67809,,,5e-06,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
 synthetic,quadratic,fleiss,estimate,irrCAC,1.4,0.70545,0.7054491899852724,8.10014727625763e-07,5e-06,True,
-synthetic,quadratic,ac1,estimate,irrCAC,1.4,0.68399,,,5e-06,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+synthetic,quadratic,ac1,estimate,irrCAC,1.4,0.68399,0.68399329291887,-3.2929188700236978e-06,5e-06,True,
 synthetic,quadratic,bp,estimate,irrCAC,1.4,0.6325,0.6324999999999998,1.1102230246251565e-16,5e-06,True,
 synthetic,quadratic,kripp,estimate,irrCAC,1.4,0.70692,0.706921944035346,-1.9440353460353776e-06,5e-06,True,
 synthetic,quadratic,conger,estimate,irrCAC,1.4,0.70553,,,5e-06,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"

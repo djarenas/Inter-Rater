@@ -141,9 +141,10 @@ def _pooled(point: float, weighted: bool = False) -> dict:
 
 
 def _gwet(point: float) -> dict:
-    """Gwet's AC1: Pe is Sum p_j (1 - p_j) / (K - 1) over the shares in _PROFILE."""
+    """Gwet's AC1, unweighted: Pe is Sum p_j (1 - p_j) / (K - 1) over the shares in _PROFILE."""
     shares = list(_PROFILE.prevalence.values())
-    return _fields(point, sum(p * (1 - p) for p in shares) / (len(shares) - 1))
+    pe = sum(p * (1 - p) for p in shares) / (len(shares) - 1)
+    return dict(_fields(point, pe), weights_type="identity")
 
 
 def _uniform(point: float, weighted: bool = False) -> dict:
@@ -1599,7 +1600,7 @@ class TestPermutationResult:
         with pytest.raises(ValueError, match=r"weight_matrix must be square, got shape \(2, 3\)"):
             PermutationResult("fleiss_kappa", "percentile", _bp(), _RATERS, "custom", self.LINEAR[:2])
 
-    @pytest.mark.parametrize("coefficient", ["scotts_pi", "gwet_ac1", "conger_kappa"])
+    @pytest.mark.parametrize("coefficient", ["scotts_pi", "conger_kappa"])
     def test_no_weighted_form_must_be_unweighted(self, coefficient):
         with pytest.raises(ValueError, match=f"{coefficient} has no weighted form"):
             PermutationResult(coefficient, "percentile", _bp(), _RATERS, "linear", self.LINEAR)
@@ -2986,7 +2987,30 @@ class TestGwetsAC1Result:
         d = GwetsAC1Result(0.7, None, None, _bp(), ci_method="bca", **_gwet(0.7)).summary()
         assert d["is_exact"] is True
         assert d["ci_method"] == "bca"
-        assert "weights_type" not in d
+        assert d["weights_type"] == "identity"
+        assert d["weight_matrix"] is None
+
+    def test_str_weighted_says_ac2(self):
+        """The printed name stays Gwet's AC1; the data line says the weighting and AC2."""
+        w = [[1.0, 0.5, 0.0], [0.5, 1.0, 0.5], [0.0, 0.5, 1.0]]
+        shares = list(_PROFILE.prevalence.values())
+        pe = sum(p * (1 - p) for p in shares) / (len(shares) - 1) * 5 / 3   # T_w = 5
+        s = str(GwetsAC1Result(
+            0.7, None, None, _bp(), ci_method="bca", weights_type="linear",
+            weight_matrix=w, **_fields(0.7, pe, weighted=True),
+        ))
+        assert "Gwet's AC1" in s
+        assert "linear weights (AC2)" in s
+
+    def test_weights_type_invalid(self):
+        with pytest.raises(ValueError, match="weights_type must be 'identity'"):
+            GwetsAC1Result(0.7, None, None, _bp(), ci_method="bca",
+                           **dict(_gwet(0.7), weights_type="cubic"))
+
+    def test_weight_matrix_with_identity_refused(self):
+        with pytest.raises(ValueError, match="weight_matrix must be None"):
+            GwetsAC1Result(0.7, None, None, _bp(), ci_method="bca",
+                           weight_matrix=[[1.0, 0.0], [0.0, 1.0]], **_gwet(0.7))
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[GwetsAC1Result\] Error"):
@@ -3007,10 +3031,21 @@ class TestGwetsAC1ResultParts:
         with pytest.raises(TypeError, match="parts must be agreement parts"):
             self._result(parts=NotComputed("no reason"))
 
-    def test_weighted_parts_refused(self):
+    def test_weighted_parts_on_unweighted_result_refused(self):
         weighted = _fields(0.7, _gwet(0.7)["parts"].chance, weighted=True)["parts"]
-        with pytest.raises(ValueError, match="Gwet's AC2, a different coefficient"):
+        with pytest.raises(ValueError, match="parts.weighted is True but weights_type is 'identity'"):
             self._result(parts=weighted)
+
+    def test_weighted_pe_is_scaled_by_sum_of_weights(self):
+        """AC2: Pe is the AC1 term times T_w / K; anything else is refused."""
+        w = [[1.0, 0.5, 0.0], [0.5, 1.0, 0.5], [0.0, 0.5, 1.0]]   # T_w = 5
+        ac1_pe = _gwet(0.7)["parts"].chance
+        ok = self._result(weights_type="linear", weight_matrix=w,
+                          parts=_fields(0.7, ac1_pe * 5 / 3, weighted=True)["parts"])
+        assert ok.parts.reproduces(0.7)
+        with pytest.raises(ValueError, match="describe different data"):
+            self._result(weights_type="linear", weight_matrix=w,
+                         parts=_fields(0.7, ac1_pe, weighted=True)["parts"])
 
     def test_computed_kappa_max_refused(self):
         with pytest.raises(TypeError, match="kappa_max must be NotComputed for Gwet's AC1"):

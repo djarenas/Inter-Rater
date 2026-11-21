@@ -79,9 +79,9 @@ a reader finds them. `weights_type` names the scheme ("identity", "linear",
 lists in `summary()`, whenever the result is weighted, and is `None` when it
 is not. The matrix is recorded every time, not only for "custom", because a
 scheme's name pins down the numbers only together with the category order.
-Present on Fleiss, Brennan-Prediger, Krippendorff and Cohen. Absent from
-Scott, Gwet and Conger (always unweighted) and from Light (defined as
-unweighted by Light 1971).
+Present on Fleiss, Gwet (AC2 when weighted), Brennan-Prediger,
+Krippendorff and Cohen. Absent from Scott and Conger (always unweighted) and
+from Light (defined as unweighted by Light 1971).
 
 ## Draws and the interval
 

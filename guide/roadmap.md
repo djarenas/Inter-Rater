@@ -88,11 +88,11 @@ direction, not a schedule.
   reproducible from a declared file. The standalone functions stay, with the
   config objects built on top.
 
-- **Gwet's AC2 and extended weighting schemes.** AC2 is AC1 with weights, so
-  it waits on extending the weight set beyond identity, linear and quadratic
-  to ordinal, interval and ratio, which also widens Krippendorff's alpha to
-  the variants its literature defines. Further coefficients follow once that
-  foundation is in place.
+- **Extended weighting schemes.** Extending the weight set beyond identity,
+  linear and quadratic to ordinal, interval and ratio, which also widens
+  Krippendorff's alpha to the variants its literature defines. Further
+  coefficients follow once that foundation is in place. (Gwet's AC2 arrived
+  in 2.2.0, with the existing weights.)
 
 - **Subset permutation, properly visualised.** The current plots show subsets
   sorted by value and as a strip. Neither yet shows what the analysis is for:

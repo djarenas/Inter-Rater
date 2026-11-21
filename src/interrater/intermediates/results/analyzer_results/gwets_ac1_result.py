@@ -1,4 +1,4 @@
-"""Result for Gwet's AC1 analysis."""
+"""Result for Gwet's AC1 analysis, weighted (AC2) or not."""
 
 from __future__ import annotations
 
@@ -33,7 +33,8 @@ KAPPA_MAX_NOT_COMPUTED = (
 @dataclass(frozen=True)
 class GwetsAC1Result(PointEstimateResult):
     """
-    I am Gwet's AC1, with data context.
+    I am Gwet's AC1, with data context. With weights I am AC2, the weighted
+    AC1, and my printed data line says so.
 
     I inherit point, confidence_interval, bootstrap_distribution, and
     balance_profile from PointEstimateResult. balance_profile tells users
@@ -48,9 +49,10 @@ class GwetsAC1Result(PointEstimateResult):
     I exist as a separate class (rather than just using PointEstimateResult)
     for type clarity. This is especially useful for error chaining.
 
-    My parts are Po and Pe, unweighted, and Pe must be
+    My parts are Po and Pe, weighted as I am, and Pe must be
     Sum_j p_j (1 - p_j) / (K - 1) over the category shares in my agreement
-    profile -- so the parts and the profile must come from the same data.
+    profile, times T_w / K when weighted (T_w the sum of the weights) -- so
+    the parts and the profile must come from the same data.
     kappa_max is always NotComputed: this chance term puts no limit below 1
     on agreement.
 
@@ -69,7 +71,7 @@ class GwetsAC1Result(PointEstimateResult):
     rater_profile : RaterProfile
         The raters (inherited).
     parts : AgreementParts
-        Po and Pe, unweighted (inherited). Always computed for AC1.
+        Po and Pe, weighted as I am (inherited). Always computed.
     kappa_max : NotComputed
         Always NotComputed, with KAPPA_MAX_NOT_COMPUTED as the reason
         (inherited).
@@ -77,6 +79,10 @@ class GwetsAC1Result(PointEstimateResult):
         Prevalence, rater marginals, specific agreement (inherited).
     ci_method : str
         Method used: "percentile" or "bca".
+    weights_type : str
+        "identity" (AC1), or "linear", "quadratic" or "custom" (AC2).
+    weight_matrix : list[list[float]] | None, default None
+        The weight matrix, None when unweighted.
     """
 
     # Attribute declaration
@@ -99,6 +105,8 @@ class GwetsAC1Result(PointEstimateResult):
 
     # Populated at this level
     ci_method: str
+    weights_type: str
+    weight_matrix: list[list[float]] | None = None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -122,6 +130,32 @@ class GwetsAC1Result(PointEstimateResult):
                 f"got '{self.ci_method}'"
             )
 
+        # Validate weights_type
+        if not isinstance(self.weights_type, str):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: weights_type must be str, "
+                f"got {type(self.weights_type).__name__}"
+            )
+        if self.weights_type not in {"identity", "linear", "quadratic", "custom"}:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: weights_type must be 'identity', 'linear', "
+                f"'quadratic', or 'custom', got '{self.weights_type}'"
+            )
+
+        # Validate weight_matrix: none when unweighted, square when given
+        if self.weight_matrix is not None:
+            if self.weights_type == "identity":
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: weight_matrix must be None when "
+                    f"weights_type is 'identity' (unweighted)"
+                )
+            matrix = np.asarray(self.weight_matrix, dtype=float)
+            if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: weight_matrix must be square, "
+                    f"got shape {matrix.shape}"
+                )
+
         # Call parent validation (validates point, confidence_interval,
         # bootstrap_distribution, balance_profile type)
         try:
@@ -132,16 +166,17 @@ class GwetsAC1Result(PointEstimateResult):
         self._check_parts_fit_gwet()
 
     def _check_parts_fit_gwet(self) -> None:
-        """Po and Pe are always there, unweighted, Pe from my profile."""
+        """Po and Pe are always there, weighted as I am, Pe from my profile."""
         if not isinstance(self.parts, AgreementParts) or self.parts.kind != "agreement":
             raise TypeError(
                 f"{_ERROR_PREFIX}: parts must be agreement parts (Po and Pe), "
                 f"got {self.parts!r}"
             )
-        if self.parts.weighted:
+        weighted = self.weights_type != "identity"
+        if self.parts.weighted != weighted:
             raise ValueError(
-                f"{_ERROR_PREFIX}: parts must be unweighted; the weighted form "
-                f"is Gwet's AC2, a different coefficient"
+                f"{_ERROR_PREFIX}: parts.weighted is {self.parts.weighted} but "
+                f"weights_type is '{self.weights_type}'"
             )
         if not isinstance(self.kappa_max, NotComputed):
             raise TypeError(
@@ -151,7 +186,19 @@ class GwetsAC1Result(PointEstimateResult):
         if math.isnan(self.parts.chance):
             return
         shares = list(self.agreement_profile.prevalence.values())
-        pe = sum(p * (1 - p) for p in shares) / (len(shares) - 1)
+        k = len(shares)
+        pe = sum(p * (1 - p) for p in shares) / (k - 1)
+        if weighted:
+            if self.weight_matrix is None:
+                return
+            matrix = np.asarray(self.weight_matrix, dtype=float)
+            if matrix.shape != (k, k):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: weight_matrix is {matrix.shape[0]}x"
+                    f"{matrix.shape[1]} but the agreement profile has {k} "
+                    f"categories"
+                )
+            pe *= float(matrix.sum()) / k
         if abs(pe - self.parts.chance) > _TOL:
             raise ValueError(
                 f"{_ERROR_PREFIX}: Pe is {self.parts.chance:.6f}, but the "
@@ -168,7 +215,13 @@ class GwetsAC1Result(PointEstimateResult):
 
     def _data_line(self) -> str:
         exact = "exact formula" if self.is_exact else UNBALANCED_DATA_LABEL
-        return f"{self._subjects_phrase()}; {self._raters_phrase()}; {exact}"
+        weights = self._weights_phrase(self.weights_type)
+        if self.weights_type != "identity":
+            weights += " (AC2)"
+        return (
+            f"{self._subjects_phrase()}; {self._raters_phrase()}; "
+            f"{weights}; {exact}"
+        )
 
     def summary(self) -> dict:
         """
@@ -177,12 +230,15 @@ class GwetsAC1Result(PointEstimateResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'is_exact', 'ci_method'.
+            Keys from parent (including balance) plus 'is_exact', 'ci_method',
+            'weights_type', 'weight_matrix'.
         """
         result = super().summary()
         result.update({
             "is_exact": self.is_exact,
             "ci_method": self.ci_method,
+            "weights_type": self.weights_type,
+            "weight_matrix": self.weight_matrix,
         })
         return result
 
