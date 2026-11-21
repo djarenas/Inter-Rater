@@ -95,7 +95,6 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
     # Checked at this level
     config: LightKappaConfig

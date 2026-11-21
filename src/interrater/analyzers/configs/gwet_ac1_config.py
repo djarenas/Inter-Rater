@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .no_weight_group_config import NoWeightGroupConfig
+from .group_coefficient_config import GroupCoefficientConfig
 
 if TYPE_CHECKING:
     from .hypothesis_test_config import HypothesisTestConfig
@@ -16,7 +16,7 @@ _ERROR_PREFIX = "[GwetAC1Config] Error"
 
 
 @dataclass(frozen=True)
-class GwetAC1Config(NoWeightGroupConfig):
+class GwetAC1Config(GroupCoefficientConfig):
     """
     I am the configuration for Gwet's AC1 analysis.
 
@@ -36,9 +36,9 @@ class GwetAC1Config(NoWeightGroupConfig):
     AC1 stays high -- matching the intuition that raters who mostly agree
     really do agree, even when categories are imbalanced.
 
-    For weighted (ordinal) analysis, use AC2 (GwetAC2Config) instead.
+    Gwet's AC2, the weighted AC1, is not implemented.
 
-    I inherit all fields from NoWeightGroupConfig and add no new ones.
+    I inherit all fields from GroupCoefficientConfig and add no new ones.
     The unweighted constraint is enforced by the analyzer, which refuses
     ratings whose semantics declares ordered or weighted categories.
 
@@ -71,11 +71,10 @@ class GwetAC1Config(NoWeightGroupConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class GroupCoefficientConfig
     balanced_data_only: bool
     rater_jackknife: bool
-    # Inherited from parent class NoWeightGroupConfig (validated there to stay at defaults)
 
     # Constructor ------------------------------------------------------------ #
 
@@ -92,8 +91,8 @@ class GwetAC1Config(NoWeightGroupConfig):
         if self.ci_method == "parametric_null":
             raise ValueError(
                 f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Gwet's AC1. The parametric null variance formula is specific "
-                f"to Fleiss' kappa (Fleiss 1979, Eq. 12). "
+                f"for Gwet's AC1. There is no closed-form null variance for this "
+                f"coefficient. "
                 f"Use 'percentile' or 'bca' instead."
             )
 
@@ -107,9 +106,3 @@ class GwetAC1Config(NoWeightGroupConfig):
                 f"available for Gwet's AC1. There is no closed-form null variance "
                 f"for AC1. Use method='permutation' instead."
             )
-
-    # Public API ------------------------------------------------------------- #
-
-    def summary(self) -> dict:
-        """Return configuration (inherits parent's summary)."""
-        return super().summary()

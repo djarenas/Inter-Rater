@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .weightable_individual_analyzer import WeightableIndividualAnalyzer
+from .individual_marginal_analyzer import IndividualMarginalAnalyzer
 
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import CohenKappaResult, HypothesisTestResult
@@ -28,7 +28,7 @@ from ..intermediates.results.ci_results import ParametricCIResult
 _ERROR_PREFIX = "[CohenKappaAnalyzer] Error"
 
 
-class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
+class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
     """
     I am the analyzer for Cohen's kappa, the pairwise agreement coefficient
     with individual marginals.
@@ -70,7 +70,7 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
     estimator_input : EstimatorInput
         Built from ratings, carrying category_index, n_categories, and weights.
     weights : Weights | None
-        The weights declared by the semantics (from WeightableIndividualAnalyzer).
+        The weights declared by the semantics (from Analyzer).
         None for unordered categories (unweighted).
 
     References
@@ -85,15 +85,16 @@ class CohenKappaAnalyzer(WeightableIndividualAnalyzer):
         Bulletin, 72(5), 323--327.
     """
 
+    # Has a weighted form: Analyzer reads the weights from the semantics
+    _ACCEPTS_WEIGHTS = True
+
     # Attribute declaration
 
     # Populated at parent class Analyzer
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
-    # Populated at parent class WeightableIndividualAnalyzer
     weights: Weights | None
     # Checked at this level
     config: CohenKappaConfig

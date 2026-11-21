@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .weightable_individual_config import WeightableIndividualConfig
+from .individual_marginal_config import IndividualMarginalConfig
 
 if TYPE_CHECKING:
     from .hypothesis_test_config import HypothesisTestConfig
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[CohenKappaConfig] Error"
 
 @dataclass(frozen=True)
-class CohenKappaConfig(WeightableIndividualConfig):
+class CohenKappaConfig(IndividualMarginalConfig):
     """
     I am the configuration for Cohen's kappa analysis.
 
@@ -53,7 +53,7 @@ class CohenKappaConfig(WeightableIndividualConfig):
         is told why False does not apply instead of failing on an unknown
         key. Cohen's kappa is always computed on the subjects both raters
         rated, which is exact, so there is no approximation to allow.
-    (all other fields inherited from WeightableIndividualConfig and parents)
+    (all other fields inherited from IndividualMarginalConfig and parents)
     """
 
     # Attribute declaration
@@ -65,10 +65,9 @@ class CohenKappaConfig(WeightableIndividualConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
-    # Inherited from parent class WeightableIndividualConfig
     # Populated at this level: Changing default 
     balanced_data_only: bool = True
 

@@ -45,7 +45,7 @@ class IndividualMarginalConfig(AnalyzerConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Populated at this level (although not supported yet)
     rater_jackknife: bool = False
 

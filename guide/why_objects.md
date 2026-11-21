@@ -63,10 +63,10 @@ what that buys.
 
   ```
   FleissKappaConfig(n_resamples=-5)
-  ValueError: [FleissKappaConfig] Error: [WeightableGroupConfig] Error: [GroupCoefficientConfig] Error: [AnalyzerConfig] Error: n_resamples must be >= 1, got -5
+  ValueError: [FleissKappaConfig] Error: [GroupCoefficientConfig] Error: [AnalyzerConfig] Error: n_resamples must be >= 1, got -5
 
   FleissKappaConfig(balanced_data_only=1)
-  TypeError: [FleissKappaConfig] Error: [WeightableGroupConfig] Error: [GroupCoefficientConfig] Error: balanced_data_only must be bool, got int
+  TypeError: [FleissKappaConfig] Error: [GroupCoefficientConfig] Error: balanced_data_only must be bool, got int
   ```
 
   The first chain reaches `AnalyzerConfig`, so the rule is one every analyzer

@@ -49,6 +49,20 @@ versioning follows [semver](https://semver.org/).
   `PrevalenceBiasIndex.n_disagree` is now worked out from those counts
   instead of passed in. A printed result says "3 raters", never "at least
   3 raters".
+- `WeightableGroupConfig`, `NoWeightGroupConfig`,
+  `WeightableIndividualConfig`, `NoWeightIndividualConfig`,
+  `WeightableGroupAnalyzer` and `WeightableIndividualAnalyzer` are removed.
+  Until 2.1.0 the config classes held or refused `weights_type` and
+  `custom_weights_path`; since weights moved to the semantics they did
+  nothing. Leaf configs inherit `GroupCoefficientConfig` or
+  `IndividualMarginalConfig` directly. Fleiss, Brennan-Prediger,
+  Krippendorff and Cohen set `_ACCEPTS_WEIGHTS = True`; the others refuse
+  weighted semantics as before. Error chains no longer name the removed
+  classes.
+- `interrater.analyzers` no longer exports `Analyzer`, `GroupAnalyzer`,
+  `percentile_ci` or `bca_ci`. The bases are not built directly, and the
+  interval functions are called by the analyzers. All four remain
+  importable from their own modules.
 
 ### Changed
 

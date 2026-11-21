@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .weightable_group_config import WeightableGroupConfig
+from .group_coefficient_config import GroupCoefficientConfig
 
 if TYPE_CHECKING:
     from ...injectors import InjectorConfig
@@ -16,26 +16,23 @@ _ERROR_PREFIX = "[BrennanPredigerConfig] Error"
 
 
 @dataclass(frozen=True)
-class BrennanPredigerConfig(WeightableGroupConfig):
+class BrennanPredigerConfig(GroupCoefficientConfig):
     """
     I am the configuration for Brennan-Prediger analysis.
 
     Brennan and Prediger's coefficient defines chance agreement as a uniform
     guess among K categories, making it independent of the observed category
-    proportions. That independence is its distinguishing property: unlike
-    Fleiss' kappa, it does not collapse under skew, and unlike Gwet's AC1,
-    it does not model rater uncertainty -- it simply asks how much better
-    the raters did than picking at random.
+    proportions.
 
     The weighted form replaces 1/K with sum(W) / K^2, where W is the weight
     matrix. The chance term remains independent of what the raters actually
-    did -- the hallmark of Brennan-Prediger -- and the weighted coefficient
+    did (the hallmark of Brennan-Prediger) and the weighted coefficient
     is the unweighted one with identity W as a special case. The formula is
     from Gwet (2014).
 
     Weights are declared in the semantics of the ratings (categories kind
     'ordered' or 'weighted'). The analyzer reads the weight matrix from there
-    at construction time, exactly as FleissKappaAnalyzer does.
+    at construction time.
 
     There is no parametric null variance formula for Brennan-Prediger, so
     ``ci_method='parametric_null'`` and hypothesis test
@@ -55,23 +52,22 @@ class BrennanPredigerConfig(WeightableGroupConfig):
     balanced_data_only : bool, default False
         Brennan-Prediger works on both balanced and unbalanced data.
         The formula naturally generalizes to varying raters per subject.
-    (all other fields inherited from WeightableGroupConfig and parents)
+    (all other fields inherited from GroupCoefficientConfig and parents)
     """
 
     # Attribute declaration
 
     # Inherited from parent class AnalyzerConfig
-    n_resamples: int 
-    alpha: float 
+    n_resamples: int
+    alpha: float
     random_state: int | None
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class GroupCoefficientConfig
     balanced_data_only: bool
-    rater_jackknife: bool 
-    # Inherited from parent class WeightableGroupConfig
+    rater_jackknife: bool
 
     # Constructor ------------------------------------------------------------ #
 
@@ -88,8 +84,8 @@ class BrennanPredigerConfig(WeightableGroupConfig):
         if self.ci_method == "parametric_null":
             raise ValueError(
                 f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Brennan-Prediger. The parametric null variance formula is "
-                f"specific to Fleiss' kappa (Fleiss 1979, Eq. 12). "
+                f"for Brennan-Prediger. There is no closed-form null variance for "
+                f"this coefficient. "
                 f"Use 'percentile' or 'bca' instead."
             )
 
@@ -103,9 +99,3 @@ class BrennanPredigerConfig(WeightableGroupConfig):
                 f"available for Brennan-Prediger. There is no closed-form null "
                 f"variance for this coefficient. Use method='permutation' instead."
             )
-
-    # Public API ------------------------------------------------------------- #
-
-    def summary(self) -> dict:
-        """Return configuration (inherits parent's summary)."""
-        return super().summary()

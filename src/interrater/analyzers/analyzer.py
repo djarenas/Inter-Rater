@@ -387,7 +387,7 @@ class Analyzer(ABC):
     # Weights ---------------------------------------------------------------- #
 
     _ACCEPTS_WEIGHTS: bool = False
-    """Whether this coefficient has a weighted form. The weightable bases say yes."""
+    """Whether this coefficient has a weighted form. Fleiss, Brennan-Prediger, Krippendorff and Cohen say yes."""
 
     def _refuse_weights_if_unsupported(self) -> None:
         """

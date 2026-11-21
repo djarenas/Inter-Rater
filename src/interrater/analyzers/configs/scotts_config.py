@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .no_weight_group_config import NoWeightGroupConfig
+from .group_coefficient_config import GroupCoefficientConfig
 
 if TYPE_CHECKING:
     from ...injectors import InjectorConfig
@@ -16,7 +16,7 @@ _ERROR_PREFIX = "[ScottsConfig] Error"
 
 
 @dataclass(frozen=True)
-class ScottsConfig(NoWeightGroupConfig):
+class ScottsConfig(GroupCoefficientConfig):
     """
     I am the configuration for Scott's pi analysis.
 
@@ -58,7 +58,7 @@ class ScottsConfig(NoWeightGroupConfig):
 
     Attributes
     ----------
-    (all fields inherited from NoWeightGroupConfig and parents)
+    (all fields inherited from GroupCoefficientConfig and parents)
     """
 
     # Attribute declaration
@@ -70,11 +70,10 @@ class ScottsConfig(NoWeightGroupConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class GroupCoefficientConfig
     balanced_data_only: bool
     rater_jackknife: bool
-    # Inherited from parent class NoWeightGroupConfig (validated to stay at defaults)
 
     # Constructor ------------------------------------------------------------ #
 
@@ -93,9 +92,3 @@ class ScottsConfig(NoWeightGroupConfig):
         # base class -- see AnalyzerConfig._warn_parametric_null.
         if self.ci_method == "parametric_null":
             self._warn_parametric_null()
-
-    # Public API ------------------------------------------------------------- #
-
-    def summary(self) -> dict:
-        """Return configuration (inherits parent's summary)."""
-        return super().summary()

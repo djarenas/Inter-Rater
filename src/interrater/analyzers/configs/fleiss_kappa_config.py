@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .weightable_group_config import WeightableGroupConfig
+from .group_coefficient_config import GroupCoefficientConfig
 
 if TYPE_CHECKING:
     from ...injectors import InjectorConfig
@@ -16,7 +16,7 @@ _ERROR_PREFIX = "[FleissKappaConfig] Error"
 
 
 @dataclass(frozen=True)
-class FleissKappaConfig(WeightableGroupConfig):
+class FleissKappaConfig(GroupCoefficientConfig):
     """
     I am the configuration for Fleiss' kappa analysis.
 
@@ -36,7 +36,7 @@ class FleissKappaConfig(WeightableGroupConfig):
     Fleiss' kappa supports weighting for ordinal data. Weights are declared
     in the semantics of the ratings (categories kind 'ordered' or 'weighted'),
     not here.
-    (all other fields inherited from WeightableGroupConfig and parents)
+    (all other fields inherited from GroupCoefficientConfig and parents)
     """
 
     # Attribute declaration
@@ -48,7 +48,7 @@ class FleissKappaConfig(WeightableGroupConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class GroupCoefficientConfig
     rater_jackknife: bool
     # Override parent default: Fleiss prefers balance by default
@@ -74,9 +74,3 @@ class FleissKappaConfig(WeightableGroupConfig):
         # them too. See AnalyzerConfig._warn_parametric_null.
         if self.ci_method == "parametric_null":
             self._warn_parametric_null()
-
-    # Public API ------------------------------------------------------------- #
-
-    def summary(self) -> dict:
-        """Return configuration (inherits parent's summary)."""
-        return super().summary()

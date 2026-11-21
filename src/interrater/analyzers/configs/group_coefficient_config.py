@@ -22,14 +22,12 @@ class GroupCoefficientConfig(AnalyzerConfig):
 
     Group coefficients (Fleiss' kappa, Gwet AC1, Brennan-Prediger, Scott's pi,
     Krippendorff's alpha) read a counts matrix (NijMatrix) that discards rater
-    identity. 
-
+    identity.
 
     I add two decisions specific to group analysis:
-    - Whether to enforce balance (constant raters per subject). Fleiss requires
-      this mathematically; others are more flexible.
+    - Whether to enforce balance (constant raters per subject).
     - Whether to run leave-one-rater-out diagnostics to see how much each
-      rater matters to the agreement. Not supported in this version yet:
+      rater matters to the agreement. Not supported as of V2 yet;
       true is refused, so it is never silently ignored.
 
     Attributes
@@ -37,8 +35,9 @@ class GroupCoefficientConfig(AnalyzerConfig):
     balanced_data_only : bool, default False
         If True, require that every subject was rated the same number of times.
         If False, allow unbalanced designs (different subjects rated by
-        different numbers of raters). Fleiss' kappa requires balance; other
-        group coefficients are flexible.
+        different numbers of raters). Fleiss' kappa is exact only on balanced
+        data (FleissKappaConfig defaults to True); with False it runs on
+        unbalanced data and the result says it is an approximation.
     rater_jackknife : bool, default False
         Leave-one-rater-out diagnostics: drop each rater in turn and recompute
         the coefficient. Not supported in this version yet; must be False.
@@ -47,13 +46,13 @@ class GroupCoefficientConfig(AnalyzerConfig):
     # Attribute declaration
 
     # Inherited from parent class AnalyzerConfig
-    n_resamples: int 
-    alpha: float 
+    n_resamples: int
+    alpha: float
     random_state: int | None
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Populated at this level
     balanced_data_only: bool = False
     rater_jackknife: bool = False

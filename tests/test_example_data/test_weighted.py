@@ -1,9 +1,8 @@
 """
 Integration tests for weighted analysis (linear + quadratic weights).
 
-Tests that distance-based weighting changes the point estimate and exercises
-both WeightableGroupConfig (Fleiss, B-P, Krippendorff) and
-WeightableIndividualConfig (Cohen).
+Tests that distance-based weighting changes the point estimate, for the group
+analyzers with a weighted form (Fleiss, B-P, Krippendorff) and for Cohen.
 
 Weights only matter when K >= 3 -- with binary categories, linear and
 quadratic collapse to identity (there is only one distance). All datasets
@@ -69,8 +68,8 @@ def _assert_brackets_point(result) -> None:
 
 # ── SR1 prelim (ratings, 4 raters, K=3, balanced, ordinal -1/0/1) ────── #
 #
-# Two weight types on the same data, exercising WeightableGroupConfig
-# with two different analyzers.  Categories are ordinal (-1, 0, 1), so
+# Two weight types on the same data, with two different group
+# analyzers.  Categories are ordinal (-1, 0, 1), so
 # -1/0 is closer than -1/1 under distance-based weights.
 #
 # Unweighted reference values (from test_research_data.py):
@@ -86,7 +85,6 @@ class TestSR1PrelimWeighted:
 
         Quadratic weights (w_ij = 1 - (i-j)^2 / (K-1)^2) upweight partial
         agreements, increasing the estimate from 0.493 to 0.593.
-        Exercises WeightableGroupConfig.
         """
         ratings = ordered_ratings("sr1_prelim", "quadratic")
         analyzer = FleissKappaAnalyzer(ratings, fast_fleiss_config)
@@ -111,7 +109,6 @@ class TestSR1PrelimWeighted:
         Linear weights (w_ij = 1 - |i-j| / (K-1)) are less aggressive
         than quadratic, but still upweight partial agreements.
         Different weight type on same data as Fleiss quadratic above.
-        Exercises WeightableGroupConfig.
         """
         ratings = ordered_ratings("sr1_prelim", "linear")
         analyzer = KrippendorffAlphaAnalyzer(ratings, fast_krippendorff_config)
@@ -224,8 +221,7 @@ class TestSR1PrelimWeightsFromSemantics:
 
 # ── Gwet cont3x3 (ratings, 2 raters, K=3, balanced) ─────────────────── #
 #
-# Exercises WeightableIndividualConfig (Cohen is an individual-marginal
-# analyzer).  irrCAC may provide an external cross-check.
+# Cohen is the individual-marginal analyzer with a weighted form.  irrCAC may provide an external cross-check.
 #
 # Unweighted reference (from test_reference_data.py):
 #   Cohen kappa = 0.796
@@ -239,7 +235,6 @@ class TestGwetCont3x3Weighted:
 
         Quadratic weights increase the estimate from 0.796 to 0.892 because
         adjacent-category disagreements get partial credit.
-        Exercises WeightableIndividualConfig.
         """
         ratings = ordered_ratings("gwet", "quadratic")
         analyzer = CohenKappaAnalyzer(ratings, fast_cohen_config)
@@ -261,7 +256,7 @@ class TestGwetCont3x3Weighted:
 
 # ── Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal) ────── #
 #
-# Second WeightableGroupConfig analyzer with weights, different dataset.
+# A second group analyzer with weights, different dataset.
 #
 # Unweighted reference (from test_reference_data.py):
 #   Brennan-Prediger = 0.670  (synthetic_2rater B-P via Scott's equivalence)
@@ -276,7 +271,6 @@ class TestSynthetic2RaterWeighted:
         Linear weights lower the estimate from 0.670 to 0.651 here because
         the B-P chance correction (Pe = 1/K) interacts differently with
         partial credit than the observed-agreement correction in kappa.
-        Exercises WeightableGroupConfig.
         """
         ratings = ordered_ratings("synthetic", "linear")
         analyzer = BrennanPredigerAnalyzer(ratings, fast_bp_config)

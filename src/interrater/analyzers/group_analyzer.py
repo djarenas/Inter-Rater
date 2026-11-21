@@ -36,7 +36,7 @@ class GroupAnalyzer(Analyzer, ABC):
         rated, how much each pair overlapped.
     config : GroupCoefficientConfig
         Must be an instance of GroupCoefficientConfig or a subclass
-        (NoWeightGroupConfig, WeightableGroupConfig, FleissKappaConfig, etc.)
+        (FleissKappaConfig, GwetAC1Config, etc.)
     """
 
     # Attribute declaration

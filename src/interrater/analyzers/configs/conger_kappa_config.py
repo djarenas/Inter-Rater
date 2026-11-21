@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .no_weight_individual_config import NoWeightIndividualConfig
+from .individual_marginal_config import IndividualMarginalConfig
 
 if TYPE_CHECKING:
     from ...injectors.configs import InjectorConfig
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[CongerKappaConfig] Error"
 
 @dataclass(frozen=True)
-class CongerKappaConfig(NoWeightIndividualConfig):
+class CongerKappaConfig(IndividualMarginalConfig):
     """
     I am the configuration for Conger's kappa analysis.
 
@@ -53,7 +53,7 @@ class CongerKappaConfig(NoWeightIndividualConfig):
         key. Conger's kappa has no approximation for missing ratings: the
         analyzer requires every rater to rate every subject, which is
         stricter than balanced.
-    (all other fields inherited from NoWeightIndividualConfig and parents)
+    (all other fields inherited from IndividualMarginalConfig and parents)
     """
 
     # Attribute declaration
@@ -65,10 +65,9 @@ class CongerKappaConfig(NoWeightIndividualConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
-    # Inherited from parent class NoWeightIndividualConfig (validated to stay at defaults)
     # Populated at this level
     # Must be True. Exists so that every coefficient config accepts the same
     # keys, and a config moved here is told why False does not apply.

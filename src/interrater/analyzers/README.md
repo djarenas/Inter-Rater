@@ -20,30 +20,20 @@ Analyzer (ABC)
   │   │   Read a counts matrix (NijMatrix): how many raters put
   │   │   each subject in each category, not which rater said what.
   │   │
-  │   ├── WeightableGroupAnalyzer (ABC)
-  │   │   │   Adds distance-based weighting for ordinal data.
-  │   │   │
-  │   │   ├── FleissKappaAnalyzer
-  │   │   ├── BrennanPredigerAnalyzer
-  │   │   └── KrippendorffAlphaAnalyzer
-  │   │
-  │   └── (direct GroupAnalyzer children, no weighting)
-  │       ├── GwetAC1Analyzer
-  │       └── ScottsAnalyzer
+  │   ├── FleissKappaAnalyzer        (weighted form)
+  │   ├── BrennanPredigerAnalyzer    (weighted form)
+  │   ├── KrippendorffAlphaAnalyzer  (weighted form)
+  │   ├── GwetAC1Analyzer
+  │   └── ScottsAnalyzer
   │
   └── IndividualMarginalAnalyzer (ABC)
       │   Coefficients that keep rater identity.
       │   Read an EstimatorInput: each rater's own category distribution
       │   enters the chance term separately.
       │
-      ├── WeightableIndividualAnalyzer (ABC)
-      │   │   Adds distance-based weighting.
-      │   │
-      │   └── CohenKappaAnalyzer
-      │
-      └── (direct IndividualMarginalAnalyzer children, no weighting)
-          ├── CongerKappaAnalyzer
-          └── LightKappaAnalyzer
+      ├── CohenKappaAnalyzer         (weighted form)
+      ├── CongerKappaAnalyzer
+      └── LightKappaAnalyzer
 ```
 
 The splits are meant to be conceptual: Group coefficients treat all raters
@@ -69,13 +59,6 @@ need the full ratings array, column by column.
 - Validates that the config is a GroupCoefficientConfig
 - Enforces balance constraints when `config.balanced_data_only=True`
 
-### WeightableGroupAnalyzer / WeightableIndividualAnalyzer
-
-- Say they accept weights (`_ACCEPTS_WEIGHTS`), so Analyzer reads them from
-  the semantics of the ratings (`Weights.build_from_categories`)
-- Validates weight matrix dimensions match the number of categories
-- Supports "identity" (unweighted), "linear", "quadratic", and "custom"
-
 ### IndividualMarginalAnalyzer
 
 - Validates that the config is an IndividualMarginalConfig
@@ -83,6 +66,10 @@ need the full ratings array, column by column.
 ### Leaf analyzers (e.g. FleissKappaAnalyzer)
 
 - Validate their own config type (FleissKappaConfig, etc.)
+- A coefficient with a weighted form sets `_ACCEPTS_WEIGHTS = True`, so
+  Analyzer reads the weights from the semantics
+  (`Weights.build_from_categories`); the others refuse ordered or weighted
+  semantics
 - Supply only what is specific to their coefficient: the coefficient itself
   (`_estimate_from_input`, one line calling its agreement function), the
   result it is packaged into (`_result`), and,

@@ -24,15 +24,11 @@ from interrater.analyzers.configs import (
     IndividualMarginalConfig,
     KrippendorffAlphaConfig,
     LightKappaConfig,
-    NoWeightGroupConfig,
-    NoWeightIndividualConfig,
     PairwisePermutationConfig,
     PermutationBootstrapMeanConfig,
     PermutationConfig,
     ScottsConfig,
     SubsetPermutationConfig,
-    WeightableGroupConfig,
-    WeightableIndividualConfig,
 )
 
 
@@ -299,20 +295,6 @@ class TestGroupCoefficientConfig:
         assert "rater_jackknife" in s
 
 
-class TestNoWeightGroupConfig:
-    """Tests for NoWeightGroupConfig (rejects weights)."""
-
-    def test_default_construction(self):
-        cfg = NoWeightGroupConfig()
-        assert isinstance(cfg, NoWeightGroupConfig)
-
-class TestWeightableGroupConfig:
-    """Tests for WeightableGroupConfig (accepts weights)."""
-
-    def test_default_construction(self):
-        cfg = WeightableGroupConfig()
-        assert isinstance(cfg, WeightableGroupConfig)
-
 # ============================================================== #
 #  Leaf group configs                                            #
 # ============================================================== #
@@ -353,7 +335,7 @@ class TestScottsConfig:
     def test_construction(self):
         """ScottsConfig should construct properly (not just pass)."""
         cfg = ScottsConfig()
-        assert isinstance(cfg, NoWeightGroupConfig)
+        assert isinstance(cfg, GroupCoefficientConfig)
 
     def test_allows_parametric_null_ci(self):
         """Scott's pi = Fleiss' kappa at 2 raters, so parametric_null OK.
@@ -453,20 +435,6 @@ class TestIndividualMarginalConfig:
         assert "rater_jackknife" in s
         assert s["rater_jackknife"] is False
 
-
-class TestNoWeightIndividualConfig:
-    """Tests for NoWeightIndividualConfig (rejects weights)."""
-
-    def test_default_construction(self):
-        cfg = NoWeightIndividualConfig()
-        assert isinstance(cfg, NoWeightIndividualConfig)
-
-class TestWeightableIndividualConfig:
-    """Tests for WeightableIndividualConfig (accepts weights)."""
-
-    def test_default_construction(self):
-        cfg = WeightableIndividualConfig()
-        assert isinstance(cfg, WeightableIndividualConfig)
 
 # ============================================================== #
 #  Leaf individual configs                                       #

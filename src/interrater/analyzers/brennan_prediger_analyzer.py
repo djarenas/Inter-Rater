@@ -10,7 +10,7 @@ from .agreement_functions.group_agreement import (
     chance_brennan_prediger,
     observed_agreement,
 )
-from .weightable_group_analyzer import WeightableGroupAnalyzer
+from .group_analyzer import GroupAnalyzer
 from ..intermediates.estimator_parts import EstimatorInput, NijMatrix
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[BrennanPredigerAnalyzer] Error"
 
 
-class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
+class BrennanPredigerAnalyzer(GroupAnalyzer):
     """
     I am the analyzer for Brennan-Prediger's coefficient.
 
@@ -68,8 +68,11 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
     weights : Weights | None
-        The weights object (from WeightableGroupAnalyzer).
+        The weights object (from Analyzer).
     """
+
+    # Has a weighted form: Analyzer reads the weights from the semantics
+    _ACCEPTS_WEIGHTS = True
 
     # Attribute declaration
 
@@ -77,7 +80,6 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    # Populated at parent class WeightableGroupAnalyzer
     weights: Weights | None
     # Checked at this level
     config: BrennanPredigerConfig
@@ -112,7 +114,7 @@ class BrennanPredigerAnalyzer(WeightableGroupAnalyzer):
                 f"got {type(ratings).__name__}"
             )
 
-        # Call parent __init__ (validates weightable config, builds Weights)
+        # Call parent __init__ (validates group config; Analyzer builds the Weights)
         try:
             super().__init__(ratings, config)
         except (TypeError, ValueError) as e:

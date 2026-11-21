@@ -20,16 +20,14 @@ class AnalyzerConfig:
 
     Every analyzer needs these decisions: how many bootstrap resamples, what
     confidence level, which CI method, and what random seed for
-    reproducibility. I enforce these choices upfront so they're documented in
+    reproducibility. I validate these choices upfront so they're documented in
     YAML and auditable in every analysis.
 
-    I also hold a placeholder for convergence diagnostics -- the ability to
+    There is currently a placeholder for convergence diagnostics, the ability to
     verify that your n_resamples is large enough that CI bounds have
-    stabilized. This is computationally expensive but statistically rigorous,
-    and it is what separates responsible analysis from wishful thinking.
+    stabilized.
 
-    Every analysis includes package version in its audit trail for
-    reproducibility.
+    My summary includes the package version, for reproducibility.
 
     Attributes
     ----------
@@ -66,15 +64,15 @@ class AnalyzerConfig:
     ci_method: str = "percentile"
     convergence_test: ConvergenceTest | None = None
     hypothesis_test_config: HypothesisTestConfig | None = None
-    injection: tuple[InjectorConfig] | None = None
+    injection: tuple[InjectorConfig, ...] | None = None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate configuration after construction."""
 
-        # Check the bool python bug. After around Python2.3, bools were made to inherit
-        # int for backwards compatibility 
+        # bool is a subclass of int (PEP 285), so True would pass the int
+        # checks below
         for name in ("n_resamples", "alpha", "random_state"):
             if isinstance(getattr(self, name), bool):
                 raise TypeError(

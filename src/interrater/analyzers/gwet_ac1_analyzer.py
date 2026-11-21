@@ -39,11 +39,10 @@ class GwetAC1Analyzer(GroupAnalyzer):
     When prevalence is skewed, Tw is small, Pe is small, and AC1 stays high --
     matching the intuition that raters who mostly agree really do agree.
 
-    AC1 is unweighted by definition. For ordinal (weighted) analysis, use
-    Gwet's AC2 instead, which is a separate coefficient with its own published
-    definition. The agreement function gwet_ac1() takes no weights argument
-    -- passing weights is a TypeError at the call site, not a silent
-    ignore.
+    AC1 is unweighted by definition. Gwet's AC2, the weighted form, is not
+    implemented. I refuse ratings whose semantics declares ordered or
+    weighted categories, and gwet_ac1() raises ValueError on non-identity
+    weights.
 
     I validate that:
     - Config is GwetAC1Config

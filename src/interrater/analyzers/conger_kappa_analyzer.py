@@ -57,9 +57,9 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     kappa, not Conger's.
 
     There is no weighted form. Conger (1980) defined the coefficient for nominal
-    data only; the unweighted constraint is enforced by my config
-    (NoWeightIndividualConfig) and by the agreement function (chance_conger
-    rejects non-identity weights).
+    data only. I refuse ordered or weighted semantics
+    (``_refuse_weights_if_unsupported``), and ``conger_kappa`` raises
+    NotImplementedError on non-identity weights.
 
     There is no parametric null variance. Confidence intervals and hypothesis
     tests use bootstrap and permutation methods respectively.
@@ -92,7 +92,6 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    # Populated at parent class IndividualMarginalAnalyzer
     estimator_input: EstimatorInput
     # Checked at this level
     config: CongerKappaConfig

@@ -4,7 +4,8 @@ Every analyzer is configured by a frozen dataclass that declares its
 decisions up front. One of their utilities is that they can be built from
 a YAML file that can be easily archived, modified, and/or shown to collaborators (or your future self).
 
-The decisions are such as: number of bootstrap resamples, confidence level, CI method, random seed, hypothesis testing, injection, and convergence diagnostics.
+The decisions are such as: number of bootstrap resamples, confidence level, CI method, random
+seed, hypothesis testing, injection, and convergence diagnostics.
 
 Configurations were designed to load from YAML (`build_from_yaml`), but the plain dicts
 (`build_from_dict`) option is also availble. `summary()` reports them.
@@ -29,22 +30,16 @@ error.
 ```
 AnalyzerConfig (base)
   ├── GroupCoefficientConfig
-  │   ├── NoWeightGroupConfig
-  │   │   ├── GwetAC1Config
-  │   │   └── ScottsConfig
-  │   │
-  │   └── WeightableGroupConfig
-  │       ├── FleissKappaConfig
-  │       ├── BrennanPredigerConfig
-  │       └── KrippendorffAlphaConfig
+  │   ├── FleissKappaConfig
+  │   ├── ScottsConfig
+  │   ├── GwetAC1Config
+  │   ├── BrennanPredigerConfig
+  │   └── KrippendorffAlphaConfig
   │
   ├── IndividualMarginalConfig
-  │   ├── NoWeightIndividualConfig
-  │   │   ├── CongerKappaConfig
-  │   │   └── LightKappaConfig
-  │   │
-  │   └── WeightableIndividualConfig
-  │       └── CohenKappaConfig
+  │   ├── CohenKappaConfig
+  │   ├── CongerKappaConfig
+  │   └── LightKappaConfig
   │
   └── PermutationConfig (holds a nested AnalyzerConfig)
       ├── PairwisePermutationConfig
@@ -57,7 +52,8 @@ Supporting types:
 
 Weights are not configured here. They are declared in the semantics of the
 ratings (categories of kind `ordered` with a `weighting`, or kind `weighted`
-with a matrix), and the analyzer reads them from there. `weights_type` and
+with a matrix), and the analyzer reads them from there; whether a
+coefficient accepts them is the analyzer's decision. `weights_type` and
 `custom_weights_path` were removed in 2.1.0; a config that still has them is
 refused with a message saying so.
 
@@ -82,18 +78,10 @@ Coefficients that read a counts matrix. Adds:
 
 Both must be a real `bool` (`balanced_data_only=1` is refused).
 
-- **NoWeightGroupConfig** (Gwet's AC1, Scott's pi): no weighted form. Adds
-  no fields; the analyzers refuse ordered or weighted semantics.
-- **WeightableGroupConfig** (Fleiss, Brennan-Prediger, Krippendorff): adds
-  no fields; these analyzers use the semantics' weights.
-
 ## IndividualMarginalConfig
 
-Coefficients that keep rater identity and read an `EstimatorInput`. Adds
-`rater_jackknife` (default False; `true` is refused).
-
-- **NoWeightIndividualConfig** (Conger, Light): no weighted form.
-- **WeightableIndividualConfig** (Cohen): uses the semantics' weights.
+Coefficients that keep rater identity. Adds `rater_jackknife` (default
+False; `true` is refused).
 
 ## Leaf configs: parametric null and balance
 
@@ -224,5 +212,4 @@ alpha is alpha with `kind: ordered, weighting: quadratic` (for equally
 spaced categories); nominal alpha is alpha with `kind: unordered`. Ratio and
 ordinal distances can be given as a `weighted` matrix.
 
-Gwet's AC2, the weighted AC1, is not implemented. When it is, it will
-inherit from `WeightableGroupConfig`. See Gwet (2014).
+Gwet's AC2, the weighted AC1, is not implemented. See Gwet (2014).

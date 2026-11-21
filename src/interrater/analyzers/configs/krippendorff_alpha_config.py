@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .weightable_group_config import WeightableGroupConfig
+from .group_coefficient_config import GroupCoefficientConfig
 
 if TYPE_CHECKING:
     from ...injectors import InjectorConfig
@@ -16,7 +16,7 @@ _ERROR_PREFIX = "[KrippendorffAlphaConfig] Error"
 
 
 @dataclass(frozen=True)
-class KrippendorffAlphaConfig(WeightableGroupConfig):
+class KrippendorffAlphaConfig(GroupCoefficientConfig):
     """
     I am the configuration for Krippendorff's alpha analysis.
 
@@ -71,7 +71,7 @@ class KrippendorffAlphaConfig(WeightableGroupConfig):
     The weights come from the semantics of the ratings (categories kind
     'ordered' or 'weighted'); unordered categories give the nominal case.
     The cost of confusing categories a and b is 1 - w_ab.
-    (all other fields inherited from WeightableGroupConfig and parents)
+    (all other fields inherited from GroupCoefficientConfig and parents)
     """
 
     # Attribute declaration
@@ -83,11 +83,10 @@ class KrippendorffAlphaConfig(WeightableGroupConfig):
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
-    injection: tuple[InjectorConfig] | None
+    injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class GroupCoefficientConfig
     balanced_data_only: bool
     rater_jackknife: bool
-    # Inherited from parent class WeightableGroupConfig
 
     # Constructor ------------------------------------------------------------ #
 
@@ -120,9 +119,3 @@ class KrippendorffAlphaConfig(WeightableGroupConfig):
                 f"null variance for this coefficient. Use method='permutation' "
                 f"instead."
             )
-
-    # Public API ------------------------------------------------------------- #
-
-    def summary(self) -> dict:
-        """Return configuration (inherits parent's summary)."""
-        return super().summary()

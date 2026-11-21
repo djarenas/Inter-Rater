@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .weightable_group_analyzer import WeightableGroupAnalyzer
+from .group_analyzer import GroupAnalyzer
 
 from ..data_objects.ratings import Ratings
 from ..intermediates.results import FleissKappaResult, HypothesisTestResult
@@ -27,7 +27,7 @@ from ..intermediates.results.analyzer_results.fleiss_kappa_result import (
 _ERROR_PREFIX = "[FleissKappaAnalyzer] Error"
 
 
-class FleissKappaAnalyzer(WeightableGroupAnalyzer):
+class FleissKappaAnalyzer(GroupAnalyzer):
     """
     I am the analyzer for Fleiss' kappa, the multi-rater agreement coefficient.
 
@@ -58,11 +58,14 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
     config : FleissKappaConfig
         The analysis configuration for Fleiss' kappa.
     weights : Weights | None
-        The weights object (from WeightableGroupAnalyzer).
+        The weights object (from Analyzer).
     is_exact : bool
         Whether the exact formula applies (data is perfectly balanced).
         Computed during initialization based on balance_profile.
     """
+
+    # Has a weighted form: Analyzer reads the weights from the semantics
+    _ACCEPTS_WEIGHTS = True
 
     # Attribute declaration
 
@@ -70,7 +73,6 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    # Populated at parent class WeightableGroupAnalyzer
     weights: Weights | None
     # Checked at this level
     config: FleissKappaConfig
@@ -118,7 +120,7 @@ class FleissKappaAnalyzer(WeightableGroupAnalyzer):
                     f"Details: {str(e)}"
                 ) from e
 
-        # Call parent __init__ (validates weightable config, builds Weights)
+        # Call parent __init__ (validates group config; Analyzer builds the Weights)
         # Wrap to propagate errors with FleissKappaAnalyzer context
         try:
             super().__init__(ratings, config)

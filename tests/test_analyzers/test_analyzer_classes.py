@@ -95,16 +95,8 @@ _ANALYZER_MODULES = [
     ("interrater.analyzers.analyzer", "[Analyzer] Error"),
     ("interrater.analyzers.group_analyzer", "[GroupAnalyzer] Error"),
     (
-        "interrater.analyzers.weightable_group_analyzer",
-        "[WeightableGroupAnalyzer] Error",
-    ),
-    (
         "interrater.analyzers.individual_marginal_analyzer",
         "[IndividualMarginalAnalyzer] Error",
-    ),
-    (
-        "interrater.analyzers.weightable_individual_analyzer",
-        "[WeightableIndividualAnalyzer] Error",
     ),
     (
         "interrater.analyzers.fleiss_kappa_analyzer",
@@ -157,89 +149,29 @@ class TestErrorPrefixes:
 
 
 class TestClassHierarchy:
-    """Verify inheritance chains match the design."""
+    """Verify inheritance chains and which coefficients accept weights."""
 
-    def test_fleiss_extends_weightable_group(self):
-        from interrater.analyzers.fleiss_kappa_analyzer import FleissKappaAnalyzer
-        from interrater.analyzers.weightable_group_analyzer import (
-            WeightableGroupAnalyzer,
-        )
+    _GROUP = ("group_analyzer", "GroupAnalyzer")
+    _INDIVIDUAL = ("individual_marginal_analyzer", "IndividualMarginalAnalyzer")
 
-        assert issubclass(FleissKappaAnalyzer, WeightableGroupAnalyzer)
+    @pytest.mark.parametrize("module, name, base, weighted", [
+        ("fleiss_kappa_analyzer", "FleissKappaAnalyzer", _GROUP, True),
+        ("brennan_prediger_analyzer", "BrennanPredigerAnalyzer", _GROUP, True),
+        ("krippendorff_alpha_analyzer", "KrippendorffAlphaAnalyzer", _GROUP, True),
+        ("gwet_ac1_analyzer", "GwetAC1Analyzer", _GROUP, False),
+        ("scotts_analyzer", "ScottsAnalyzer", _GROUP, False),
+        ("cohen_kappa_analyzer", "CohenKappaAnalyzer", _INDIVIDUAL, True),
+        ("conger_kappa_analyzer", "CongerKappaAnalyzer", _INDIVIDUAL, False),
+        ("light_kappa_analyzer", "LightKappaAnalyzer", _INDIVIDUAL, False),
+    ])
+    def test_base_and_weights(self, module, name, base, weighted):
+        import importlib
 
-    def test_brennan_prediger_extends_weightable_group(self):
-        from interrater.analyzers.brennan_prediger_analyzer import (
-            BrennanPredigerAnalyzer,
-        )
-        from interrater.analyzers.weightable_group_analyzer import (
-            WeightableGroupAnalyzer,
-        )
+        def load(mod, attr):
+            return getattr(importlib.import_module(f"interrater.analyzers.{mod}"), attr)
 
-        assert issubclass(BrennanPredigerAnalyzer, WeightableGroupAnalyzer)
-
-    def test_krippendorff_extends_weightable_group(self):
-        from interrater.analyzers.krippendorff_alpha_analyzer import (
-            KrippendorffAlphaAnalyzer,
-        )
-        from interrater.analyzers.weightable_group_analyzer import (
-            WeightableGroupAnalyzer,
-        )
-
-        assert issubclass(KrippendorffAlphaAnalyzer, WeightableGroupAnalyzer)
-
-    def test_gwet_extends_group_not_weightable(self):
-        """AC1 is unweighted -- extends GroupAnalyzer directly."""
-        from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
-        from interrater.analyzers.group_analyzer import GroupAnalyzer
-        from interrater.analyzers.weightable_group_analyzer import (
-            WeightableGroupAnalyzer,
-        )
-
-        assert issubclass(GwetAC1Analyzer, GroupAnalyzer)
-        assert not issubclass(GwetAC1Analyzer, WeightableGroupAnalyzer)
-
-    def test_scott_extends_group_not_weightable(self):
-        """Scott's pi is unweighted -- extends GroupAnalyzer directly."""
-        from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
-        from interrater.analyzers.group_analyzer import GroupAnalyzer
-        from interrater.analyzers.weightable_group_analyzer import (
-            WeightableGroupAnalyzer,
-        )
-
-        assert issubclass(ScottsAnalyzer, GroupAnalyzer)
-        assert not issubclass(ScottsAnalyzer, WeightableGroupAnalyzer)
-
-    def test_cohen_extends_weightable_individual(self):
-        from interrater.analyzers.cohen_kappa_analyzer import CohenKappaAnalyzer
-        from interrater.analyzers.weightable_individual_analyzer import (
-            WeightableIndividualAnalyzer,
-        )
-
-        assert issubclass(CohenKappaAnalyzer, WeightableIndividualAnalyzer)
-
-    def test_conger_extends_individual_not_weightable(self):
-        from interrater.analyzers.conger_kappa_analyzer import CongerKappaAnalyzer
-        from interrater.analyzers.individual_marginal_analyzer import (
-            IndividualMarginalAnalyzer,
-        )
-        from interrater.analyzers.weightable_individual_analyzer import (
-            WeightableIndividualAnalyzer,
-        )
-
-        assert issubclass(CongerKappaAnalyzer, IndividualMarginalAnalyzer)
-        assert not issubclass(CongerKappaAnalyzer, WeightableIndividualAnalyzer)
-
-    def test_light_extends_individual_not_weightable(self):
-        from interrater.analyzers.light_kappa_analyzer import LightKappaAnalyzer
-        from interrater.analyzers.individual_marginal_analyzer import (
-            IndividualMarginalAnalyzer,
-        )
-        from interrater.analyzers.weightable_individual_analyzer import (
-            WeightableIndividualAnalyzer,
-        )
-
-        assert issubclass(LightKappaAnalyzer, IndividualMarginalAnalyzer)
-        assert not issubclass(LightKappaAnalyzer, WeightableIndividualAnalyzer)
+        assert issubclass(load(module, name), load(*base))
+        assert load(module, name)._ACCEPTS_WEIGHTS is weighted
 
 
 # ------------------------------------------------------------------ #

@@ -55,7 +55,7 @@ the README's CI bounds.
 4. Both balance conditions covered (balanced and unbalanced)
 5. Both pairwise bootstrap methods tested (correlated and independent)
 6. Weighted analysis (linear and quadratic) tested on multiple datasets
-   across both WeightableGroupConfig and WeightableIndividualConfig
+   for both group and individual-marginal analyzers
 
 ### Analyzer coverage map
 
@@ -228,9 +228,8 @@ the other two would prove nothing.
 ## test_weighted.py (13 tests)
 
 Weighted analysis across multiple datasets. Tests that distance-based weighting
-changes the point estimate (weighted != unweighted) and exercises both
-WeightableGroupConfig (Fleiss, B-P, Krippendorff) and WeightableIndividualConfig
-(Cohen).
+changes the point estimate (weighted != unweighted), for the group analyzers
+with a weighted form (Fleiss, B-P, Krippendorff) and for Cohen.
 
 Weights only matter when K >= 3 -- with binary categories, linear and quadratic
 collapse to identity (there is only one distance). All datasets below have K=3.
@@ -239,20 +238,20 @@ collapse to identity (there is only one distance). All datasets below have K=3.
 
 | Test | Analyzer | Weights | Expected | Notes |
 |------|----------|---------|----------|-------|
-| test_fleiss_kappa_quadratic | FleissKappaAnalyzer | quadratic | 0.593 | -1/0 closer than -1/1; WeightableGroupConfig |
+| test_fleiss_kappa_quadratic | FleissKappaAnalyzer | quadratic | 0.593 | -1/0 closer than -1/1 |
 | test_krippendorff_alpha_linear | KrippendorffAlphaAnalyzer | linear | 0.555 | Different weight type on same data |
 
 ### Gwet cont3x3 (ratings, 2 raters, K=3, balanced)
 
 | Test | Analyzer | Weights | Expected | Notes |
 |------|----------|---------|----------|-------|
-| test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | 0.892 | WeightableIndividualConfig; irrCAC cross-check possible |
+| test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | 0.892 | irrCAC cross-check possible |
 
 ### Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal -1/0/1)
 
 | Test | Analyzer | Weights | Expected | Notes |
 |------|----------|---------|----------|-------|
-| test_brennan_prediger_linear | BrennanPredigerAnalyzer | linear | 0.651 | Second WeightableGroup analyzer with weights |
+| test_brennan_prediger_linear | BrennanPredigerAnalyzer | linear | 0.651 | Second group analyzer with weights |
 
 ### Weights from the semantics (SR1 prelim)
 

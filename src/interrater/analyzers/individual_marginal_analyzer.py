@@ -74,7 +74,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
     Analyzer builds the EstimatorInput: the category_index array alongside K
     and optional weights -- everything an agreement function in
     individual_marginals.py needs. Weights are None unless the coefficient
-    accepts them (WeightableIndividualAnalyzer).
+    accepts them (CohenKappaAnalyzer sets ``_ACCEPTS_WEIGHTS``).
 
     Counts discard rater identity, which is exactly what individual marginal
     coefficients need to keep. If you have only counts,
@@ -87,8 +87,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         gave which rating.
     config : IndividualMarginalConfig
         Must be an instance of IndividualMarginalConfig or a subclass
-        (WeightableIndividualConfig, NoWeightIndividualConfig,
-        CohenKappaConfig, CongerKappaConfig, LightKappaConfig).
+        (CohenKappaConfig, CongerKappaConfig, LightKappaConfig).
     balance_profile : BalanceProfile
         Describes the data structure (from Analyzer).
     rater_profile : RaterProfile
@@ -175,8 +174,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         if not isinstance(self.config, IndividualMarginalConfig):
             raise TypeError(
                 f"{_ERROR_PREFIX}: config must be IndividualMarginalConfig or "
-                f"subclass (WeightableIndividualConfig, "
-                f"NoWeightIndividualConfig, CohenKappaConfig, "
-                f"CongerKappaConfig, LightKappaConfig). "
+                f"subclass (CohenKappaConfig, CongerKappaConfig, "
+                f"LightKappaConfig). "
                 f"Got {type(self.config).__name__}"
             )
