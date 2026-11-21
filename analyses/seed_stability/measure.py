@@ -102,12 +102,12 @@ DATASETS = [
      "SR1_main_semantics.yaml", "SR1_main_cleaner_config.yaml"),
     ("SR2", "SR2", "SR2_JSRC2019", "SR2_data.txt",
      "SR2_semantics.yaml", "SR2_cleaner_config.yaml"),
-    ("SR3 FIS Psych", "SR3", "SR3_JGIM2019", "SR_FIS_Psych_data.txt",
-     "SR_FIS_Psych_semantics.yaml", "SR_FIS_Psych_cleaner_config.yaml"),
-    ("SR4 FIS CVD", "SR4", "SR4_FIS_CVD", "SR_FIS_CVD_data.txt",
-     "SR_FIS_CVD_semantics.yaml", "SR_FIS_CVD_cleaner_config.yaml"),
-    ("SR5 Coc Cardio", "SR5", "SR5_CocCardio", "SR_cocaine_cardio_data.txt",
-     "SR_cocaine_cardio_semantics.yaml", "SR_cocaine_cardio_cleaner_config.yaml"),
+    ("SR3", "SR3", "SR3_JGIM2019", "SR3_data.txt",
+     "SR3_semantics.yaml", "SR3_cleaner_config.yaml"),
+    ("SR4", "SR4", "SR4_FIS_CVD", "SR4_data.txt",
+     "SR4_semantics.yaml", "SR4_cleaner_config.yaml"),
+    ("SR5", "SR5", "SR5_SciRep2020", "SR5_data.txt",
+     "SR5_semantics.yaml", "SR5_cleaner_config.yaml"),
 ]
 
 
