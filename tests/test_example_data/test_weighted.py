@@ -221,7 +221,8 @@ class TestSR1PrelimWeightsFromSemantics:
 
 # ── Gwet cont3x3 (ratings, 2 raters, K=3, balanced) ─────────────────── #
 #
-# Cohen is the individual-marginal analyzer with a weighted form.  irrCAC may provide an external cross-check.
+# Cohen is the individual-marginal analyzer with a weighted form. irrCAC
+# gives 0.89216 for the quadratic case (analyses/external_validation/).
 #
 # Unweighted reference (from test_reference_data.py):
 #   Cohen kappa = 0.796

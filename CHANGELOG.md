@@ -64,6 +64,16 @@ versioning follows [semver](https://semver.org/).
   interval functions are called by the analyzers. All four remain
   importable from their own modules.
 
+### Added
+
+- `analyses/external_validation/`: the package compared with irrCAC and irr
+  (R), and statsmodels, scikit-learn and krippendorff (Python), on the
+  shipped datasets. 182 estimates and null standard errors are compared; all
+  agree within the tool's rounding except irr's `kripp.alpha` on complete
+  data with more than 2 raters, where the package, irrCAC and krippendorff
+  agree with each other. `tests/test_example_data/test_external_validation.py`
+  checks the package against the saved values on every push.
+
 ### Changed
 
 - Example data: `Gwet_example/gwet_cont3x3_data_nij.csv`,

@@ -1,6 +1,6 @@
 # Tests
 
-2203 tests across nine packages and two top-level files, run with `pytest tests/`.
+2223 tests across nine packages and two top-level files, run with `pytest tests/`.
 
 Every count in this file is a **collected** count -- what `pytest` prints, not
 what you get by counting `def test_` in the source. The two differ because
@@ -161,7 +161,7 @@ call. Built bottom-up along the inheritance tree:
 | conftest.py | Shared fixtures: Fleiss 1971 (NijMatrix + expanded Ratings), 2-rater (10x2, K=2), 3-rater (10x3, K=2), expected-value dicts, minimal configs for all 8 coefficients, PairwisePermutationConfig instances | -- |
 
 
-## test_example_data/ (97 tests)
+## test_example_data/ (117 tests)
 
 Integration tests. Every other package tests one layer with data built for the
 purpose; this package loads the datasets shipped in `example_data/` and runs
@@ -197,6 +197,7 @@ with their provenance and shapes, are in `example_data/README.md`.
 | test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 42 |
 | test_statistical_background.py | `example_data/Statistical_background/`: the committed tables reproduce, interrater gives the statistical background page's numbers, and a wrong page value fails | 3 |
 | test_made_up_ratings.py | `example_data/made_up_ratings.py`: counts come back exactly, names and ids are kept, short rows get empty slots, a subject rated once is refused | 4 |
+| test_external_validation.py | The package against irrCAC, irr, statsmodels, scikit-learn and krippendorff: recomputes the package's values and checks them against `analyses/external_validation/results.csv`, and checks that the saved data files still match cleaning | 20 |
 | conftest.py | 10 dataset fixtures (the Fleiss 1971 counts, the Ratings built from them, 8 ratings), the loader for `example_data/made_up_ratings.py`, 8 single-coefficient configs at 250 resamples, and builders for the subset, pairwise, weighted, unbalanced and BCa configs | -- |
 | README.md | Which datasets are validated against which source, and what each test asserts | -- |
 

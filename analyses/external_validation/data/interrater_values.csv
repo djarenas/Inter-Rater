@@ -1,0 +1,176 @@
+dataset,K,n_raters,weights,coef,quantity,value,note
+fleiss1971,5,6,unweighted,fleiss,estimate,0.4302445200601408,
+fleiss1971,5,6,unweighted,fleiss,null_se,0.02437393209941115,
+fleiss1971,5,6,unweighted,ac1,estimate,0.447884515844564,
+fleiss1971,5,6,unweighted,bp,estimate,0.4444444444444443,
+fleiss1971,5,6,unweighted,kripp,estimate,0.433409828282029,
+gwet,3,2,unweighted,fleiss,estimate,0.7962396962119107,
+gwet,3,2,unweighted,fleiss,null_se,0.07617585652340388,
+gwet,3,2,unweighted,ac1,estimate,0.8493305482313461,
+gwet,3,2,unweighted,bp,estimate,0.8349999999999999,
+gwet,3,2,unweighted,kripp,estimate,0.7972584977308512,
+gwet,3,2,unweighted,scott,estimate,0.7962396962119107,
+gwet,3,2,unweighted,scott,null_se,0.07617585652340388,
+gwet,3,2,unweighted,cohen,estimate,0.7964094021839719,
+gwet,3,2,unweighted,cohen,null_se,0.07600602503338184,
+gwet,3,2,unweighted,conger,estimate,0.796409402183972,
+gwet,3,2,unweighted,light,estimate,0.7964094021839719,
+gwet,3,2,linear,fleiss,estimate,0.8428010003572703,
+gwet,3,2,linear,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' uses an unweighted null variance, but the semantics declares a weighted kind. Use ci_method='percentile' or 'bca', or hypothesis te"
+gwet,3,2,linear,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+gwet,3,2,linear,bp,estimate,0.8762499999999999,
+gwet,3,2,linear,kripp,estimate,0.8435869953554841,
+gwet,3,2,linear,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these rating"
+gwet,3,2,linear,cohen,estimate,0.8429020279920021,
+gwet,3,2,linear,cohen,null_se,0.0815490095101672,
+gwet,3,2,linear,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+gwet,3,2,linear,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+gwet,3,2,quadratic,fleiss,estimate,0.8921092638909324,
+gwet,3,2,quadratic,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' uses an unweighted null variance, but the semantics declares a weighted kind. Use ci_method='percentile' or 'bca', or hypothesis te"
+gwet,3,2,quadratic,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+gwet,3,2,quadratic,bp,estimate,0.9175000000000001,
+gwet,3,2,quadratic,kripp,estimate,0.8926487175714776,
+gwet,3,2,quadratic,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these rating"
+gwet,3,2,quadratic,cohen,estimate,0.8921568627450982,
+gwet,3,2,quadratic,cohen,null_se,0.0999117257441612,
+gwet,3,2,quadratic,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+gwet,3,2,quadratic,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+synthetic,3,2,unweighted,fleiss,estimate,0.6407283416346862,
+synthetic,3,2,unweighted,fleiss,null_se,0.0751978829952538,
+synthetic,3,2,unweighted,ac1,estimate,0.6829171621086009,
+synthetic,3,2,unweighted,bp,estimate,0.67,
+synthetic,3,2,unweighted,kripp,estimate,0.6425246999265126,
+synthetic,3,2,unweighted,scott,estimate,0.6407283416346862,
+synthetic,3,2,unweighted,scott,null_se,0.0751978829952538,
+synthetic,3,2,unweighted,cohen,estimate,0.6408163265306123,
+synthetic,3,2,unweighted,cohen,null_se,0.07515388627503393,
+synthetic,3,2,unweighted,conger,estimate,0.6408163265306123,
+synthetic,3,2,unweighted,light,estimate,0.6408163265306123,
+synthetic,3,2,linear,fleiss,estimate,0.6780057128018696,
+synthetic,3,2,linear,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' uses an unweighted null variance, but the semantics declares a weighted kind. Use ci_method='percentile' or 'bca', or hypothesis te"
+synthetic,3,2,linear,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+synthetic,3,2,linear,bp,estimate,0.6512499999999999,
+synthetic,3,2,linear,kripp,estimate,0.6796156842378602,
+synthetic,3,2,linear,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these rating"
+synthetic,3,2,linear,cohen,estimate,0.6780893042575286,
+synthetic,3,2,linear,cohen,null_se,0.08745168469033461,
+synthetic,3,2,linear,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+synthetic,3,2,linear,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+synthetic,3,2,quadratic,fleiss,estimate,0.7054491899852724,
+synthetic,3,2,quadratic,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' uses an unweighted null variance, but the semantics declares a weighted kind. Use ci_method='percentile' or 'bca', or hypothesis te"
+synthetic,3,2,quadratic,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+synthetic,3,2,quadratic,bp,estimate,0.6324999999999998,
+synthetic,3,2,quadratic,kripp,estimate,0.706921944035346,
+synthetic,3,2,quadratic,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these rating"
+synthetic,3,2,quadratic,cohen,estimate,0.705528846153846,
+synthetic,3,2,quadratic,cohen,null_se,0.09994573983261056,
+synthetic,3,2,quadratic,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+synthetic,3,2,quadratic,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr1_prelim,3,4,unweighted,fleiss,estimate,0.49263190679516017,
+sr1_prelim,3,4,unweighted,fleiss,null_se,0.02402222240435799,
+sr1_prelim,3,4,unweighted,ac1,estimate,0.8275449691486252,
+sr1_prelim,3,4,unweighted,bp,estimate,0.7788944723618089,
+sr1_prelim,3,4,unweighted,kripp,estimate,0.49326930389717616,
+sr1_prelim,3,4,unweighted,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr1_prelim,3,4,unweighted,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr1_prelim,3,4,unweighted,conger,estimate,0.4942455704610765,
+sr1_prelim,3,4,unweighted,light,estimate,0.4955431981721947,
+sr1_prelim,3,4,linear,fleiss,estimate,0.5541682661749622,
+sr1_prelim,3,4,linear,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' uses an unweighted null variance, but the semantics declares a weighted kind. Use ci_method='percentile' or 'bca', or hypothesis te"
+sr1_prelim,3,4,linear,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_prelim,3,4,linear,bp,estimate,0.748429648241206,
+sr1_prelim,3,4,linear,kripp,estimate,0.5547283562928327,
+sr1_prelim,3,4,linear,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr1_prelim,3,4,linear,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr1_prelim,3,4,linear,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+sr1_prelim,3,4,linear,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr1_prelim,3,4,quadratic,fleiss,estimate,0.5928787614722265,
+sr1_prelim,3,4,quadratic,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' uses an unweighted null variance, but the semantics declares a weighted kind. Use ci_method='percentile' or 'bca', or hypothesis te"
+sr1_prelim,3,4,quadratic,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_prelim,3,4,quadratic,bp,estimate,0.7179648241206028,
+sr1_prelim,3,4,quadratic,kripp,estimate,0.5933902203145984,
+sr1_prelim,3,4,quadratic,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr1_prelim,3,4,quadratic,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr1_prelim,3,4,quadratic,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+sr1_prelim,3,4,quadratic,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr1_main,3,4,unweighted,fleiss,estimate,0.6185075969020781,
+sr1_main,3,4,unweighted,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' assumes every subject has the same number of raters; these data have 2 to 3. Use ci_method='percentile' or 'bca', or hypothesis tes"
+sr1_main,3,4,unweighted,ac1,estimate,0.9255622216307906,
+sr1_main,3,4,unweighted,bp,estimate,0.898268398268398,
+sr1_main,3,4,unweighted,kripp,estimate,0.6182222818072127,
+sr1_main,3,4,unweighted,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr1_main,3,4,unweighted,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr1_main,3,4,unweighted,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: Conger's kappa needs every rater to rate every subject (Conger 1980); these data have 3,231 missing ratings in 1,617 subjects. For data with missing ratings us"
+sr1_main,3,4,unweighted,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: Light's kappa needs every rater to rate every subject (Light 1971); these data have 3,231 missing ratings in 1,617 subjects. For data with missing ratings use F"
+sr1_main,3,4,linear,fleiss,estimate,0.6563838335827202,
+sr1_main,3,4,linear,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' assumes every subject has the same number of raters; these data have 2 to 3. Use ci_method='percentile' or 'bca', or hypothesis tes"
+sr1_main,3,4,linear,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_main,3,4,linear,bp,estimate,0.8703617810760667,
+sr1_main,3,4,linear,kripp,estimate,0.655983054181367,
+sr1_main,3,4,linear,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr1_main,3,4,linear,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr1_main,3,4,linear,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+sr1_main,3,4,linear,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr1_main,3,4,quadratic,fleiss,estimate,0.677086166476543,
+sr1_main,3,4,quadratic,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' assumes every subject has the same number of raters; these data have 2 to 3. Use ci_method='percentile' or 'bca', or hypothesis tes"
+sr1_main,3,4,quadratic,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr1_main,3,4,quadratic,bp,estimate,0.8424551638837353,
+sr1_main,3,4,quadratic,kripp,estimate,0.6766184958901669,
+sr1_main,3,4,quadratic,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr1_main,3,4,quadratic,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr1_main,3,4,quadratic,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+sr1_main,3,4,quadratic,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr2,3,4,unweighted,fleiss,estimate,0.4312089472749862,
+sr2,3,4,unweighted,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' assumes every subject has the same number of raters; these data have 2 to 4. Use ci_method='percentile' or 'bca', or hypothesis tes"
+sr2,3,4,unweighted,ac1,estimate,0.7817364351646853,
+sr2,3,4,unweighted,bp,estimate,0.7253086419753084,
+sr2,3,4,unweighted,kripp,estimate,0.4185847731851763,
+sr2,3,4,unweighted,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr2,3,4,unweighted,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr2,3,4,unweighted,conger,estimate,,ValueError: [CongerKappaAnalyzer] Error: Conger's kappa needs every rater to rate every subject (Conger 1980); these data have 2 missing ratings in 1 subjects. For data with missing ratings use Fleiss
+sr2,3,4,unweighted,light,estimate,,ValueError: [LightKappaAnalyzer] Error: Light's kappa needs every rater to rate every subject (Light 1971); these data have 2 missing ratings in 1 subjects. For data with missing ratings use Fleiss' k
+sr2,3,4,linear,fleiss,estimate,0.43539955190440593,
+sr2,3,4,linear,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' assumes every subject has the same number of raters; these data have 2 to 4. Use ci_method='percentile' or 'bca', or hypothesis tes"
+sr2,3,4,linear,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr2,3,4,linear,bp,estimate,0.5949074074074072,
+sr2,3,4,linear,kripp,estimate,0.4227271325954929,
+sr2,3,4,linear,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr2,3,4,linear,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr2,3,4,linear,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+sr2,3,4,linear,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr2,3,4,quadratic,fleiss,estimate,0.4375253275699039,
+sr2,3,4,quadratic,fleiss,null_se,,"ValueError: [FleissKappaAnalyzer] Error: ci_method='parametric_null' assumes every subject has the same number of raters; these data have 2 to 4. Use ci_method='percentile' or 'bca', or hypothesis tes"
+sr2,3,4,quadratic,ac1,estimate,,"ValueError: [GwetAC1Analyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ratin"
+sr2,3,4,quadratic,bp,estimate,0.46450617283950596,
+sr2,3,4,quadratic,kripp,estimate,0.42482921010642416,
+sr2,3,4,quadratic,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr2,3,4,quadratic,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr2,3,4,quadratic,conger,estimate,,"ValueError: [CongerKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these r"
+sr2,3,4,quadratic,light,estimate,,"ValueError: [LightKappaAnalyzer] Error: this coefficient has no weighted form, but the semantics declares categories of kind 'ordered'. To compute it, use a semantics with kind: unordered for these ra"
+sr3,2,3,unweighted,fleiss,estimate,0.6750119904076738,
+sr3,2,3,unweighted,fleiss,null_se,0.02080625946441196,
+sr3,2,3,unweighted,ac1,estimate,0.930666120945462,
+sr3,2,3,unweighted,bp,estimate,0.8857142857142857,
+sr3,2,3,unweighted,kripp,estimate,0.6751526778577138,
+sr3,2,3,unweighted,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 3. For 3 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr3,2,3,unweighted,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 3. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr3,2,3,unweighted,conger,estimate,0.675055628021177,
+sr3,2,3,unweighted,light,estimate,0.6755047880521335,
+sr4,2,4,unweighted,fleiss,estimate,0.7079887724988063,
+sr4,2,4,unweighted,fleiss,null_se,0.014552479917500643,
+sr4,2,4,unweighted,ac1,estimate,0.8785631602724543,
+sr4,2,4,unweighted,bp,estimate,0.8284625158831005,
+sr4,2,4,unweighted,kripp,estimate,0.7080815333715829,
+sr4,2,4,unweighted,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 4. For 4 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr4,2,4,unweighted,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 4. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr4,2,4,unweighted,conger,estimate,0.7084430629966422,
+sr4,2,4,unweighted,light,estimate,0.7037391507583801,
+sr5,2,3,unweighted,fleiss,estimate,0.5088338753567407,
+sr5,2,3,unweighted,fleiss,null_se,0.01945142479610587,
+sr5,2,3,unweighted,ac1,estimate,0.8649253689117717,
+sr5,2,3,unweighted,bp,estimate,0.7881195611048053,
+sr5,2,3,unweighted,kripp,estimate,0.5090197119532753,
+sr5,2,3,unweighted,scott,estimate,,"ValueError: [ScottsAnalyzer] Error: Scott's pi is defined for exactly 2 raters, got 3. For 3 raters, use FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
+sr5,2,3,unweighted,cohen,estimate,,"ValueError: [CohenKappaAnalyzer] Error: Cohen's kappa requires exactly 2 raters, got 3. For more than 2 raters, use CongerKappaAnalyzer (individual marginals) or FleissKappaAnalyzer (pooled marginals)"
+sr5,2,3,unweighted,conger,estimate,0.5108913325375836,
+sr5,2,3,unweighted,light,estimate,0.5059809842709689,

@@ -80,15 +80,16 @@ the README's CI bounds.
 | test_reference_data.py | Datasets with published reference values, plus the one end-to-end BCa test | 11 |
 | test_research_data.py | Original systematic review datasets (internal validation against README) | 10 |
 | test_subset_permutation.py | Subset permutation on partially crossed data -- the measurable-pool regression | 5 |
-| test_weighted.py | Weighted analysis (linear + quadratic) across both weightable config branches, and weights declared in the semantics | 13 |
+| test_weighted.py | Weighted analysis (linear + quadratic) for group and individual-marginal analyzers, and weights declared in the semantics | 13 |
 | test_pairwise_permutation.py | Pairwise permutation analysis with both bootstrap methods | 4 |
 | test_missing_structure.py | The three shuffles keep SR1 main's missing-data design | 5 |
 | test_example_configs.py | Every YAML shipped in `example_data/` loads with the current code, one test per file, found by globbing | 42 |
 | test_statistical_background.py | `example_data/Statistical_background/`: the committed tables reproduce, interrater gives the page's numbers, and a wrong page value fails | 3 |
 | test_made_up_ratings.py | `example_data/made_up_ratings.py`: counts come back exactly, names and ids are kept, short rows get empty slots, a subject rated once is refused | 4 |
+| test_external_validation.py | The package against five other implementations, from saved values | 20 |
 | conftest.py | Dataset-loading fixtures, shared analyzer config builders | -- |
 
-**Total: 97 tests.** Counts here are from `pytest --collect-only`; if you
+**Total: 117 tests.** Counts here are from `pytest --collect-only`; if you
 change a file, re-derive rather than adjust by hand.
 
 
@@ -245,7 +246,7 @@ collapse to identity (there is only one distance). All datasets below have K=3.
 
 | Test | Analyzer | Weights | Expected | Notes |
 |------|----------|---------|----------|-------|
-| test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | 0.892 | irrCAC cross-check possible |
+| test_cohen_kappa_quadratic | CohenKappaAnalyzer | quadratic | 0.892 | irrCAC: 0.89216 |
 
 ### Synthetic 2-rater (ratings, 2 raters, K=3, balanced, ordinal -1/0/1)
 
@@ -298,6 +299,26 @@ its input unchanged fails. Verified by replacing the three shuffles with naive
 ones that shuffle empty cells along with the answers, as a generic routine
 would: all three shuffle tests fail. The small-fixture versions of these
 checks are in `tests/test_analyzers/test_resampling_functions.py`.
+
+
+## test_external_validation.py (20 tests)
+
+`analyses/external_validation/results.csv` holds values that irrCAC and irr
+(R), and statsmodels, scikit-learn and krippendorff (Python) computed on the
+shipped datasets. None of them are installed in CI; these tests recompute the
+package's side with the analysis's own `measure.py` and check it against the
+saved values.
+
+| Test | What it checks |
+|---|---|
+| test_values_match (x9, one per dataset) | Every estimate and null SE another tool computed: within 5e-6 of irrCAC (it rounds to 5 decimals), within 1e-10 of the others |
+| test_refused_rows_still_refused | What only another tool computes (AC2, weighted Scott/Conger/Light, Conger and Light on incomplete data) is still refused |
+| test_irr_kripp_still_differs | The one known disagreement, irr's `kripp.alpha` on complete data with more than 2 raters, is the only one in `results.csv` |
+| test_matches_cleaning (x9) | Each file in `data/` is still what cleaning produces from `example_data/` |
+
+Verified by moving one saved value by 1e-6: test_values_match fails and names
+the row. When a test here fails after an intended change, rerun the four
+scripts in `analyses/external_validation/` (the order is in `measure.py`).
 
 
 ## Not yet covered
