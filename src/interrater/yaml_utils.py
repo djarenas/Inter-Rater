@@ -1,10 +1,10 @@
 """YAML key normalization for configuration objects.
 
-I hold the canonical-key alias registry and a function to normalize
-user-facing YAML keys to their canonical field names. Every config's
-``build_from_dict`` calls ``normalize_yaml_key`` before constructing
-the dataclass, so users can write the short form in YAML and the code
-always sees the canonical field name.
+This module holds the canonical-key alias registry and a function to normalize
+user-facing YAML keys to their canonical field names.
+
+The analyzer and permutation configs call ``normalize_yaml_key`` in
+``build_from_dict`` before constructing the dataclass.
 
 Adding a new alias is a one-line edit to YAML_KEY_ALIASES.
 """
@@ -25,7 +25,7 @@ YAML_KEY_ALIASES: dict[str, list[str]] = {
 The canonical key is always accepted. The aliases are the extra
 spellings a user may write in YAML or pass in a dict. If multiple
 keys from the same alias group are present, normalize_yaml_key
-raises ValueError.
+raises a ValueError.
 """
 
 _ERROR_PREFIX = "[yaml_utils] Error"
@@ -37,10 +37,10 @@ def normalize_yaml_key(data_dict: dict, canonical_key: str) -> None:
     """
     Resolve an alias to the canonical key in place.
 
-    I look up the aliases for ``canonical_key`` in YAML_KEY_ALIASES.
-    If an alias is present in ``data_dict``, I rename it to the
+    Looks up the aliases for ``canonical_key`` in YAML_KEY_ALIASES.
+    If an alias is present in ``data_dict``, renames it to the
     canonical key. If both an alias and the canonical key are present,
-    I raise ValueError.
+    raises ValueError.
 
     Parameters
     ----------
@@ -86,10 +86,10 @@ def refuse_unknown_keys(
 
     A misspelt key would otherwise reach the dataclass constructor, which
     raises Python's bare "unexpected keyword argument", without the
-    config's name or what it accepts. I name the config (``owner``), the
+    config's name or what it accepts. The error names the config (``owner``), the
     unknown keys, the nearest valid key for each, and every valid key.
 
-    Every config in the package refuses an unknown key through me, so the
+    Every config in the package refuses an unknown key through this function, so the
     exception and the wording are the same whichever file the typo was in.
     A ValueError: the dict is the right type, and one of its keys is a value
     the config does not have.

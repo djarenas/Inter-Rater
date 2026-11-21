@@ -2,25 +2,28 @@
 
 This module holds generators that produce permuted versions of the ratings
 data. Each scheme shuffles the data differently and therefore stands for a
-different null hypothesis. within_rater_shuffle and pool_and_redistribute
-are nulls of no agreement, used to test H0: coefficient = 0.
-within_subject_shuffle is not: it keeps the agreement, and its null is about
-the raters. See the docstring of each function for what it tests.
+different null hypothesis.
+
+"within_rater_shuffle" and "pool_and_redistribute"
+are nulls of no agreement. They are used to test H0: coefficient = 0.
+
+"within_subject_shuffle" keeps the agreement. It can be used to explore
+the relationship between specific raters.
 
 All three keep the missing-data structure exactly. They move only answers
-that were given, and put them back only into cells that were rated: no
-answer lands on a subject its rater was not shown, every rater keeps their
+that were given, and put them back only into cells that were rated. Therefore,
+no answer lands on a subject its rater was not shown, every rater keeps their
 workload, and every subject keeps its number of ratings.
-
-These are conceptually different from bootstrap resampling:
-- Bootstrap: resample WITH replacement from observed data →
-  sampling distribution under the ALTERNATIVE (for CIs)
-- Permutation: shuffle WITHOUT replacement to destroy structure →
-  distribution under the NULL (for hypothesis testing)
 
 All three schemes operate on category_index (the raw ratings array,
 shape n_subjects × n_raters, integer-coded). They yield one permuted
 array at a time for memory efficiency.
+
+These are conceptually different from bootstrap resampling:
+- Bootstrap: resample WITH replacement from observed data →
+  approximates the sampling distribution of the coefficient (for CIs)
+- Permutation: shuffle WITHOUT replacement to destroy structure →
+  distribution under the NULL (for hypothesis testing)
 
 References
 ----------
@@ -48,15 +51,14 @@ def within_rater_shuffle(
     For each rater (column), randomly reassigns their answers among the
     subjects they rated, independently for each rater. This preserves each
     rater's marginal distribution (how often they use each category), while
-    still breaking the subject-rater pairing. 
-    
-    Important note: Cells the rater did not rate stay empty -> each 
+    still breaking the subject-rater pairing.
+
+    Important note: Cells the rater did not rate stay empty -> each
     rater keeps their workload and hypotheses are not tested on made-up
     distributions of rated subjects.
 
     **Null hypothesis tested:** "Raters agree no more than expected given
-    their individual category-usage biases." This is the strongest test
-    that respects rater-level marginals.
+    their individual category-usage biases."
 
     Parameters
     ----------
@@ -126,24 +128,6 @@ def within_rater_shuffle(
         yield permuted
 
 
-def column_shuffle(*args, **kwargs):
-    """
-    Renamed ``within_rater_shuffle`` in 2.1.0. Kept so that old code is told
-    the new name instead of failing on an import.
-
-    Raises
-    ------
-    TypeError
-        Always, naming the new function.
-    """
-    raise TypeError(
-        f"{_ERROR_PREFIX}: column_shuffle() was renamed within_rater_shuffle() "
-        f"in 2.1.0: it shuffles each rater's answers across subjects, not the "
-        f"raters themselves. Same arguments; import within_rater_shuffle "
-        f"instead."
-    )
-
-
 def within_subject_shuffle(
     category_index: np.ndarray,
     n_permutations: int = 5000,
@@ -164,9 +148,10 @@ def within_subject_shuffle(
 
     Note: this shuffle keeps each subject's set of answers, and with it the
     agreement, so it cannot test H0: coefficient = 0. For group coefficients
-    that discard rater identity (Fleiss, Scott, AC1) the coefficient does not
-    change at all; for Cohen, Conger and Light the null distribution sits at
-    the observed value. It is therefore not a HypothesisTestConfig scheme
+    that discard rater identity (Fleiss, Scott, AC1, Brennan-Prediger,
+    Krippendorff) the coefficient does not change at all; for Cohen, Conger
+    and Light it sits near the pooled coefficient (Scott, Fleiss), so it
+    cannot test κ = 0 either. It is therefore not a HypothesisTestConfig scheme
     (removed in 2.1.0). Its null suits statistics the shuffle can move: the
     spread of a coefficient across rater pairs or subsets, or the gap between
     an individual-marginal and a pooled coefficient (Cohen - Scott).
@@ -247,14 +232,14 @@ def pool_and_redistribute(
     """
     Pool all ratings and redistribute them randomly into the rated cells.
 
-    Collects all non-missing ratings into a single pool, shuffle them, and
-    deal them back out only into cells that were rated. No answer lands in a
+    Collects all non-missing ratings into a single pool, shuffles them, and
+    deals them back out only into cells that were rated. No answer lands in a
     cell that was not rated, so every rater keeps their workload and every
     subject its number of ratings. Beyond that, this preserves only the
     global category proportions -- all other structure is destroyed.
 
     **Null hypothesis tested:** "There is no structure in the data beyond
-    the overall category proportions." This is the strongest null -- it
+    the overall category proportions." This is the strongest null. It
     breaks both subject-rater pairing AND rater-level marginals.
 
     Parameters

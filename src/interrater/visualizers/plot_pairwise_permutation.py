@@ -26,7 +26,7 @@ def plot_pairwise_permutation(
     ax: plt.Axes | None = None,
 ) -> plt.Figure:
     """
-    I plot pairwise permutation results as a grouped-by-rater scatter.
+    Plot pairwise permutation results as a grouped-by-rater scatter.
 
     Each rater gets a column on the x-axis. Every pair is plotted under
     both raters it belongs to, with a label showing the partner. Each

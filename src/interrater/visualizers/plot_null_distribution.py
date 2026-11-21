@@ -23,7 +23,7 @@ def plot_null_distribution(
     bins: int | str = "auto",
 ) -> plt.Figure:
     """
-    I plot a permutation test: what agreement looks like by chance, and yours.
+    Plot a permutation test: what agreement looks like by chance, and yours.
 
     The histogram is the coefficient on every usable shuffle of the ratings
     -- the null distribution. A solid line marks the observed value. The

@@ -13,7 +13,7 @@ _ERROR_PREFIX = "[InjectorRegistry] Error"
 
 def _build_registry() -> dict[str, tuple[type[InjectorConfig], type[RaterInjector]]]:
     """
-    I build the registry lazily to avoid circular imports.
+    Builds the registry lazily to avoid circular imports.
 
     Returns
     -------
@@ -44,7 +44,7 @@ def _build_registry() -> dict[str, tuple[type[InjectorConfig], type[RaterInjecto
 
 def get_registry() -> dict[str, tuple[type[InjectorConfig], type[RaterInjector]]]:
     """
-    I return the injector registry, building it on first call.
+    Returns the injector registry, building it on first call.
 
     The registry maps YAML type strings (e.g. ``"distribution"``,
     ``"rater_bootstrap"``) to ``(ConfigClass, InjectorClass)`` pairs.
@@ -65,9 +65,9 @@ def get_registry() -> dict[str, tuple[type[InjectorConfig], type[RaterInjector]]
 
 def hydrate_injection_step(step_dict: dict) -> InjectorConfig:
     """
-    I convert a single YAML injection step dict into a typed config.
+    Converts a single YAML injection step dict into a typed config.
 
-    I pop the ``type`` key, look it up in the registry, and delegate
+    Pops the ``type`` key, looks it up in the registry, and delegates
     to the config class's ``build_from_dict``.
 
     Parameters
@@ -75,7 +75,7 @@ def hydrate_injection_step(step_dict: dict) -> InjectorConfig:
     step_dict : dict
         A single injection step from YAML, e.g.
         ``{"type": "rater_bootstrap", "source_raters": [0, 1], ...}``.
-        Not changed: I work on a copy.
+        Not changed: the function works on a copy.
 
     Returns
     -------
@@ -117,10 +117,10 @@ def hydrate_injection_step(step_dict: dict) -> InjectorConfig:
 
 def get_injector_class(config: InjectorConfig) -> type[RaterInjector]:
     """
-    I return the injector class for a given config instance.
+    Returns the injector class for a given config instance.
 
-    I build a reverse mapping from ConfigClass → InjectorClass on
-    first call, then look up the config's type. This is used at
+    Builds a reverse mapping from ConfigClass → InjectorClass on
+    first call, then looks up the config's type. This is used at
     runtime by ``Analyzer.apply_injection()`` to go from a typed
     config object to the injector that knows how to execute it.
 

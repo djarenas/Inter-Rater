@@ -25,7 +25,7 @@ def plot_subset_sorted(
     ax: plt.Axes | None = None,
 ) -> plt.Figure:
     """
-    I plot subset permutation results as a sorted dot plot.
+    Plot subset permutation results as a sorted dot plot.
 
     Subsets are sorted by coefficient value (ascending, left to right).
     Each subset is a dot at its coefficient value. Per-subset bootstrap

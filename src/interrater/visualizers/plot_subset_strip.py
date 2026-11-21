@@ -25,7 +25,7 @@ def plot_subset_strip(
     ax: plt.Axes | None = None,
 ) -> plt.Figure:
     """
-    I plot multi-k subset results as a strip-and-trend chart.
+    Plot multi-k subset results as a strip-and-trend chart.
 
     Each k value gets a column on the x-axis. Within each column, every
     subset's coefficient is plotted as a jittered dot, showing the spread
@@ -372,9 +372,9 @@ def _stagger_offsets(
     ax: plt.Axes,
 ) -> list[float]:
     """
-    I compute vertical label offsets that prevent overlap.
+    Computes vertical label offsets that prevent overlap.
 
-    Given y-values sorted ascending, I walk through them and push each
+    Given y-values sorted ascending, walks through them and pushes each
     label's offset so that consecutive labels are at least min_gap_pts
     apart in display coordinates. When values are well-separated, all
     offsets are 0 (labels sit next to their dot). When values cluster,

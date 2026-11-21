@@ -4,8 +4,7 @@ Every analyzer is configured by a frozen dataclass that declares its
 decisions up front. One of their utilities is that they can be built from
 a YAML file that can be easily archived, modified, and/or shown to collaborators (or your future self).
 
-The decisions are such as: number of bootstrap resamples, confidence level, CI method, random
-seed, hypothesis testing, injection, and convergence diagnostics.
+The decisions are such as: number of bootstrap resamples, confidence level, CI method, random seed, hypothesis testing, injection, and convergence diagnostics.
 
 Configurations were designed to load from YAML (`build_from_yaml`), but the plain dicts
 (`build_from_dict`) option is also availble. `summary()` reports them.
@@ -149,7 +148,7 @@ and `ci_method: percentile`.
 ### HypothesisTestConfig
 
 - `method` (str, default "permutation"): "permutation" or "parametric_null"
-- `scheme` (str, default "within_rater_shuffle"): "within_rater_shuffle" or "pool_and_redistribute". Both keep the missing-data structure: answers move only between rated cells. `"column_shuffle"` (renamed) and `"within_subject"` (cannot test coefficient = 0) are refused with a message saying so
+- `scheme` (str, default "within_rater_shuffle"): "within_rater_shuffle" or "pool_and_redistribute". Both keep the missing-data structure: answers move only between rated cells. `"within_subject"` (cannot test coefficient = 0) is refused with a message saying so
 - `alternative` (str, default "two-sided"): "two-sided", "greater" or "less". Two-sided by default because below-chance agreement (a scale read backwards, two labels swapped) is a real finding a one-sided test misses
 - `n_permutations` (int, default 5000)
 - `alpha` (float, default 0.05)

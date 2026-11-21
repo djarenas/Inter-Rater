@@ -64,7 +64,7 @@ All three keep the missing-data structure exactly: they move only answers that w
 
 #### `within_rater_shuffle(category_index, n_permutations=5000, random_state=42)`
 
-Shuffle each rater's answers across the subjects that rater rated, independently for each rater. Preserves each rater's marginal distribution (how often they use each category) but breaks the subject-rater pairing. Called `column_shuffle` before 2.1.0; the old name still imports and raises, naming the new one.
+Shuffle each rater's answers across the subjects that rater rated, independently for each rater. Preserves each rater's marginal distribution (how often they use each category) but breaks the subject-rater pairing.
 
 **Null hypothesis:** "Raters agree no more than expected given their individual category-usage biases."
 

@@ -213,11 +213,6 @@ class TestHypothesisTestConfig:
         with pytest.raises(ValueError, match="removed in 2.1.0"):
             HypothesisTestConfig(scheme="within_subject")
 
-    def test_scheme_column_shuffle_refused(self):
-        """The old name is refused, and the message names the new one."""
-        with pytest.raises(ValueError, match="renamed to 'within_rater_shuffle' in 2.1.0"):
-            HypothesisTestConfig(scheme="column_shuffle")
-
     # Finding 1b: bool-first guards on n_permutations
     def test_n_permutations_bool_rejected(self):
         """bool subclasses int; True must be caught before isinstance(int)."""

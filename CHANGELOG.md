@@ -19,6 +19,12 @@ versioning follows [semver](https://semver.org/).
   the width of the table it was given rather than from a declared
   semantics. Results on the ratings route are unchanged.
 - Passing `None` as ratings now raises `TypeError` in every analyzer.
+- `column_shuffle()` and `scheme="column_shuffle"`, kept in 2.1.0 only to
+  name their replacement `within_rater_shuffle`, are removed.
+- `NijMatrix` and `Weights` are no longer exported at the top level. Nothing
+  public takes an `NijMatrix` since the counts route was removed, and
+  weights are declared in the semantics. Both remain importable from
+  `interrater.intermediates.estimator_parts`.
 - `rater_combinations` moved from `agreement_functions/` to
   `permutation_analysis/`, its only user; it computes no agreement.
   `over_subsets`, `over_pairs`, `unit_problem` and `estimate_unit` renamed

@@ -2,23 +2,23 @@
 
 This module holds closed-form variance expressions used for parametric
 confidence intervals and hypothesis tests. Each function computes the
-variance of a specific coefficient under a specific assumption (null or
-nonnull). The formulas come from the original statistical literature and
-are cited in each docstring.
+variance of a specific coefficient under a specific assumption. As of
+V2 there are only two formulas and both are for the null assumptions.
+They come from the original statistical literature and
+are cited in the docstrings.
 
-Bootstrap and permutation approaches do not need these formulas -- they
-estimate variance empirically. These exist for:
+These exist for:
 - Parametric null CIs (ci_method="parametric_null")
 - Parametric hypothesis tests (method="parametric_null")
 - Reproducing published results that used these formulas
 
 Note on bias correction:
-    Fleiss (1979) Eq. 17 includes a bias correction of 1/(N*(n-1)) added
+    Fleiss, Nee & Landis (1979) Eq. 17 includes a bias correction of 1/(N*(n-1)) added
     to kappa before computing the z-statistic. This corrects for the slight
     negative bias in kappa under the null. The correction is O(1/N) and
     negligible for large N, but is included in our hypothesis_test() for
     exactness. The variance formula itself (Eq. 12) does not include the
-    bias correction -- it is applied at the z-test level.
+    bias correction. It is applied at the z-test level.
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ def fleiss_null_variance(
     Null variance of Fleiss' kappa under H₀: κ = 0.
 
     This is Equation 12 from Fleiss, Nee & Landis (1979), which corrected
-    the incorrect variance formulas published in Fleiss (1971) and confirmed
-    by Cicchetti (1978) via Monte Carlo simulation.
+    the incorrect variance formulas published in Fleiss (1971), and checked
+    by Monte Carlo simulation in the same paper.
 
     This variance is valid for:
     - Testing H₀: κ = 0 (hypothesis testing)
@@ -47,9 +47,11 @@ def fleiss_null_variance(
     - Null hypothesis is true
 
     This variance is NOT valid for:
-    - Confidence interval construction (use bootstrap instead)
+    - An interval around a nonnull κ. The ``parametric_null`` interval uses
+      this variance anyway, scaled as if κ = 0; the bootstrap interval is
+      the one that does not assume the null.
     - Small N (asymptotic approximation breaks down)
-    - Nonnull κ (underestimates variance when κ > 0)
+    - Nonnull κ (the variance is derived under κ = 0)
 
     Parameters
     ----------
@@ -80,8 +82,6 @@ def fleiss_null_variance(
     Fleiss, J. L. (1971). "Measuring nominal scale agreement among many
         raters." *Psychological Bulletin*, 76(5), 378-382.
 
-    Cicchetti, D. V. (1978). Confirmed the corrected formulas via
-        Monte Carlo simulation.
     """
     # Validate inputs
     if n_subjects <= 0:
@@ -100,7 +100,7 @@ def fleiss_null_variance(
     # qj = 1 - pj
     qj = 1.0 - pj
 
-    # Fleiss (1979) Eq. 12:
+    # Fleiss, Nee & Landis (1979) Eq. 12:
     # Var(κ) = [2 / (N * n * (n-1) * (Σ pj*qj)²)]
     #        × [(Σ pj*qj)² - Σ pj*qj*(qj - pj)]
 
@@ -133,7 +133,7 @@ def cohen_null_variance(
     """
     Null variance of Cohen's (weighted) kappa under H₀: κ_w = 0.
 
-    I am the large-sample null variance for two raters with individual
+    The large-sample null variance for two raters with individual
     marginals, supporting both unweighted and weighted kappa. Under the null,
     the two raters are independent, so the joint probability factorises as
     p_ij = p_a_i * p_b_j.
@@ -171,13 +171,15 @@ def cohen_null_variance(
 
     This variance is valid for:
     - Testing H₀: κ_w = 0 (hypothesis testing)
-    - Parametric null confidence intervals
     - Large N (asymptotic approximation)
     - Exactly two raters with individual marginals
     - Both weighted and unweighted kappa
 
     This variance is NOT valid for:
-    - Nonnull κ (underestimates variance when κ > 0)
+    - An interval around a nonnull κ. The ``parametric_null`` interval uses
+      this variance anyway, scaled as if κ = 0; the bootstrap interval is
+      the one that does not assume the null.
+    - Nonnull κ (the variance is derived under κ = 0)
     - Small N (asymptotic approximation breaks down)
     - More than two raters (use Conger/Fleiss instead)
 

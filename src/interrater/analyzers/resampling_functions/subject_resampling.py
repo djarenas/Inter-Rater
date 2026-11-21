@@ -19,15 +19,16 @@ def subject_bootstrap(
     """
     Resample subjects (rows) with replacement, yielding one at a time.
 
-    I draw subject rows (with replacement) from data,
-    yielding n_resamples new datasets one at a time. Each keeps data's K and
-    weights, so a draw that misses a category is still computed against the
-    rating task's K. This is memory-efficient:
+    Draws subject rows (with replacement) from data,
+    yielding n_resamples new datasets one at a time. Due to the EstimatorInput
+    structure, the number of categories (K) and the weights are preserved every
+    draw. This is relevant for coefficients that use K, since a draw that misses
+    a category would otherwise be computed against a smaller K.
+
+    The iterator keeps memory low:
     only one resample exists in memory at any moment, even for 10,000 draws.
 
-    The resampling is subject-level, never rater-level. A rater drawn twice is
-    one rater agreeing perfectly with themselves, which inflates every
-    coefficient. Subject resampling is the one that works.
+    The resampling is subject-level, never rater-level.
 
     Parameters
     ----------
@@ -98,11 +99,11 @@ def subject_jackknife(data: EstimatorInput) -> Iterator[EstimatorInput]:
     """
     Leave-one-subject-out: yield data with each subject removed in turn.
 
-    I iterate through all subjects, yielding the data with one subject removed
-    each time. This gives n_subjects datasets, each missing one observation.
+    Iterates through all subjects, yielding the data with one subject removed
+    each time. This gives n_subjects datasets, each missing one subject.
 
-    Useful for bias diagnostics and stability analysis: how much does the
-    estimate change when we drop each subject?
+    Used for BCa's acceleration (``ci_methods.bca_ci``), which reads how much
+    the estimate moves when each subject is dropped.
 
     Parameters
     ----------

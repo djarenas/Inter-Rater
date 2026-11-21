@@ -23,15 +23,13 @@ class Categories(ABC):
 
     I am the rating task's design, not a summary of the data. I list what was offered,
     never what was chosen. If I name five grades and nobody earned a D, I still
-    have five categories, because the raters could have said D and did not --
-    and any coefficient whose chance term divides by the number of categories
-    would move if I quietly shrank. This may not be relevant to all agreement statistics,
-    but it is relevant to some.
+    have five categories, because the raters could have said D and did not. This is
+    relevant for coefficients whose chance term divides by the number of categories.
 
-    I own K. Nothing else in the package may infer it: the largest code present
-    in a dataset is a lower bound on K and never K itself, and that gap is
-    exactly where a bootstrap draw goes wrong when a rare category happens to
-    miss a resample.
+    I own K. The package is designed so that nothing else infers K. The
+    reasoning is that K should be set by the semantics, a choice by the
+    designer of the study. It also keeps K fixed when a bootstrap draw
+    happens to miss a category.
 
     I hold no ratings and do no counting. My position in a list is the integer
     a ratings array stores, so my order is my encoding.
@@ -39,12 +37,10 @@ class Categories(ABC):
     Attributes
     ----------
     names:
-        The allowed responses, in encoding order. Position i is code i.
-        Always text: a number such as ``1`` or ``-1`` (what YAML gives for
-        unquoted ``1`` and ``-1``) is stored as ``'1'`` and ``'-1'``, because
-        ratings are matched as strings. A boolean is refused rather than
-        converted: YAML reads unquoted ``yes``/``no`` as True/False, and
-        ``'True'`` is not what anyone meant to declare.
+        The allowed responses, in encoding order: position i is code i.
+        Stored as text, because ratings are matched as strings, so YAML's
+        unquoted ``1`` and ``-1`` become ``'1'`` and ``'-1'``. Booleans are
+        refused: YAML reads unquoted yes/no as True/False.
     labels:
         Optional display names. Cosmetic; never used in arithmetic.
     """
@@ -171,15 +167,14 @@ class UnorderedCategories(Categories):
     """
     I am categories with no ranking and no notion of distance.
 
-    Nominal. 'include', 'unsure' and 'exclude' are three different answers, and
-    nothing in me says 'unsure' sits between the other two -- even when a human
-    reading the words would assume it does. If you want that assumption in the
+    Nominal. For example, 'include', 'unsure' and 'exclude' are three different answers,
+    and nothing in me says 'unsure' sits between the other two (even when a human
+    reading the words would assume it does). If you want that assumption in the
     arithmetic, say so with OrderedCategories.
 
     Every disagreement I describe is equally wrong, which is what unweighted
-    kappa already computes. A weighted coefficient handed me would reduce to
-    the unweighted one, so analysers that need distance should refuse me rather
-    than silently return the same number under a different name.
+    kappa already computes. A weightable coefficient handed me computes its
+    unweighted form and reports it as unweighted.
     """
 
     _KIND = "unordered"
@@ -216,16 +211,12 @@ class OrderedCategories(DistanceCategories):
     """
     I am categories on a ranked scale, and I derive distance from position.
 
-    'mild' < 'moderate' < 'severe'. My order is not merely an encoding, it is a
-    claim: adjacent categories are more alike than distant ones, so a rater
-    who says 'mild' where another said 'moderate' has disagreed less than one
-    who said 'severe'.
+    Adjacent categories are more alike than distant ones.
 
     I compute weights from rank distance, either linearly or quadratically.
-    Quadratic is the common default in the medical literature and forgives
-    near-misses more readily; linear penalises distance evenly. Neither is more
-    correct, so I make you say which -- the choice changes the coefficient and
-    ought to appear in a methods section.
+    Quadratic forgives near-misses more readily; linear penalises distance
+    evenly. Neither is more correct. I default to quadratic. The choice
+    changes the coefficient and ought to appear in a methods section.
 
     Attributes
     ----------
@@ -322,7 +313,7 @@ class WeightedCategories(DistanceCategories):
             super()._validate()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{self._ERROR_PREFIX}: {exc}") from exc
-        
+
         name = type(self).__name__
         k    = self.n_categories
 
@@ -381,7 +372,7 @@ def _as_name(value: object, owner: str) -> str:
     unquoted ``yes``, ``no``, ``on`` and ``off`` into True and False, and the
     original word cannot be recovered from that. Anything else is refused too.
 
-    I raise ValueError, not TypeError, because ``build_categories`` reads a
+    Raises ValueError, not TypeError, because ``build_categories`` reads a
     TypeError from a constructor as a misspelt key.
     """
     if isinstance(value, (bool, np.bool_)):
@@ -472,7 +463,7 @@ def _load_weights_file(
     depends on row order, and reordering the categories in the semantics would
     otherwise move every weight onto the wrong pair without a word.
 
-    I return the matrix as parsed. ``WeightedCategories`` then validates it
+    Returns the matrix as parsed. ``WeightedCategories`` then validates it
     exactly as it would an inline one.
     """
     import yaml

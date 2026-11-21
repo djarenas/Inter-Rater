@@ -26,7 +26,7 @@ def plot_bootstrap_distribution(
     bins: int | str = "auto",
 ) -> plt.Figure:
     """
-    I plot a coefficient's bootstrap distribution with its interval.
+    Plot a coefficient's bootstrap distribution with its interval.
 
     The histogram is the usable draws; draws whose coefficient was undefined
     are left out and counted in the caption, as the interval counted them.
@@ -34,7 +34,7 @@ def plot_bootstrap_distribution(
     labelled with the method that actually produced it -- a BCa that fell
     back says 'percentile', because it is one.
 
-    When the interval is BCa I also show what BCa did. The plain percentile
+    When the interval is BCa, also shows what BCa did. The plain percentile
     interval from the same draws is drawn as a dashed outline, so the shift
     BCa made is visible, and a box gives its two corrections in words:
 

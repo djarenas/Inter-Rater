@@ -94,12 +94,6 @@ class HypothesisTestConfig:
                 f"the agreement, so it cannot test H₀: coefficient = 0. "
                 f"Use scheme='within_rater_shuffle'."
             )
-        if self.scheme == "column_shuffle":
-            raise ValueError(
-                f"{_ERROR_PREFIX}: scheme='column_shuffle' was renamed to "
-                f"'within_rater_shuffle' in 2.1.0: it shuffles each rater's "
-                f"answers across subjects, not the raters themselves."
-            )
         if self.scheme not in _VALID_SCHEMES:
             raise ValueError(
                 f"{_ERROR_PREFIX}: scheme must be one of {_VALID_SCHEMES}, "

@@ -1,36 +1,39 @@
 """Confidence interval computation methods for bootstrap distributions.
 
-Both methods return a :class:`BootstrapCIResult`, which records the method
-asked for, the method that ran, and how many draws failed.
+Two ci methods: percentile_ci and bca_ci
 
-**Failed draws.** A coefficient of the form ``(p_o - p_e) / (1 - p_e)`` is
+Both of the ci methods return a :class:`BootstrapCIResult`. This result object records the
+method asked for, the method that ran, and how many draws failed.
+
+**Failed draws.** Coefficients of the form ``(p_o - p_e) / (1 - p_e)`` are
 undefined when a resample has a single category (p_e = 1). The agreement
 functions return NaN there. Both methods take their bounds from the usable
 draws and count the rest. Neither thresholds on that count: whether failures
 matter depends on whether failing correlates with the coefficient's value.
 
 **Acceleration needs the data.** BCa's ``a`` measures how the coefficient's
-standard error changes with its value (agreement near 1 varies less than
-agreement near 0.5). A bootstrap distribution describes the spread at one
-value only, so ``a`` comes from the leave-one-subject-out estimates instead
+standard error changes with its value (for example, agreement near 1 varies less than
+agreement near 0.5). ``a`` comes from the leave-one-subject-out estimates
 (Efron & Tibshirani 1986, eq. 8.5). These functions never see the ratings, so
 :func:`bca_ci` takes those estimates as a required argument and raises
-without them. (Versions before 2.0.1 took the skewness of the draws, which is
-not the acceleration.)
+without them.
 
 **When BCa steps down:**
+If the method requested is bca_ci, this package handles three scenarios at
+which the method could fail:
 
-- ``a`` undefined (fewer than two jackknife values, or all identical):
-  percentile.
+- ``a`` undefined (fewer than two jackknife values, or all identical) ->
+  percentile method is used instead.
 - ``1 - a(z0 + z)`` not positive at either end, which would send a bound
-  to infinity or to the wrong side: percentile.
+  to infinity or to the wrong side -> percentile method is used instead.
 - no draw usable: nothing runs, and the method is None.
 
 A fallback to percentile drops ``z0`` as well as ``a``, so ``method_used``
-'percentile' means plain quantiles. Each method in Efron & Tibshirani's
-Table 6 is correct under weaker assumptions than the one above it, so the
-fallback costs accuracy, not validity. ``method_used`` of None is an absence:
-there are no bounds.
+'percentile' means plain quantiles. With z0 = a = 0, BCa reduces to the
+percentile interval, so falling back drops the two corrections and keeps the
+method they correct.
+
+``method_used`` is None only when no draw was usable.
 
 References
 ----------
@@ -88,9 +91,10 @@ def _usable(array: np.ndarray) -> tuple[np.ndarray, int]:
     """
     Split an array into its usable values and a count of the rest.
 
-    Usable means finite. The agreement functions signal an undefined
-    coefficient with NaN, which is what this is here for, but an infinite
-    draw is equally unusable for a quantile and is counted the same way.
+
+    Usable means finite. The agreement functions mark an undefined
+    coefficient with NaN; an infinite value cannot be used for a quantile
+    either, so it is counted the same way.
     """
     keep = np.isfinite(array)
     return array[keep], int(array.size - int(keep.sum()))
@@ -123,17 +127,13 @@ def _acceleration(jackknife_estimates: np.ndarray) -> float | None:
 
     Notes
     -----
-    Identical values are detected by their range, not by their deviations
-    from the mean. The mean of identical floats is not always one of them:
-    twenty copies of 0.6 average to a value one ulp away, leaving deviations
-    near 1e-17. Because ``a`` is a standardised skewness, that noise divided
-    by noise of the same order gives an ordinary-looking acceleration, and
-    BCa would apply a correction to a coefficient no subject moves (0.5 and
-    0.75 are exact in binary and did not show it; 0.6 did).
-
-    The range of identical values is exactly zero. The tolerance is a few
-    ulps of the values' magnitude; real leave-one-out spread is around 1e-3
-    (the coefficient over the number of subjects), far above it.
+    Identical values are caught by their range, not by their deviations from
+    the mean. The mean of identical floats can be one ulp off (twenty copies
+    of 0.6 average to 0.5999999999999999), leaving deviations near 1e-16.
+    ``a`` divides one such tiny number by another, so it would come out
+    ordinary-looking and BCa would correct for skew that is not there. The
+    range of identical values is exactly zero, and the cut-off is a few ulps
+    of the values' size.
     """
     values, _ = _usable(np.asarray(jackknife_estimates, dtype=np.float64))
     if values.size < 2:
@@ -180,8 +180,7 @@ def percentile_ci(
 
     The simpler of the two methods in Efron & Tibshirani's Table 6, and the
     floor of this module: BCa can decline and hand its work here, while this
-    has nothing simpler to hand off to in turn. So this is where failed
-    resamples are dealt with rather than passed along.
+    has nothing simpler to hand off to in turn.
 
     Parameters
     ----------
@@ -236,7 +235,7 @@ def bca_ci(
     itself changes, and lets the interval lean when it does; it is read from
     how much each individual subject moves the estimate.
 
-    When either correction cannot be computed I fall back to the percentile
+    When either correction cannot be computed, falls back to the percentile
     interval, dropping ``z0`` as well as ``a``, so ``method_used`` of
     'percentile' means plain quantiles.
 
@@ -318,9 +317,9 @@ def bca_ci(
     # Draws equal to the point estimate count as half below and half above.
     # Counting them all as below (`<=`) shifts the interval up, counting them
     # all as above (Efron & Tibshirani's strict `<`) shifts it down, and on
-    # small discrete data ties are common: Brennan-Prediger, which depends
-    # only on raw agreement, ties the point in up to 12% of draws in the
-    # example data. This is the 'mean' rule scipy.stats.bootstrap uses.
+    # small discrete data ties are common, e.g. Brennan-Prediger, which
+    # depends only on raw agreement. This is the 'mean' rule
+    # scipy.stats.bootstrap uses.
     n_below = np.sum(usable < point)
     n_at_or_below = np.sum(usable <= point)
     ecdf_point = float((n_below + n_at_or_below) / (2 * usable.size))
@@ -333,9 +332,9 @@ def bca_ci(
     # adjusted quantile runs off to infinity; below zero it lands on the wrong
     # side and the bounds come out inverted (possible when the point lies
     # outside nearly all the draws, so z0 sits at its clip, and |a| is large).
-    # The data are fine, the correction is not. Table 6 makes stepping down
-    # the right answer: each method there is correct under weaker assumptions
-    # than the one below it, so the fallback costs accuracy, not validity.
+    # The data are fine, the correction is not. With z0 = a = 0, BCa reduces
+    # to the percentile interval, so falling back drops the two corrections
+    # and keeps the method they correct.
     denom_lower = 1 - acceleration * (z0 + z_lower)
     denom_upper = 1 - acceleration * (z0 + z_upper)
     if not (denom_lower > 0 and denom_upper > 0):
