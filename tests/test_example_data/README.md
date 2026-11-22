@@ -250,8 +250,9 @@ collapse to identity (there is only one distance). All datasets below have K=3.
 
 ### Gwet's AC2 against irrCAC
 
-The formula is the one in Gwet's irrCAC 1.4 (`gwet.ac1.raw`), so the
-references are its values, rounded to 5 decimals; checked to 5e-6.
+The formula is from Gwet (2021), Chapter 4. The references are the values
+of Gwet's irrCAC 1.4 (`gwet.ac1.raw`), rounded to 5 decimals; checked to
+5e-6.
 
 | Test | Data | Weights | irrCAC |
 |------|------|---------|--------|
@@ -421,7 +422,7 @@ they are.
 | Dataset | Source | Format | Raters | K | Balance | Tests |
 |---------|--------|--------|--------|---|---------|-------|
 | Fleiss 1971 | Fleiss (1971) | counts (csv), turned into Ratings in memory | 6 | 5 | Balanced | 3 |
-| Gwet cont3x3 | Gwet (2014) Table 4.1 | ratings (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
+| Gwet cont3x3 | irrCAC dataset `cont3x3abstractors` | ratings (csv) | 2 | 3 | Balanced | 3 + 1 weighted |
 | Synthetic 2-rater | Synthetic | ratings (txt) | 2 | 3 | Balanced | 2 + 1 weighted |
 | SR1 prelim | OSF 2018 | ratings (csv) | 4 | 3 | Balanced | 4 + 11 weighted + 4 pairwise |
 | SR1 main | OSF 2018 | ratings (txt) | 4 | 3 | Partially crossed | 2 + 5 subset |

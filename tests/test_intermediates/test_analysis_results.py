@@ -2980,7 +2980,7 @@ class TestGwetsAC1Result:
         s = str(GwetsAC1Result(
             0.7, None, None, _unbalanced_bp(), ci_method="bca", **_gwet(0.7),
         ))
-        assert "unbalanced data: Gwet (2014) formula for missing ratings" in s
+        assert "unbalanced data: Gwet (2016) formula for missing ratings" in s
         assert "approximation" not in s
 
     def test_summary_keys(self):
@@ -3152,7 +3152,7 @@ class TestBrennanPredigerResult:
             ci_method="bca", weights_type="identity",
             **_uniform(0.835),
         ))
-        assert "unbalanced data: Gwet (2014) formula for missing ratings" in s
+        assert "unbalanced data: Gwet (2016) formula for missing ratings" in s
         assert "approximation" not in s
 
     def test_summary_keys(self):

@@ -261,9 +261,10 @@ class TestGwetCont3x3Weighted:
 
 # ── Gwet's AC2 against irrCAC ───────────────────────────────────────── #
 #
-# AC2 is AC1 with weights. The formula is the one in Gwet's R package
-# irrCAC 1.4 (gwet.ac1.raw), so the references are its values, which it
-# rounds to 5 decimals (analyses/external_validation/r_tools.csv).
+# AC2 is AC1 with weights (Gwet 2021, Handbook, 5th ed., Chapter 4).
+# The references are the values of Gwet's R package irrCAC 1.4
+# (gwet.ac1.raw), which rounds to 5 decimals
+# (analyses/external_validation/r_tools.csv).
 
 
 class TestGwetAC2:

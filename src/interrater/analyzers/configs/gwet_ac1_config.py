@@ -43,9 +43,9 @@ class GwetAC1Config(GroupCoefficientConfig):
       Statistical Psychology, 61(1), 29--48.
     - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
       Advanced Analytics, LLC.
-    - Gwet, K. L. (2026). irrCAC: Computing the Extent of Agreement among
-      Raters with Chance-Corrected Agreement Coefficient (CAC). R package
-      version 1.4. The AC2 formula used here.
+    - Gwet, K. L. (2021). Handbook of Inter-Rater Reliability (5th ed.),
+      Vol. 1: Analysis of Categorical Ratings. AgreeStat Analytics.
+      Chapter 4, AC2.
     - Wongpakaran, N., et al. (2013). A comparison of Cohen's Kappa and
       Gwet's AC1 when calculating inter-rater reliability coefficients:
       a study conducted with personality disorder samples.

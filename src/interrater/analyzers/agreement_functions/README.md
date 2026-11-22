@@ -61,10 +61,10 @@ With *W* = *I* this is Sum_j *n<sub>ij</sub>*(*n<sub>ij</sub>* - 1) / [*n<sub>i<
 
 At two raters Scott's pi equals Fleiss' kappa.
 
-AC1's Pe is Gwet (2008) Equation 38. The weighted form, AC2, is the one in
-Gwet's R package irrCAC 1.4 (``gwet.ac1.raw``), and the package matches it on
-every weighted case in ``analyses/external_validation/``. irrCAC cites Gwet
-(2014) for it, which was not consulted here.
+AC1's Pe is Gwet (2008) Equation 38. AC2's is from Gwet (2021), Chapter 4.
+Brennan-Prediger's weighted Pe is the one in Gwet's R package irrCAC 1.4
+(``bp.coeff.raw``). The package matches irrCAC on every weighted case in
+``analyses/external_validation/``.
 
 **p<sub>j</sub> is averaged per subject**, (1/*N*) Sum_i *n<sub>ij</sub>* / *n<sub>i</sub>*,
 not pooled per rating. Po is a mean over subjects, so Pe is too. On balanced
@@ -143,6 +143,8 @@ Light's, not for Conger's at three or more raters.
 - Gwet, K. L. (2016). Testing the difference of correlated agreement
   coefficients for statistical significance. *Educational and Psychological
   Measurement*, 76(4), 609-637.
+- Gwet, K. L. (2021). *Handbook of Inter-Rater Reliability* (5th ed.), Vol. 1:
+  *Analysis of Categorical Ratings*. AgreeStat Analytics.
 - Gwet, K. L. (2026). *irrCAC: Computing the Extent of Agreement among Raters
   with Chance-Corrected Agreement Coefficient (CAC)*. R package version 1.4.
   https://CRAN.R-project.org/package=irrCAC

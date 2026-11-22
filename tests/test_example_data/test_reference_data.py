@@ -89,8 +89,7 @@ class TestFleiss1971:
 
 # ── Gwet cont3x3 (2 raters, K=3, balanced) ──────────────────────────────── #
 #
-# Source: Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
-#         Table 4.1 (cont3x3abstractors).
+# Source: the cont3x3abstractors dataset of Gwet's R package irrCAC 1.4.
 # Cross-check: irrCAC: Cohen κ = 0.79641, AC1 = 0.84933.
 
 

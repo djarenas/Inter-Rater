@@ -213,4 +213,4 @@ spaced categories); nominal alpha is alpha with `kind: unordered`. Ratio and
 ordinal distances can be given as a `weighted` matrix.
 
 Gwet's AC2 is AC1 with weights from the semantics, as for Fleiss' kappa.
-The formula is the one in Gwet's irrCAC 1.4; see `agreement_functions/README.md`.
+Its chance term is from Gwet (2021), Chapter 4; see `agreement_functions/README.md`.

@@ -28,7 +28,7 @@ class BrennanPredigerConfig(GroupCoefficientConfig):
     matrix. The chance term remains independent of what the raters actually
     did (the hallmark of Brennan-Prediger) and the weighted coefficient
     is the unweighted one with identity W as a special case. The formula is
-    from Gwet (2014).
+    the one in Gwet's irrCAC 1.4 (``bp.coeff.raw``).
 
     Weights are declared in the semantics of the ratings (categories kind
     'ordered' or 'weighted'). The analyzer reads the weight matrix from there
@@ -46,6 +46,9 @@ class BrennanPredigerConfig(GroupCoefficientConfig):
       Measurement, 41(3), 687--699.
     - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
       Advanced Analytics, LLC.
+    - Gwet, K. L. (2026). irrCAC: Computing the Extent of Agreement among
+      Raters with Chance-Corrected Agreement Coefficient (CAC). R package
+      version 1.4.
 
     Attributes
     ----------

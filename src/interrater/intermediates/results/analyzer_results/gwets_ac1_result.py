@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[GwetsAC1Result] Error"
 _TOL = 1e-9
 # Printed on unbalanced data: the formula is Gwet's own, not an approximation
-UNBALANCED_DATA_LABEL = "unbalanced data: Gwet (2014) formula for missing ratings"
+UNBALANCED_DATA_LABEL = "unbalanced data: Gwet (2016) formula for missing ratings"
 
 # Why kappa_max is not computed for me. The analyzer passes it in.
 KAPPA_MAX_NOT_COMPUTED = (
@@ -43,8 +43,9 @@ class GwetsAC1Result(PointEstimateResult):
     When is_exact is True, the data was balanced (constant raters per
     subject), where every reference gives the same formula. When False, I
     am Gwet's formula for missing ratings: Po and p_j averaged per subject,
-    each subject divided by its own rater count (Gwet, K. L. (2014).
-    Handbook of Inter-Rater Reliability, 4th ed.). Not an approximation; my printed form names the source.
+    each subject divided by its own rater count (Gwet, K. L. (2016).
+    Educational and Psychological Measurement, 76(4), 609-637, Appendix A).
+    Not an approximation; my printed form names the source.
 
     I exist as a separate class (rather than just using PointEstimateResult)
     for type clarity. This is especially useful for error chaining.

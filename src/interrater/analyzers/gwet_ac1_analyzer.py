@@ -42,8 +42,8 @@ class GwetAC1Analyzer(GroupAnalyzer):
 
     With ordered or weighted categories in the semantics I compute AC2: Po
     credits near misses through the weights, and Pe is multiplied by
-    T_w / K, where T_w is the sum of the weights. The weighted formula is the
-    one in Gwet's irrCAC 1.4 (``gwet.ac1.raw``); see ``chance_gwet_ac1``.
+    T_w / K, where T_w is the sum of the weights (Gwet 2021, Chapter 4);
+    see ``chance_gwet_ac1``.
 
     I validate that:
     - Config is GwetAC1Config

@@ -31,6 +31,8 @@ References
 - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
 - Gwet, K. L. (2016). Educational and Psychological Measurement, 76(4),
   609-637.
+- Gwet, K. L. (2021). Handbook of Inter-Rater Reliability (5th ed.), Vol. 1:
+  Analysis of Categorical Ratings. AgreeStat Analytics.
 - Gwet, K. L. (2026). irrCAC: Computing the Extent of Agreement among Raters
   with Chance-Corrected Agreement Coefficient (CAC). R package version 1.4.
 """
@@ -182,9 +184,8 @@ def chance_gwet_ac1(nij: NijMatrix, weights: Weights | None = None) -> float:
 
         Pe = T_w / (K (K - 1)) * sum_j p_j (1 - p_j)
 
-    The weighted formula is the one in irrCAC 1.4 (``gwet.ac1.raw``), Gwet's
-    own package; it cites Gwet (2014), which was not consulted here. Identity
-    weights give T_w = K, which reduces it to AC1.
+    The weighted Pe is from Gwet (2021), Chapter 4. Identity weights give
+    T_w = K, which reduces it to AC1.
 
     Gwet's argument is that chance agreement happens when a rater is uncertain,
     and uncertainty is highest for categories used about half the time. A
@@ -221,7 +222,9 @@ def chance_brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> f
     partial credit and therefore raise the baseline that chance alone would
     produce.
 
-    The weighted formula is from Gwet (2014).
+    The weighted formula is the one in Gwet's irrCAC 1.4 (``bp.coeff.raw``),
+    and the package matches it on every weighted case in
+    ``analyses/external_validation/``.
     """
     k = nij.n_categories
     if weights is None or weights.is_identity:

@@ -38,9 +38,10 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
     derives chance from the observed marginals, and unlike Gwet's AC1, which
     derives it from category heterogeneity.
 
-    The weighted form (Gwet 2014) replaces 1/K with sum(W) / K^2, where W is the weight matrix. For
-    identity weights sum(I) = K, so Pe = K/K^2 = 1/K -- the unweighted
-    coefficient is the special case.
+    The weighted form (as in Gwet's irrCAC 1.4, ``bp.coeff.raw``) replaces
+    1/K with sum(W) / K^2, where W is the weight matrix. For identity
+    weights sum(I) = K, so Pe = K/K^2 = 1/K -- the unweighted coefficient is
+    the special case.
 
     There is no parametric null variance formula for Brennan-Prediger, so
     confidence intervals use bootstrap (percentile or BCa) and hypothesis

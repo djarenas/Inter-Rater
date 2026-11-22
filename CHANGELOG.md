@@ -69,8 +69,8 @@ versioning follows [semver](https://semver.org/).
 - Gwet's AC2, the weighted AC1. `GwetAC1Analyzer` computes it when the
   semantics declares ordered or weighted categories, as Fleiss' kappa does;
   pairwise and subset permutation accept it too. The chance term is
-  T_w / (K (K - 1)) * sum_j p_j (1 - p_j), with T_w the sum of the weights,
-  the formula in Gwet's irrCAC 1.4 (`gwet.ac1.raw`). It matches irrCAC on all
+  T_w / (K (K - 1)) * sum_j p_j (1 - p_j), with T_w the sum of the weights
+  (Gwet 2021, Handbook, 5th ed., Chapter 4). It matches irrCAC on all
   10 weighted cases in `analyses/external_validation/`. `GwetsAC1Result`
   gains `weights_type` and `weight_matrix`, and its data line says "(AC2)"
   when weighted. Unweighted AC1 is unchanged.
@@ -83,6 +83,13 @@ versioning follows [semver](https://semver.org/).
   checks the package against the saved values on every push.
 
 ### Changed
+
+- AC1 and Brennan-Prediger results print "unbalanced data: Gwet (2016)
+  formula for missing ratings" instead of "Gwet (2014)". The formula is
+  unchanged; the citation is now to Gwet (2016), Educational and
+  Psychological Measurement 76(4), Appendix A, which was checked against the
+  paper. Brennan-Prediger's weighted chance term is cited to irrCAC 1.4
+  (`bp.coeff.raw`) instead of Gwet (2014).
 
 - Example data: `Gwet_example/gwet_cont3x3_data_nij.csv`,
   `Synthetic_2raters/synthetic_2raters_data_nij.csv` and `Unbalanced_nij/`

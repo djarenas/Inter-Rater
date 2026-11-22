@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[BrennanPredigerResult] Error"
 _TOL = 1e-9
 # Printed on unbalanced data: the formula is Gwet's, not an approximation
-UNBALANCED_DATA_LABEL = "unbalanced data: Gwet (2014) formula for missing ratings"
+UNBALANCED_DATA_LABEL = "unbalanced data: Gwet (2016) formula for missing ratings"
 
 # Why kappa_max is not computed for me. The analyzer passes it in.
 KAPPA_MAX_NOT_COMPUTED = (
@@ -42,8 +42,9 @@ class BrennanPredigerResult(PointEstimateResult):
     When is_exact is True, the data was balanced and the formula is the
     standard Brennan-Prediger with Pe = 1/K. When False, I am Gwet's formula
     for missing ratings: Po averaged per subject, each subject divided by its
-    own rater count, over the same Pe (Gwet, K. L. (2014). Handbook of
-    Inter-Rater Reliability, 4th ed.). Not an approximation; my printed form names the source.
+    own rater count, over the same Pe (Gwet, K. L. (2016). Educational and
+    Psychological Measurement, 76(4), 609-637, Appendix A). Not an
+    approximation; my printed form names the source.
 
     weights_type is on me (not just on the config) because weighted and
     unweighted Brennan-Prediger are different statistics with different
