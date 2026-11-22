@@ -17,13 +17,18 @@ _ERROR_PREFIX = "[GroupAnalyzer] Error"
 
 class GroupAnalyzer(Analyzer, ABC):
     """
-    I am the abstract base for group coefficients (Fleiss, AC1, BP, Scott, Krippendorff).
+    I am the abstract base for analyzers of group coefficients (Fleiss, AC1,
+    BP, Scott, Krippendorff). These coefficients use how many raters chose
+    each category for each subject, not which rater chose it.
 
-    Group coefficients read a counts matrix (NijMatrix) that discards rater
-    identity. I add validation specific to group analysis:
+    My inheritors' coefficient functions take an EstimatorInput and count it
+    into an NijMatrix (``data.nij``), which discards rater identity.
+
+    At this inheritance level, I check:
     - Config must be GroupCoefficientConfig
     - If config.balanced_data_only=True, ratings must have constant raters per subject
     - If config.balanced_data_only=False, allow unbalanced data
+    - Weights in the semantics are refused if my coefficient has no weighted form
 
     Attributes
     ----------
@@ -34,6 +39,10 @@ class GroupAnalyzer(Analyzer, ABC):
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
+    weights : Weights | None
+        From the semantics (from Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from (from Analyzer).
     config : GroupCoefficientConfig
         Must be an instance of GroupCoefficientConfig or a subclass
         (FleissKappaConfig, GwetAC1Config, etc.)
@@ -53,7 +62,8 @@ class GroupAnalyzer(Analyzer, ABC):
 
     def __init__(self, ratings: Ratings, config: GroupCoefficientConfig) -> None:
         """
-        Initialize group analyzer: validate inputs and config type.
+        Run the parent's checks, then check the config type, the balance
+        constraint and the weights.
 
         Parameters
         ----------
@@ -67,9 +77,11 @@ class GroupAnalyzer(Analyzer, ABC):
         TypeError
             If config is not GroupCoefficientConfig.
         ValueError
-            If config.balanced_data_only=True but data is unbalanced.
+            If config.balanced_data_only=True but data is unbalanced, or the
+            semantics declares weights and my coefficient has no weighted form.
         """
-        # Call parent __init__ (validates ratings and config, computes BalanceProfile)
+        # Call parent __init__ (validates ratings and config, applies the
+        # injection, builds the profiles, the weights and the EstimatorInput)
         # Wrap to propagate errors with GroupAnalyzer context
         try:
             super().__init__(ratings, config)
@@ -86,14 +98,6 @@ class GroupAnalyzer(Analyzer, ABC):
     # Public API ------------------------------------------------------------- #
 
     # Private helpers -------------------------------------------------------- #
-
-    def _agreement_profile(self):
-        """
-        My agreement profile, from my ratings.
-        """
-        from ..intermediates.data_profiles import AgreementProfile
-
-        return AgreementProfile.build_from_ratings(self.ratings)
 
     def _validate_group_config(self) -> None:
         """

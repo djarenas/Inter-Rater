@@ -19,7 +19,6 @@ from .agreement_functions.individual_marginals import (
     conger_parts,
     rater_marginals,
 )
-from ..intermediates.data_profiles import AgreementProfile
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.conger_kappa_result import (
@@ -288,6 +287,6 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(),
             kappa_max=self._kappa_max(),
-            agreement_profile=AgreementProfile.build_from_ratings(self.ratings),
+            agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,
         )

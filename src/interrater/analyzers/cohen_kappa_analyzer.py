@@ -21,7 +21,6 @@ from .agreement_functions.individual_marginals import (
     rater_marginals,
     shared_rows,
 )
-from ..intermediates.data_profiles import AgreementProfile
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.ci_results import ParametricCIResult
 
@@ -429,7 +428,7 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(),
             kappa_max=self._kappa_max(),
-            agreement_profile=AgreementProfile.build_from_ratings(self.ratings),
+            agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,
             weights_type=self._weights_kind(),
             weight_matrix=self._weight_matrix(),

@@ -38,7 +38,8 @@ class Analyzer(ABC):
 
     Subclasses override __init__ to add their own validation
     (e.g., GroupAnalyzer checks balanced_data_only, FleissKappaAnalyzer
-    validates ratings type).
+    validates ratings type). But their constructor can utilize the parent
+    constructors using super __init__.
 
     Attributes
     ----------
@@ -47,17 +48,19 @@ class Analyzer(ABC):
         FleissKappaAnalyzer may require BalancedRatings if config.balanced_data_only=True.
     config : AnalyzerConfig
         The analysis configuration (FleissKappaConfig, etc.).
-        Defines bootstrap resamples, confidence level, CI method, weights, etc.
+        Defines bootstrap resamples, confidence level, CI method, hypothesis
+        test and injection. Weights come from the semantics, not from here.
     balance_profile : BalanceProfile
-        Computed from ratings. Describes how subjects were rated 
-        (constant n per subject, distribution of subjects by rater count, etc.). 
+        Computed from ratings. Describes how subjects were rated
+        (constant n per subject, distribution of subjects by rater count, etc.).
         Stored here for access by all analyzers and included in results.
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
     weights : Weights | None
         From the semantics, for a coefficient with a weighted form. None
-        for identity, and always None for a coefficient without one.
+        for unordered categories, and always None for a coefficient without
+        a weighted form.
     estimator_input : EstimatorInput
         The ratings array, K from the semantics, and the weights. What the
         coefficient is computed from, and what every resample is drawn from.
@@ -75,7 +78,8 @@ class Analyzer(ABC):
 
     def __init__(self, ratings: Ratings, config: AnalyzerConfig) -> None:
         """
-        Initialize analyzer: validate inputs and compute BalanceProfile.
+        Validate the inputs, apply the injection, and build the profiles,
+        the weights and the EstimatorInput.
 
         Parameters
         ----------
@@ -203,16 +207,16 @@ class Analyzer(ABC):
 
     def apply_injection(self) -> None:
         """
-        I apply the injection pipeline from config to the ratings.
+        Apply the injection pipeline from config to the ratings.
 
-        I iterate through each injection step in ``self.config.injection``,
+        Iterate through each injection step in ``self.config.injection``,
         instantiate the corresponding injector, and call ``inject()`` to
         produce a new Ratings with synthetic raters appended. Each step
         chains -- the output Ratings of one step becomes the input to the
         next. The new Ratings validates itself through its own constructor.
 
-        I update ``self.ratings`` in place. If ``self.config.injection``
-        is None I do nothing.
+        Updates ``self.ratings`` in place. Does nothing if
+        ``self.config.injection`` is None.
 
         Called automatically in ``__init__`` before BalanceProfile is built,
         so all downstream computation sees the injected data.
@@ -238,17 +242,12 @@ class Analyzer(ABC):
     @abstractmethod
     def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
-        Compute my coefficient from an EstimatorInput, and nothing else.
+        Compute my coefficient from an EstimatorInput.
 
-        This is the one step that differs between coefficients. Everything
-        that resamples -- the bootstrap, the jackknife, anything added later
-        -- is expressed in terms of it, so each of them exists once here
-        rather than once per analyzer.
-
-        I take an EstimatorInput rather than a Ratings because my callers
-        hand me resamples, which are not Ratings and should not have to
-        pretend to be. K and the weights come with the data, taken from
-        ``self.estimator_input``, never inferred from the array.
+        It takes an EstimatorInput rather than a Ratings because its callers
+        may pass resamples. K and the weights come with an EstimatorInput
+        object, taken from ``self.estimator_input``, so that the methods do
+        not have to infer K from a resampled array.
 
         Parameters
         ----------
@@ -259,10 +258,11 @@ class Analyzer(ABC):
         Returns
         -------
         float
-            The coefficient, or NaN when this array cannot define it -- an
-            array holding a single category drives chance agreement to 1,
-            and the coefficient is then 0/0.
+            The coefficient, or NaN when it is undefined on this array (e.g.
+            Fleiss' kappa when every rating is in one category, so chance
+            agreement is 1).
         """
+        # Just an extra precaution to ensure proper inheritance of the abstract method.
         raise NotImplementedError(
             f"{_ERROR_PREFIX}: _estimate_from_input() must be implemented "
             f"by subclass"
@@ -270,8 +270,8 @@ class Analyzer(ABC):
 
     def _with_category_index(self, category_index: np.ndarray) -> EstimatorInput:
         """
-        My estimator_input with another array in place of mine: same K, same
-        weights. For permutation tests, whose permuted arrays have my shape.
+        Use the same K and same weights from my EstimatorInput attribute, but
+        with a new data array. Used by the permutation tests.
         """
         import dataclasses
 
@@ -281,7 +281,9 @@ class Analyzer(ABC):
 
     def _bootstrap_distribution(self) -> np.ndarray:
         """
-        Resample subjects with replacement and recompute my coefficient.
+        Return the bootstrap distribution as a numpy array of coefficients.
+        One coefficient for each of the ``n_resamples`` resamples of the
+        subjects, drawn with replacement.
 
         Returns
         -------
@@ -303,12 +305,10 @@ class Analyzer(ABC):
 
     def _jackknife_estimates(self) -> np.ndarray:
         """
-        Recompute my coefficient with each subject left out in turn.
+        My coefficient with each subject left out in turn.
 
-        BCa's acceleration is the standardised skewness of these values. It
-        measures how much each individual subject moves the coefficient,
-        which is a property of the data and cannot be recovered from a
-        bootstrap distribution.
+        BCa's acceleration is computed from these values. The "a" needs
+        to know how much each subject moves the coefficient.
 
         Returns
         -------
@@ -367,6 +367,10 @@ class Analyzer(ABC):
         permutation analysis that bootstrapped a pair or subset with its own
         seeds -- gets the same result, built and checked the same way.
         """
+        # Just an extra precaution to ensure proper inheritance of the abstract method.
+        raise NotImplementedError(
+            f"{_ERROR_PREFIX}: _result() must be implemented by subclass"
+        )
 
     def _parametric_null_interval(self, point: float):
         """
@@ -384,6 +388,14 @@ class Analyzer(ABC):
 
     # Private helpers -------------------------------------------------------- #
 
+    def _agreement_profile(self):
+        """
+        My agreement profile, from my ratings. Every result carries one.
+        """
+        from ..intermediates.data_profiles import AgreementProfile
+
+        return AgreementProfile.build_from_ratings(self.ratings)
+
     # Weights ---------------------------------------------------------------- #
 
     _ACCEPTS_WEIGHTS: bool = False
@@ -393,9 +405,10 @@ class Analyzer(ABC):
         """
         Refuse ordered or weighted categories for a coefficient with no weighted form.
 
-        Weights are declared in the semantics, so they arrive with the
-        ratings. A coefficient that cannot use them must say so rather than
-        quietly compute the unweighted number under a weighted declaration.
+        Weights are declared in the semantics, so they arrive at the Analyzer
+        object with the ratings. The analyzer must look at the ratings object,
+        and if its coefficient cannot use weights, then it must throw a clear
+        error instead of computing an unweighted number silently.
         """
         if self._ACCEPTS_WEIGHTS:
             return
@@ -422,6 +435,9 @@ class Analyzer(ABC):
         at construction, the first point where the method asked for, the
         balance of the data and the weights are all known; both the
         interval and the hypothesis test are covered.
+
+        The analyzer object looks at the config and if its coefficient does not
+        allow a parametric null, it shows a clear error.
         """
         asked = []
         if self.config.ci_method == "parametric_null":
@@ -477,8 +493,8 @@ class Analyzer(ABC):
         Count the permutations at or beyond the observed point, and the p-value.
 
         Draws that came out NaN are skipped and counted, as the bootstrap
-        does: a NaN compares False with everything, so left in it would
-        count as "not extreme" and push the p-value down.
+        does. This prevents NaNs from being compared as False with
+        everything, which would push the p-value down.
 
         Returns the keyword arguments HypothesisTestResult records:
         p_value, n_usable, n_at_or_above, n_at_or_below and alternative.
@@ -498,9 +514,12 @@ class Analyzer(ABC):
                 f"distribution to compare with."
             )
 
-        # A shuffle that reproduces the observed table can give the same
-        # value with different rounding; count it as a tie, as
-        # scipy.stats.permutation_test does.
+        # A permutation can give exactly the observed coefficient, for example
+        # by reproducing the same counts, and still differ from the point in
+        # the last digits, from rounding. Values within a small
+        # tolerance of the point count as ties: 100 machine epsilons times
+        # |point|, as in scipy.stats.permutation_test, but never less than
+        # 100 epsilons.
         tol = 100 * np.finfo(float).eps * max(abs(point), 1.0)
         n_at_or_above = int(np.sum(usable >= point - tol))
         n_at_or_below = int(np.sum(usable <= point + tol))

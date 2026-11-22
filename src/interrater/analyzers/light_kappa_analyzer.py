@@ -22,7 +22,6 @@ from .agreement_functions.individual_marginals import (
     rater_marginals,
     shared_rows,
 )
-from ..intermediates.data_profiles import AgreementProfile
 from ..intermediates.not_computed import NotComputed
 from ..intermediates.results import AgreementParts
 from ..intermediates.results.analyzer_results.light_kappa_result import (
@@ -298,7 +297,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             rater_profile=self.rater_profile,
             parts=NotComputed(PARTS_NOT_COMPUTED),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
-            agreement_profile=AgreementProfile.build_from_ratings(self.ratings),
+            agreement_profile=self._agreement_profile(),
             n_pairs=n_pairs,
             ci_method=self.config.ci_method,
             pair_parts=pair_parts,
