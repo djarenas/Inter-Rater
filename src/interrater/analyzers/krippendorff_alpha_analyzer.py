@@ -39,7 +39,7 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
     where Do is the observed disagreement pooled across all pairable rating
     pairs, and De is the expected disagreement under random permutation of
     the same ratings. This is not the same expression as the kappa family's
-    ``(Po - Pe) / (1 - Pe)`` rearranged -- the two use different units
+    ``(Po - Pe) / (1 - Pe)``; the two use different units
     (pairs pooled vs. subjects averaged) and different chance models
     (finite-sample permutation vs. population rates).
 
@@ -53,8 +53,8 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
     the observed and expected disagreement terms identically. Identity
     weights give the nominal (unweighted) case.
 
-    There is no parametric null variance formula for Krippendorff's alpha,
-    so confidence intervals use bootstrap (percentile or BCa) and hypothesis
+    This package does not use parametric... for Krippendorff's alpha,
+    The confidence intervals for Kripp use bootstrap (percentile or BCa) and hypothesis
     tests use permutation only (Hayes & Krippendorff 2007).
 
     I validate that:
@@ -143,7 +143,7 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
         """
         Test H_0: alpha = 0 by permutation (``_permutation_test``).
 
-        There is no closed-form null variance for Krippendorff's alpha.
+        This package ...There is no closed-form null variance for Krippendorff's alpha.
         """
         return self._permutation_test()
 

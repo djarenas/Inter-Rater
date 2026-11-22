@@ -29,16 +29,15 @@ class GwetAC1Analyzer(GroupAnalyzer):
     I am the analyzer for Gwet's AC1, the prevalence-robust agreement
     coefficient, and for AC2, its weighted form.
 
-    AC1 measures chance-corrected agreement among any number of raters (n >= 2)
-    on nominal categorical data. It addresses the "kappa paradox" -- the
-    collapse of Fleiss/Cohen kappa under skewed prevalence --
+    AC1 measures chance-corrected agreement among two or more raters
+    on categorical data. It addresses the low values of Fleiss' and Cohen's
+    kappa under skewed prevalence
     by replacing kappa's marginal-based chance term with one derived from
     category heterogeneity (Gwet 2008, Equation 38):
 
         Pe = sum_j p_j (1 - p_j) / (K - 1)
 
-    When prevalence is skewed, Pe is small and AC1 stays high --
-    matching the intuition that raters who mostly agree really do agree.
+    When prevalence is skewed, Pe is small, so AC1 stays close to Po.
 
     With ordered or weighted categories in the semantics I compute AC2: Po
     credits near misses through the weights, and Pe is multiplied by
@@ -46,28 +45,29 @@ class GwetAC1Analyzer(GroupAnalyzer):
     see ``chance_gwet_ac1``.
 
     I validate that:
+    - Ratings and config pass my parent's checks
     - Config is GwetAC1Config
-    - Data structure is appropriate for AC1
 
     I compute:
     - Point estimate of AC1
     - Bootstrap confidence interval (percentile or BCa)
-    - Balance profile
-    - Return GwetsAC1Result with all metadata
+    - Return a GwetsAC1Result
 
     Attributes
     ----------
     ratings : Ratings
-        The validated ratings data (inherited from Analyzer).
-    config : GwetAC1Config
-        The analysis configuration for Gwet's AC1.
-    weights : Weights | None
-        The weights object (from Analyzer).
+        The validated ratings data (from Analyzer).
     balance_profile : BalanceProfile
-        Describes the balance structure of the data (inherited from Analyzer).
+        Describes the balance structure of the data (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
+    weights : Weights | None
+        The weights object (from Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from (from Analyzer).
+    config : GwetAC1Config
+        The analysis configuration for Gwet's AC1.
     """
 
     # Has a weighted form (AC2): Analyzer reads the weights from the semantics
@@ -83,6 +83,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
     weights: Weights | None
+    estimator_input: EstimatorInput
     # Checked at this level
     config: GwetAC1Config
 
@@ -90,7 +91,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
 
     def __init__(self, ratings: Ratings, config: GwetAC1Config) -> None:
         """
-        Initialize Gwet's AC1 analyzer: validate config and ratings.
+        Run the parent's checks, then check the config type.
 
         Parameters
         ----------
@@ -102,22 +103,12 @@ class GwetAC1Analyzer(GroupAnalyzer):
         Raises
         ------
         TypeError
-            If config is not GwetAC1Config.
-            If ratings is not a Ratings object.
+            If ratings is not a Ratings object, or config is not GwetAC1Config.
         ValueError
             If config.balanced_data_only=True but data is unbalanced.
         """
-        from ..data_objects.ratings import Ratings as RatingsBase
-
-        # Validate ratings is at least a Ratings object
-        if not isinstance(ratings, RatingsBase):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ratings must be a Ratings object, "
-                f"got {type(ratings).__name__}"
-            )
-
-        # Call parent __init__ (validates config, computes BalanceProfile,
-        # validates group config and balance constraint)
+        # Call parent __init__ (validates ratings and config, computes
+        # BalanceProfile, validates group config and balance constraint)
         try:
             super().__init__(ratings, config)
         except (TypeError, ValueError) as e:
@@ -132,7 +123,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         """
         Test H_0: AC1 = 0 by permutation (``_permutation_test``).
 
-        There is no closed-form null variance for AC1.
+        The package implements no parametric null for AC1.
         """
         return self._permutation_test()
 

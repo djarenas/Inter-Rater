@@ -33,43 +33,50 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
     I am the analyzer for Brennan-Prediger's coefficient.
 
     Brennan and Prediger (1981) defined chance agreement as a uniform guess
-    among K categories: Pe = 1/K -- a chance term independent of
+    among K categories: Pe = 1/K, a chance term independent of
     how the raters actually used the categories; unlike Fleiss' kappa, which
-    derives chance from the observed marginals, and unlike Gwet's AC1, which
-    derives it from category heterogeneity.
+    derives chance from the pooled category proportions, and unlike Gwet's
+    AC1, which derives it from category heterogeneity.
 
     The weighted form (as in Gwet's irrCAC 1.4, ``bp.coeff.raw``) replaces
     1/K with sum(W) / K^2, where W is the weight matrix. For identity
     weights sum(I) = K, so Pe = K/K^2 = 1/K -- the unweighted coefficient is
     the special case.
 
-    There is no parametric null variance formula for Brennan-Prediger, so
+    The package implements no parametric null for Brennan-Prediger, so
     confidence intervals use bootstrap (percentile or BCa) and hypothesis
     tests use permutation only.
 
     I validate that:
+    - Ratings and config pass my parent's checks
     - Config is BrennanPredigerConfig
-    - Data structure is appropriate for Brennan-Prediger
 
     I compute:
     - Point estimate of Brennan-Prediger's coefficient
     - Bootstrap confidence interval (percentile or BCa)
-    - Balance profile
-    - Return BrennanPredigerResult with all metadata
+    - Return a BrennanPredigerResult
+
+    References
+    ----------
+    Brennan, R. L., & Prediger, D. J. (1981). Coefficient kappa: Some
+        uses, misuses, and alternatives. Educational and Psychological
+        Measurement, 41(3), 687-699.
 
     Attributes
     ----------
     ratings : Ratings
-        The validated ratings data (inherited from Analyzer).
-    config : BrennanPredigerConfig
-        The analysis configuration for Brennan-Prediger.
+        The validated ratings data (from Analyzer).
     balance_profile : BalanceProfile
-        Describes the balance structure of the data (inherited from Analyzer).
+        Describes the balance structure of the data (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
     weights : Weights | None
         The weights object (from Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from (from Analyzer).
+    config : BrennanPredigerConfig
+        The analysis configuration for Brennan-Prediger.
     """
 
     # Has a weighted form: Analyzer reads the weights from the semantics
@@ -85,6 +92,7 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
     weights: Weights | None
+    estimator_input: EstimatorInput
     # Checked at this level
     config: BrennanPredigerConfig
 
@@ -92,7 +100,7 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
 
     def __init__(self, ratings: Ratings, config: BrennanPredigerConfig) -> None:
         """
-        Initialize Brennan-Prediger analyzer: validate config and ratings.
+        Run the parent's checks, then check the config type.
 
         Parameters
         ----------
@@ -104,21 +112,13 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
         Raises
         ------
         TypeError
-            If config is not BrennanPredigerConfig.
-            If ratings is not a Ratings object.
+            If ratings is not a Ratings object, or config is not
+            BrennanPredigerConfig.
         ValueError
             If config.balanced_data_only=True but data is unbalanced.
         """
-        from ..data_objects.ratings import Ratings as RatingsBase
-
-        # Validate ratings is at least a Ratings object
-        if not isinstance(ratings, RatingsBase):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ratings must be a Ratings object, "
-                f"got {type(ratings).__name__}"
-            )
-
-        # Call parent __init__ (validates group config; Analyzer builds the Weights)
+        # Call parent __init__ (validates ratings and config, computes
+        # BalanceProfile, validates group config and balance constraint)
         try:
             super().__init__(ratings, config)
         except (TypeError, ValueError) as e:
@@ -133,7 +133,7 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
         """
         Test H_0: Brennan-Prediger = 0 by permutation (``_permutation_test``).
 
-        There is no closed-form null variance for Brennan-Prediger.
+        The package implements no parametric null for Brennan-Prediger.
         """
         return self._permutation_test()
 

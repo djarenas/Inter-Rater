@@ -118,6 +118,9 @@ class HypothesisTestResult:
         Z-score (parametric_null only, None for permutation).
     null_variance : float | None
         The null variance used (parametric_null only). Must be >= 0.
+    null_variance_source : str | None
+        Where the null variance formula comes from, e.g. "Fleiss, Nee &
+        Landis (1979), Eq. 12" (parametric_null only, required there).
     null_distribution : np.ndarray | None
         The permutation distribution (permutation only, None for parametric).
     n_permutations : int | None
@@ -161,6 +164,7 @@ class HypothesisTestResult:
     # Parametric-null fields (None for permutation)
     z_statistic: float | None = None
     null_variance: float | None = None
+    null_variance_source: str | None = None
 
     # Permutation fields (None for parametric)
     null_distribution: np.ndarray | None = None
@@ -278,6 +282,19 @@ class HypothesisTestResult:
                     f"{_ERROR_PREFIX}: null_variance must not be None "
                     f"for method='parametric_null'"
                 )
+            if (not isinstance(self.null_variance_source, str)
+                    or not self.null_variance_source.strip()):
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: null_variance_source must name the "
+                    f"formula's source for method='parametric_null', e.g. "
+                    f"'Fleiss, Nee & Landis (1979), Eq. 12'; got "
+                    f"{self.null_variance_source!r}"
+                )
+        if self.method == "permutation" and self.null_variance_source is not None:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: null_variance_source must be None for "
+                f"method='permutation'"
+            )
         if self.method == "permutation":
             if self.n_permutations is None:
                 raise ValueError(
@@ -420,7 +437,8 @@ class HypothesisTestResult:
         Examples
         --------
         Parametric:
-            H₀: Fleiss' κ = 0, z = 3.42, two-sided p = 0.0006, reject at α = 0.05
+            H₀: Fleiss' κ = 0, z = 3.42 (null variance: Fleiss, Nee & Landis
+            (1979), Eq. 12), two-sided p = 0.0006, reject at α = 0.05
         Permutation:
             H₀: Fleiss' κ = 0, two-sided p = 0.0030 (5000 permutations,
             within_rater_shuffle, seed 42), reject at α = 0.05. Two-sided p
@@ -445,7 +463,8 @@ class HypothesisTestResult:
 
         if self.method == "parametric_null" and self.z_statistic is not None:
             return (
-                f"H₀: {name} = 0, z = {self.z_statistic:.2f}, "
+                f"H₀: {name} = 0, z = {self.z_statistic:.2f} "
+                f"(null variance: {self.null_variance_source}), "
                 f"{p_str}, {decision} at α = {self.alpha}"
             )
         elif self.method == "permutation" and self.n_permutations is not None:
@@ -498,6 +517,8 @@ class HypothesisTestResult:
             result["z_statistic"] = self.z_statistic
         if self.null_variance is not None:
             result["null_variance"] = self.null_variance
+        if self.null_variance_source is not None:
+            result["null_variance_source"] = self.null_variance_source
         if self.n_permutations is not None:
             result["n_permutations"] = self.n_permutations
         for name in ("alternative", "n_usable", "n_at_or_above", "n_at_or_below"):
