@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -12,7 +12,6 @@ from .analyzer import Analyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
-    from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from ..intermediates.estimator_parts.estimator_input import EstimatorInput
     from .configs import IndividualMarginalConfig
@@ -68,17 +67,12 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
 
     Individual marginal coefficients keep rater identity: they read which rater
     said what, and use each rater's own category distribution in the chance
-    term. I am the sibling of GroupAnalyzer, which discards rater identity,
-    reads a counts matrix, and therefore cares about 'pooled marginals'.
+    term. I am the sibling of GroupAnalyzer, whose inheritors do not need rater identity.
 
-    Analyzer builds the EstimatorInput: the category_index array alongside K
-    and optional weights -- everything an agreement function in
-    individual_marginals.py needs. Weights are None unless the coefficient
-    accepts them (CohenKappaAnalyzer sets ``_ACCEPTS_WEIGHTS``).
-
-    Counts discard rater identity, which is exactly what individual marginal
-    coefficients need to keep. If you have only counts,
-    you want a group coefficient (Fleiss, Scott, etc.), not Cohen or Conger.
+    My inheritors' chance terms use each rater's own category rates, so their
+    coefficient functions read the ratings array, where each column is one
+    rater. Data available only as counts per subject fit a group coefficient
+    instead (Fleiss, Scott, Gwet's AC1, Brennan-Prediger, Krippendorff).
 
     Attributes
     ----------
@@ -92,8 +86,9 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         Describes the data structure (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
-        rated, how much each pair overlapped. Always present here:
-        this coefficient needs rater identity.
+        rated, how much each pair overlapped (from Analyzer).
+    weights : Weights | None
+        From the semantics (from Analyzer).
     estimator_input : EstimatorInput
         Carrying category_index, n_categories, and weights (from Analyzer).
     """
@@ -114,7 +109,7 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         self, ratings: Ratings, config: IndividualMarginalConfig
     ) -> None:
         """
-        Initialize individual marginal analyzer: validate inputs.
+        Run the parent's checks, then check the config type and the weights.
 
         Parameters
         ----------
@@ -126,10 +121,14 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
         Raises
         ------
         TypeError
-            If ratings is not a Ratings object, or config is not
-            IndividualMarginalConfig.
+            If ratings is not a Ratings object, or config object is not from an inheritor
+            of IndividualMarginalConfig.
+        ValueError
+            If the semantics declares weights and my coefficient has no
+            weighted form.
         """
-        # Call parent __init__ (validates ratings and config, computes BalanceProfile)
+        # Call parent __init__ (validates ratings and config, applies the
+        # injection, builds the profiles, the weights and the EstimatorInput)
         try:
             super().__init__(ratings, config)
         except (TypeError, ValueError) as exc:
@@ -140,23 +139,6 @@ class IndividualMarginalAnalyzer(Analyzer, ABC):
 
         # Weights arrive with the semantics; refuse them if unusable here
         self._refuse_weights_if_unsupported()
-
-    # Public API ------------------------------------------------------------- #
-
-    @abstractmethod
-    def hypothesis_test(self) -> HypothesisTestResult:
-        """
-        Test the null hypothesis that the agreement coefficient equals zero.
-
-        Returns
-        -------
-        HypothesisTestResult
-            Test statistic, p-value, and metadata.
-        """
-        raise NotImplementedError(
-            f"{_ERROR_PREFIX}: hypothesis_test() must be implemented by "
-            f"subclass, got {type(self).__name__}"
-        )
 
     # Private helpers -------------------------------------------------------- #
 

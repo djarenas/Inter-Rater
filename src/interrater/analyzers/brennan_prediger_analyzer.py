@@ -75,6 +75,9 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
     # Has a weighted form: Analyzer reads the weights from the semantics
     _ACCEPTS_WEIGHTS = True
 
+    # Label in hypothesis test results
+    _COEFFICIENT_KEY = "brennan_prediger"
+
     # Attribute declaration
 
     # Populated at parent class Analyzer
@@ -128,97 +131,11 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
-        Test the null hypothesis that BP = 0 (agreement is due to chance).
+        Test H_0: Brennan-Prediger = 0 by permutation (``_permutation_test``).
 
-        Reads method and parameters from self.config.hypothesis_test_config.
-        Brennan-Prediger supports permutation testing only -- there is no
-        parametric null variance formula for this coefficient.
-
-        Uses a one-sided p-value: proportion of null values >= observed,
-        testing whether agreement is significantly better than uniform
-        random guessing.
-
-        Returns
-        -------
-        HypothesisTestResult
-            p-value, test decision, null distribution, and metadata.
-
-        Raises
-        ------
-        ValueError
-            If hypothesis_test_config is None.
-            If method is not "permutation".
+        There is no closed-form null variance for Brennan-Prediger.
         """
-        from ..intermediates.results import HypothesisTestResult
-        from .agreement_functions.group_agreement import brennan_prediger
-        from .resampling_functions.permutation_resampling import (
-            within_rater_shuffle,
-            pool_and_redistribute,
-        )
-
-        # Guard: hypothesis_test_config must be set
-        if self.config.hypothesis_test_config is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis_test() requires "
-                f"config.hypothesis_test_config to be set."
-            )
-
-        ht_config = self.config.hypothesis_test_config
-
-        # Brennan-Prediger supports permutation only
-        if ht_config.method != "permutation":
-            raise ValueError(
-                f"{_ERROR_PREFIX}: Brennan-Prediger supports only "
-                f"method='permutation' for hypothesis testing. "
-                f"Got '{ht_config.method}'. There is no parametric null "
-                f"variance formula for this coefficient."
-            )
-
-        # Compute observed Brennan-Prediger
-        observed_bp = brennan_prediger(self.estimator_input)
-
-        # Select permutation scheme
-        scheme_map = {
-            "within_rater_shuffle": within_rater_shuffle,
-            "pool_and_redistribute": pool_and_redistribute,
-        }
-        permute_fn = scheme_map.get(ht_config.scheme)
-        if permute_fn is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown permutation scheme "
-                f"'{ht_config.scheme}'. Expected one of: "
-                f"{set(scheme_map.keys())}."
-            )
-
-        # Permutation loop
-        null_values = []
-        for permuted_array in permute_fn(
-            self.estimator_input.category_index,
-            n_permutations=ht_config.n_permutations,
-            random_state=ht_config.random_state,
-        ):
-            null_values.append(self._estimate_from_input(
-                self._with_category_index(permuted_array)
-            ))
-
-        null_distribution = np.array(null_values)
-
-        counts = self._permutation_p_value(
-            null_distribution, observed_bp, ht_config.alternative
-        )
-
-        return HypothesisTestResult(
-            alpha=ht_config.alpha,
-            reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
-            method="permutation",
-            coefficient="brennan_prediger",
-            point=observed_bp,
-            z_statistic=None,
-            null_variance=None,
-            null_distribution=null_distribution,
-            n_permutations=ht_config.n_permutations,
-            **counts,
-        )
+        return self._permutation_test()
 
     # Private helpers -------------------------------------------------------- #
 

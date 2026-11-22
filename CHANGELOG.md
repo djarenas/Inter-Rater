@@ -84,6 +84,13 @@ versioning follows [semver](https://semver.org/).
 
 ### Changed
 
+- The permutation test is written once, as `Analyzer._permutation_test`,
+  instead of once in each of the 8 analyzers. `hypothesis_test()` stays
+  abstract: each analyzer calls `_permutation_test`, and Fleiss, Scott and
+  Cohen also offer `_parametric_null_test`. P-values, null distributions and
+  error messages are unchanged (checked on 372 runs). `AgreementProfile` is
+  built by one `Analyzer._agreement_profile` instead of four copies.
+
 - AC1 and Brennan-Prediger results print "unbalanced data: Gwet (2016)
   formula for missing ratings" instead of "Gwet (2014)". The formula is
   unchanged; the citation is now to Gwet (2016), Educational and

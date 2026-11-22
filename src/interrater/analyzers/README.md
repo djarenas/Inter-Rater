@@ -72,9 +72,10 @@ need the full ratings array, column by column.
   semantics
 - Supply only what is specific to their coefficient: the coefficient itself
   (`_estimate_from_input`, one line calling its agreement function), the
-  result it is packaged into (`_result`), and,
-  for Cohen, Scott and Fleiss, the null-variance interval
-  (`_parametric_null_interval`)
+  result it is packaged into (`_result`), its label in hypothesis test
+  results (`_COEFFICIENT_KEY`), its `hypothesis_test`, and, for Cohen, Scott
+  and Fleiss, the null-variance interval and test
+  (`_parametric_null_interval`, `_parametric_null_test`)
 
 
 ## The estimate() flow
@@ -97,6 +98,22 @@ need nothing from it beyond `_estimate_from_input`. `_result` is separate
 from the rest so that a permutation analysis, which bootstraps each pair or
 subset with its own seeds, can package a unit's point, interval and draws
 through the same method and get a result built and checked the same way.
+
+
+## The hypothesis_test() flow
+
+`hypothesis_test()` is abstract on `Analyzer`, so each leaf states which
+methods its coefficient supports:
+
+- **Permutation**, every coefficient: `_permutation_test`, written once on
+  `Analyzer`. It shuffles the ratings with the scheme in the config, calls
+  `_estimate_from_input` on each shuffle, and counts the shuffles at or
+  beyond the observed value.
+- **Parametric null**, Fleiss, Scott and Cohen only: each leaf's
+  `_parametric_null_test`, with its published null variance.
+
+A leaf without a parametric null calls `_permutation_test` and nothing else;
+its config has already refused `parametric_null`.
 
 ```python
 analyzer = FleissKappaAnalyzer(ratings, config)

@@ -88,6 +88,9 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         Bulletin, 76(5), 365--377.
     """
 
+    # Label in hypothesis test results
+    _COEFFICIENT_KEY = "light_kappa"
+
     # Attribute declaration
 
     # Populated at parent class Analyzer
@@ -140,91 +143,11 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
-        Test H_0: kappa = 0 using permutation.
+        Test H_0: kappa = 0 by permutation (``_permutation_test``).
 
-        Only "permutation" is supported -- there is no closed-form null
-        variance for Light's kappa.
-
-        Returns
-        -------
-        HypothesisTestResult
-            Test statistic, p-value, and metadata.
-
-        Raises
-        ------
-        ValueError
-            If config.hypothesis_test_config is None.
-            If method is not "permutation".
+        There is no closed-form null variance for Light's kappa.
         """
-        # Guard: hypothesis_test_config must be set
-        if self.config.hypothesis_test_config is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis_test_config is None. "
-                f"Set hypothesis_test_config in your config to use "
-                f"hypothesis testing."
-            )
-
-        ht_config = self.config.hypothesis_test_config
-
-        # Compute point estimate
-        point = light_kappa(self.estimator_input)
-
-        if ht_config.method == "permutation":
-            # Permutation test: shuffle ratings to build null distribution
-            from .resampling_functions.permutation_resampling import (
-                within_rater_shuffle,
-                pool_and_redistribute,
-            )
-
-            scheme_map = {
-                "within_rater_shuffle": within_rater_shuffle,
-                "pool_and_redistribute": pool_and_redistribute,
-            }
-
-            scheme_fn = scheme_map.get(ht_config.scheme)
-            if scheme_fn is None:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: unknown permutation scheme "
-                    f"'{ht_config.scheme}'. Expected one of: "
-                    f"{set(scheme_map.keys())}."
-                )
-
-            # Build null distribution
-            null_values = []
-
-            for permuted_array in scheme_fn(
-                self.estimator_input.category_index,
-                n_permutations=ht_config.n_permutations,
-                random_state=ht_config.random_state,
-            ):
-                null_values.append(self._estimate_from_input(
-                    self._with_category_index(permuted_array)
-                ))
-
-            null_distribution = np.array(null_values)
-
-            counts = self._permutation_p_value(
-                null_distribution, point, ht_config.alternative
-            )
-
-            return HypothesisTestResult(
-                alpha=ht_config.alpha,
-                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
-                method="permutation",
-                coefficient="light_kappa",
-                point=point,
-                null_distribution=null_distribution,
-                n_permutations=ht_config.n_permutations,
-                **counts,
-            )
-
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown hypothesis test method "
-                f"'{ht_config.method}'. Light's kappa has no closed-form null "
-                f"variance, so only 'permutation' is available. "
-                f"Got '{ht_config.method}'."
-            )
+        return self._permutation_test()
 
     # Private helpers -------------------------------------------------------- #
 

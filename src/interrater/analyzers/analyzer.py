@@ -183,10 +183,9 @@ class Analyzer(ABC):
         ``config.hypothesis_test_config``, as everything else about a run
         comes from the config. Each leaf class implements this with the
         methods available for its coefficient:
-        - "permutation": permute ratings to build the null distribution
-          (requires Ratings)
-        - "parametric_null": use the analytical null variance formula
-          (coefficient-specific)
+        - "permutation": every coefficient, through ``_permutation_test``
+        - "parametric_null": only Fleiss, Scott and Cohen, which have a
+          published null variance, each in its own ``_parametric_null_test``
 
         Returns
         -------
@@ -387,6 +386,77 @@ class Analyzer(ABC):
         )
 
     # Private helpers -------------------------------------------------------- #
+
+    _COEFFICIENT_KEY: str
+    """How hypothesis test results name the coefficient (e.g. "fleiss_kappa"). Set by each leaf."""
+
+    def _hypothesis_test_config(self):
+        """The hypothesis test settings in my config; ValueError if there are none."""
+        ht_config = self.config.hypothesis_test_config
+        if ht_config is None:
+            raise ValueError(
+                f"[{type(self).__name__}] Error: hypothesis_test_config is None. "
+                f"Set hypothesis_test_config in your config to use hypothesis testing."
+            )
+        return ht_config
+
+    def _permutation_test(self) -> HypothesisTestResult:
+        """
+        Test H0: coefficient = 0 by permutation. Any coefficient can use it.
+
+        The ratings are shuffled ``n_permutations`` times by the scheme in my
+        hypothesis test config, my coefficient is computed on each shuffle,
+        and the p-value counts the shuffles at or beyond the observed value
+        (``_permutation_p_value``).
+        """
+        from ..intermediates.results import HypothesisTestResult
+        from .resampling_functions.permutation_resampling import (
+            pool_and_redistribute,
+            within_rater_shuffle,
+        )
+
+        ht_config = self._hypothesis_test_config()
+        prefix = f"[{type(self).__name__}] Error"
+        if ht_config.method != "permutation":
+            raise ValueError(
+                f"{prefix}: hypothesis test method '{ht_config.method}' is not "
+                f"available for this coefficient. Use method='permutation'."
+            )
+
+        scheme_map = {
+            "within_rater_shuffle": within_rater_shuffle,
+            "pool_and_redistribute": pool_and_redistribute,
+        }
+        scheme_fn = scheme_map.get(ht_config.scheme)
+        if scheme_fn is None:
+            raise ValueError(
+                f"{prefix}: unknown permutation scheme '{ht_config.scheme}'. "
+                f"Expected one of: {set(scheme_map.keys())}."
+            )
+
+        point = self._estimate_from_input(self.estimator_input)
+        null_distribution = np.array([
+            self._estimate_from_input(self._with_category_index(permuted_array))
+            for permuted_array in scheme_fn(
+                self.estimator_input.category_index,
+                n_permutations=ht_config.n_permutations,
+                random_state=ht_config.random_state,
+            )
+        ])
+        counts = self._permutation_p_value(
+            null_distribution, point, ht_config.alternative
+        )
+
+        return HypothesisTestResult(
+            alpha=ht_config.alpha,
+            reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
+            method="permutation",
+            coefficient=self._COEFFICIENT_KEY,
+            point=point,
+            null_distribution=null_distribution,
+            n_permutations=ht_config.n_permutations,
+            **counts,
+        )
 
     def _agreement_profile(self):
         """

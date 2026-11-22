@@ -87,6 +87,9 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
     # Has a weighted form: Analyzer reads the weights from the semantics
     _ACCEPTS_WEIGHTS = True
 
+    # Label in hypothesis test results
+    _COEFFICIENT_KEY = "cohen_kappa"
+
     # Attribute declaration
 
     # Populated at parent class Analyzer
@@ -133,126 +136,57 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
-        Test H_0: kappa_w = 0 using the method specified in config.
-
-        Two methods are supported:
-        - "parametric_null": uses Fleiss, Cohen & Everitt (1969) null variance.
-          No bias correction -- the Fleiss (1979) bias correction +1/(N(n-1))
-          was derived for the multi-rater case and does not apply here.
-        - "permutation": builds null distribution by shuffling ratings.
-
-        Returns
-        -------
-        HypothesisTestResult
-            Test statistic, p-value, and metadata.
-
-        Raises
-        ------
-        ValueError
-            If config.hypothesis_test_config is None.
+        Test H_0: kappa_w = 0 by the method in config.hypothesis_test_config:
+        "parametric_null" (``_parametric_null_test``) or "permutation"
+        (``_permutation_test``).
         """
-        # Guard: hypothesis_test_config must be set
-        if self.config.hypothesis_test_config is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis_test_config is None. "
-                f"Set hypothesis_test_config in your config to use "
-                f"hypothesis testing."
-            )
+        if self._hypothesis_test_config().method == "parametric_null":
+            return self._parametric_null_test()
+        return self._permutation_test()
 
-        ht_config = self.config.hypothesis_test_config
+    def _parametric_null_test(self) -> HypothesisTestResult:
+        """
+        Test H_0: kappa_w = 0 with the Fleiss, Cohen & Everitt (1969) null
+        variance.
 
-        # Compute point estimate
+        No bias correction: the Fleiss (1979) correction +1/(N(n-1)) was
+        derived for the multi-rater case and does not apply here.
+        """
+        from ..intermediates.results import HypothesisTestResult
+        from .variance_functions import cohen_null_variance
+
+        ht_config = self._hypothesis_test_config()
         point = cohen_kappa(self.estimator_input)
 
-        if ht_config.method == "parametric_null":
-            # Fleiss, Cohen & Everitt (1969): null variance for two raters
-            from .variance_functions import cohen_null_variance
+        p_a, p_b = self._compute_marginals()
+        n_subjects = self._get_n_subjects()
+        weight_matrix = (
+            self.weights.matrix if self.weights is not None else None
+        )
 
-            p_a, p_b = self._compute_marginals()
-            n_subjects = self._get_n_subjects()
-            weight_matrix = (
-                self.weights.matrix if self.weights is not None else None
-            )
+        var_null = cohen_null_variance(
+            p_a, p_b, n_subjects, weight_matrix
+        )
+        se_null = np.sqrt(var_null)
 
-            var_null = cohen_null_variance(
-                p_a, p_b, n_subjects, weight_matrix
-            )
-            se_null = np.sqrt(var_null)
+        # No bias correction for two-rater case.
+        # The +1/(N(n-1)) correction in Fleiss (1979) Eq. 17 was derived
+        # for multi-rater kappa and does not apply to Cohen's kappa.
+        z = point / se_null
 
-            # No bias correction for two-rater case.
-            # The +1/(N(n-1)) correction in Fleiss (1979) Eq. 17 was derived
-            # for multi-rater kappa and does not apply to Cohen's kappa.
-            z = point / se_null
+        p_value = self._parametric_p_value(z, ht_config.alternative)
 
-            p_value = self._parametric_p_value(z, ht_config.alternative)
-
-            return HypothesisTestResult(
-                p_value=p_value,
-                alpha=ht_config.alpha,
-                reject_null=self._reject_null(p_value, ht_config.alpha),
-                method="parametric_null",
-                coefficient="cohen_kappa",
-                point=point,
-                z_statistic=z,
-                null_variance=var_null,
-                alternative=ht_config.alternative,
-            )
-
-        elif ht_config.method == "permutation":
-            # Permutation test: shuffle ratings to build null distribution
-            from .resampling_functions.permutation_resampling import (
-                within_rater_shuffle,
-                pool_and_redistribute,
-            )
-
-            scheme_map = {
-                "within_rater_shuffle": within_rater_shuffle,
-                "pool_and_redistribute": pool_and_redistribute,
-            }
-
-            scheme_fn = scheme_map.get(ht_config.scheme)
-            if scheme_fn is None:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: unknown permutation scheme "
-                    f"'{ht_config.scheme}'. Expected one of: "
-                    f"{set(scheme_map.keys())}."
-                )
-
-            # Build null distribution
-            null_values = []
-
-            for permuted_array in scheme_fn(
-                self.estimator_input.category_index,
-                n_permutations=ht_config.n_permutations,
-                random_state=ht_config.random_state,
-            ):
-                null_values.append(self._estimate_from_input(
-                    self._with_category_index(permuted_array)
-                ))
-
-            null_distribution = np.array(null_values)
-
-            counts = self._permutation_p_value(
-                null_distribution, point, ht_config.alternative
-            )
-
-            return HypothesisTestResult(
-                alpha=ht_config.alpha,
-                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
-                method="permutation",
-                coefficient="cohen_kappa",
-                point=point,
-                null_distribution=null_distribution,
-                n_permutations=ht_config.n_permutations,
-                **counts,
-            )
-
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown hypothesis test method "
-                f"'{ht_config.method}'. Expected 'parametric_null' or "
-                f"'permutation'."
-            )
+        return HypothesisTestResult(
+            p_value=p_value,
+            alpha=ht_config.alpha,
+            reject_null=self._reject_null(p_value, ht_config.alpha),
+            method="parametric_null",
+            coefficient="cohen_kappa",
+            point=point,
+            z_statistic=z,
+            null_variance=var_null,
+            alternative=ht_config.alternative,
+        )
 
     # Private helpers -------------------------------------------------------- #
 

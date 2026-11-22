@@ -68,6 +68,9 @@ class ScottsAnalyzer(GroupAnalyzer):
         The analysis configuration for Scott's pi.
     """
 
+    # Label in hypothesis test results
+    _COEFFICIENT_KEY = "scotts_pi"
+
     # Attribute declaration
 
     # Populated at parent class Analyzer
@@ -125,110 +128,52 @@ class ScottsAnalyzer(GroupAnalyzer):
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
-        Test H₀: π = 0 using the method specified in config.hypothesis_test_config.
+        Test H₀: π = 0 by the method in config.hypothesis_test_config:
+        "parametric_null" (``_parametric_null_test``) or "permutation"
+        (``_permutation_test``).
+        """
+        if self._hypothesis_test_config().method == "parametric_null":
+            return self._parametric_null_test()
+        return self._permutation_test()
+
+    def _parametric_null_test(self) -> HypothesisTestResult:
+        """
+        Test H₀: π = 0 with Fleiss' null variance.
 
         Scott's pi uses the same null variance as Fleiss' kappa (they are
-        algebraically identical at two raters). The parametric_null method
-        uses Fleiss (1979) Eq. 12 with bias correction from Eq. 17.
-
-        Returns
-        -------
-        HypothesisTestResult
+        algebraically identical at two raters): Fleiss (1979) Eq. 12 with
+        the bias correction of Eq. 17.
         """
         from ..intermediates.results import HypothesisTestResult
+        from .variance_functions import fleiss_null_variance
 
-        # Guard: hypothesis_test_config must be set
-        if self.config.hypothesis_test_config is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis_test_config is None. "
-                f"Set hypothesis_test_config in your config to use hypothesis testing."
-            )
-
-        ht_config = self.config.hypothesis_test_config
-
-        # Compute point estimate from whichever data source is available
+        ht_config = self._hypothesis_test_config()
         nij = self.estimator_input.nij
         point = scotts_pi(self.estimator_input)
         pj = self._compute_pj(nij)
 
-        if ht_config.method == "parametric_null":
-            # Scott's pi uses Fleiss' null variance (identical at n=2)
-            from .variance_functions import fleiss_null_variance
+        n_subjects = nij.n_subjects
+        n_raters = int(nij.n_per_subject[0])
 
-            n_subjects = nij.n_subjects
-            n_raters = int(nij.n_per_subject[0])
+        var_null = fleiss_null_variance(pj, n_subjects, n_raters)
+        se_null = np.sqrt(var_null)
 
-            var_null = fleiss_null_variance(pj, n_subjects, n_raters)
-            se_null = np.sqrt(var_null)
+        # Bias correction from Fleiss (1979) Eq. 17
+        bias_correction = 1.0 / (n_subjects * (n_raters - 1))
+        z = (point + bias_correction) / se_null
+        p_value = self._parametric_p_value(z, ht_config.alternative)
 
-            # Bias correction from Fleiss (1979) Eq. 17
-            bias_correction = 1.0 / (n_subjects * (n_raters - 1))
-            z = (point + bias_correction) / se_null
-            p_value = self._parametric_p_value(z, ht_config.alternative)
-
-            return HypothesisTestResult(
-                p_value=p_value,
-                alpha=ht_config.alpha,
-                reject_null=self._reject_null(p_value, ht_config.alpha),
-                method="parametric_null",
-                coefficient="scotts_pi",
-                point=point,
-                z_statistic=z,
-                null_variance=var_null,
-                alternative=ht_config.alternative,
-            )
-
-        elif ht_config.method == "permutation":
-            from .resampling_functions.permutation_resampling import (
-                within_rater_shuffle,
-                pool_and_redistribute,
-            )
-
-            scheme_map = {
-                "within_rater_shuffle": within_rater_shuffle,
-                "pool_and_redistribute": pool_and_redistribute,
-            }
-
-            scheme_fn = scheme_map.get(ht_config.scheme)
-            if scheme_fn is None:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: unknown permutation scheme '{ht_config.scheme}'. "
-                    f"Expected one of: {set(scheme_map.keys())}."
-                )
-
-            # Build null distribution
-            null_values = []
-
-            for permuted_array in scheme_fn(
-                self.estimator_input.category_index,
-                n_permutations=ht_config.n_permutations,
-                random_state=ht_config.random_state,
-            ):
-                null_values.append(self._estimate_from_input(
-                    self._with_category_index(permuted_array)
-                ))
-
-            null_distribution = np.array(null_values)
-            counts = self._permutation_p_value(
-                null_distribution, point, ht_config.alternative
-            )
-
-            return HypothesisTestResult(
-                alpha=ht_config.alpha,
-                reject_null=self._reject_null(counts["p_value"], ht_config.alpha),
-                method="permutation",
-                coefficient="scotts_pi",
-                point=point,
-                null_distribution=null_distribution,
-                n_permutations=ht_config.n_permutations,
-                **counts,
-            )
-
-        else:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: unknown hypothesis test method '{ht_config.method}'. "
-                f"Expected 'parametric_null' or 'permutation'."
-            )
+        return HypothesisTestResult(
+            p_value=p_value,
+            alpha=ht_config.alpha,
+            reject_null=self._reject_null(p_value, ht_config.alpha),
+            method="parametric_null",
+            coefficient="scotts_pi",
+            point=point,
+            z_statistic=z,
+            null_variance=var_null,
+            alternative=ht_config.alternative,
+        )
 
     # Private helpers -------------------------------------------------------- #
 
