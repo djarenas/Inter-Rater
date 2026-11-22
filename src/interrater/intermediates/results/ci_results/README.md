@@ -16,7 +16,7 @@ CIResult (ABC)             lower, upper, alpha
 |----------------------|-------------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | `CIResult`           | lower, upper, alpha; `is_defined`, `confidence_level`, `as_tuple()`           | What every interval has, whatever produced it.                            |
 | `BootstrapCIResult`  | n_resamples, n_failed, method_intended, method_used, acceleration, bias_correction; `n_usable`, `degraded`, `recommended_resamples`, `below_recommended_resamples` | A resampled interval, with what failed, what actually ran, and how many draws it ran on. |
-| `ParametricCIResult` | variance_source                                                               | A closed-form interval. Nothing to fall back to.                          |
+| `ParametricCIResult` | variance_source, variance_reference                                           | A closed-form interval. Nothing to fall back to.                          |
 
 ## Not analysis results
 
@@ -121,11 +121,14 @@ data and published values in `tests/fixtures/efron1986_lawschool_*`.
 |---|---|---|---|
 | Fleiss 1971 / Fleiss κ | 0.2186 | 0.0955 | -56% |
 | SR1 prelim / Fleiss κ | 0.2298 | 0.0942 | -59% |
+| Gwet cont3x3 / Fleiss κ | 0.2347 | 0.2986 | +27% |
 | Gwet cont3x3 / Cohen κ | 0.2332 | 0.2979 | +28% |
+| Gwet cont3x3 / Cohen κ, quadratic weights | 0.1482 | 0.3916 | +164% |
 | Synthetic / Scott π | 0.2627 | 0.2948 | +12% |
 
-Too narrow for Fleiss, too wide for Cohen and Scott, so there is no
-correction factor and no safe direction to assume.
+The direction depends on the data, not only on the coefficient: Fleiss' κ
+is too narrow on Fleiss 1971 and SR1 prelim and too wide on Gwet cont3x3.
+So there is no correction factor and no safe direction to assume.
 
 ## Where the minimums live
 

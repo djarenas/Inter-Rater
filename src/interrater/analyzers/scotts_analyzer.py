@@ -10,6 +10,7 @@ from .group_analyzer import GroupAnalyzer
 
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
+    from ..intermediates.estimator_parts import Weights
     from ..intermediates.results import ScottsPiResult, HypothesisTestResult
     from .configs import ScottsConfig
     from ..intermediates.data_profiles.balance_profile import BalanceProfile
@@ -40,21 +41,26 @@ class ScottsAnalyzer(GroupAnalyzer):
     nominal (unweighted) categorical data, corrected for chance using pooled
     marginal proportions.
 
-    At exactly two raters, Fleiss' kappa equals Scott's pi -- they are
-    algebraically identical. This class exists to honor Scott's priority,
-    provide a clear two-rater-only entry point, and enforce the nominal-data
-    constraint. For more than two raters, use FleissKappaAnalyzer.
+    At exactly two raters, Fleiss' kappa equals Scott's pi. This class exists
+    to honor Scott's contribution, provide a clear two-rater-only entry
+    point, and refuse weighted semantics: Scott's pi has no weighted form.
 
-    I validate that:
-    - Config is ScottsConfig
-    - Ratings have exactly two raters
-    - Data structure is appropriate for Scott's pi
+    For more than two raters, use FleissKappaAnalyzer.
 
-    I compute:
-    - Point estimate of Scott's pi
-    - Bootstrap or parametric null confidence interval
-    - Hypothesis test (permutation or parametric null)
-    - Return ScottsPiResult with all metadata
+    My constructor checks that the config is a ScottsConfig, that the ratings
+    have exactly two raters after any injection, and that parametric_null is
+    asked for only on balanced data. I supply the coefficient
+    (``_estimate_from_input``), my result (``_result``), and the parametric
+    null interval and test, with the null variance of Fleiss' kappa (Fleiss,
+    Nee & Landis 1979). Analyzer does the bootstrap and the permutation test.
+
+    References
+    ----------
+    Fleiss, J. L., Nee, J. C. M., & Landis, J. R. (1979). Large sample
+        variance of kappa in the case of different sets of raters.
+        Psychological Bulletin, 86(5), 974-977.
+    Scott, W. A. (1955). Reliability of content analysis: the case of
+        nominal scale coding. Public Opinion Quarterly, 19(3), 321-325.
 
     Attributes
     ----------
@@ -65,6 +71,10 @@ class ScottsAnalyzer(GroupAnalyzer):
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
+    weights : Weights | None
+        Always None: Scott's pi has no weighted form (from Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from (from Analyzer).
     config : ScottsConfig
         The analysis configuration for Scott's pi.
     """
@@ -78,6 +88,8 @@ class ScottsAnalyzer(GroupAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights: Weights | None
+    estimator_input: EstimatorInput
     # Checked at this level
     config: ScottsConfig
 
@@ -85,7 +97,8 @@ class ScottsAnalyzer(GroupAnalyzer):
 
     def __init__(self, ratings: Ratings, config: ScottsConfig) -> None:
         """
-        Initialize Scott's pi analyzer: validate config and ratings type.
+        Run the parent's checks, then check the config type, the two raters
+        and parametric_null.
 
         Parameters
         ----------
@@ -97,24 +110,13 @@ class ScottsAnalyzer(GroupAnalyzer):
         Raises
         ------
         TypeError
-            If config is not ScottsConfig.
-            If ratings is not a Ratings object.
+            If ratings is not a Ratings object, or config is not ScottsConfig.
         ValueError
-            If ratings do not have exactly 2 raters.
+            If the ratings, after any injection, do not have exactly 2 raters,
+            or parametric_null is asked for on unbalanced data.
         """
-        from ..data_objects.ratings import Ratings as RatingsBase
-
-        # Validate ratings is at least a Ratings object
-        if not isinstance(ratings, RatingsBase):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ratings must be a Ratings object, "
-                f"got {type(ratings).__name__}"
-            )
-
-        # Validate exactly 2 raters (Scott's pi is two-rater only)
-        self._validate_two_raters_from_ratings(ratings)
-
-        # Call parent __init__ (validates group config, balance constraint)
+        # Call parent __init__ (validates ratings and config, applies the
+        # injection, checks the group config and balance constraint)
         # Wrap to propagate errors with ScottsAnalyzer context
         try:
             super().__init__(ratings, config)
@@ -123,6 +125,9 @@ class ScottsAnalyzer(GroupAnalyzer):
 
         # Validate config type
         self._validate_scotts_config()
+
+        # Exactly 2 raters, checked after the injection, which can add raters
+        self._validate_two_raters_from_ratings(self.ratings)
         self._refuse_parametric_null_if_invalid(allow_weights=False)
 
     # Public API ------------------------------------------------------------- #
@@ -141,12 +146,15 @@ class ScottsAnalyzer(GroupAnalyzer):
         """
         Test H₀: π = 0 with Fleiss' null variance.
 
-        Scott's pi uses the same null variance as Fleiss' kappa (they are
-        algebraically identical at two raters): Fleiss (1979) Eq. 12 with
-        the bias correction of Eq. 17.
+        Scott's pi equals Fleiss' kappa at two raters, so it uses the same
+        null variance: Fleiss, Nee & Landis (1979) Eq. 12, with the bias
+        correction of Eq. 17. The result names the source.
         """
         from ..intermediates.results import HypothesisTestResult
-        from .variance_functions import fleiss_null_variance
+        from .variance_functions import (
+            FLEISS_NULL_VARIANCE_SOURCE,
+            fleiss_null_variance,
+        )
 
         ht_config = self._hypothesis_test_config()
         nij = self.estimator_input.nij
@@ -154,12 +162,14 @@ class ScottsAnalyzer(GroupAnalyzer):
         pj = category_proportions(nij)
 
         n_subjects = nij.n_subjects
+        # Balanced: _refuse_parametric_null_if_invalid refused anything else
         n_raters = int(nij.n_per_subject[0])
 
+        # Fleiss, Nee & Landis (1979), Eq. 12
         var_null = fleiss_null_variance(pj, n_subjects, n_raters)
         se_null = np.sqrt(var_null)
 
-        # Bias correction from Fleiss (1979) Eq. 17
+        # Bias correction from Fleiss, Nee & Landis (1979), Eq. 17
         bias_correction = 1.0 / (n_subjects * (n_raters - 1))
         z = (point + bias_correction) / se_null
         p_value = self._parametric_p_value(z, ht_config.alternative)
@@ -169,10 +179,11 @@ class ScottsAnalyzer(GroupAnalyzer):
             alpha=ht_config.alpha,
             reject_null=self._reject_null(p_value, ht_config.alpha),
             method="parametric_null",
-            coefficient="scotts_pi",
+            coefficient=self._COEFFICIENT_KEY,
             point=point,
             z_statistic=z,
             null_variance=var_null,
+            null_variance_source=FLEISS_NULL_VARIANCE_SOURCE,
             alternative=ht_config.alternative,
         )
 
@@ -189,7 +200,7 @@ class ScottsAnalyzer(GroupAnalyzer):
             )
 
     def _validate_two_raters_from_ratings(self, ratings) -> None:
-        """Validate exactly 2 raters from Ratings object."""
+        """Validate exactly 2 raters."""
         if ratings.n_raters != 2:
             raise ValueError(
                 f"{_ERROR_PREFIX}: Scott's pi is defined for exactly 2 raters, "
@@ -221,18 +232,26 @@ class ScottsAnalyzer(GroupAnalyzer):
             weighted=False,
         )
 
-    def _parametric_null_ci(
-        self, point: float, pj: np.ndarray
-    ) -> tuple[float, float]:
-        """Compute CI using Fleiss (1979) null variance."""
+    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
+        """
+        The interval from the Fleiss, Nee & Landis (1979) null variance
+        (Eq. 12), for ``ci_method="parametric_null"``: no bootstrap, so no
+        draws.
+        """
         from scipy import stats
-        from .variance_functions import fleiss_null_variance
+        from .variance_functions import (
+            FLEISS_NULL_VARIANCE_SOURCE,
+            fleiss_null_variance,
+        )
 
         nij = self.estimator_input.nij
         n_subjects = nij.n_subjects
+        # Balanced: _refuse_parametric_null_if_invalid refused anything else
         n_raters = int(nij.n_per_subject[0])
 
-        var_null = fleiss_null_variance(pj, n_subjects, n_raters)
+        var_null = fleiss_null_variance(
+            category_proportions(nij), n_subjects, n_raters
+        )
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
@@ -241,15 +260,7 @@ class ScottsAnalyzer(GroupAnalyzer):
             upper=point + z_crit * se_null,
             alpha=self.config.alpha,
             variance_source="null",
-        )
-
-    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
-        """
-        The interval from Fleiss (1979) null variance, for
-        ``ci_method="parametric_null"``: no bootstrap, so no draws.
-        """
-        return self._parametric_null_ci(
-            point, category_proportions(self.estimator_input.nij)
+            variance_reference=FLEISS_NULL_VARIANCE_SOURCE,
         )
 
     def _result(

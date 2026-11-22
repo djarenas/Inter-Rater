@@ -34,18 +34,17 @@ _MIN_RESAMPLES = {
 @dataclass(frozen=True)
 class BootstrapCIResult(CIResult):
     """
-    I am an interval from a bootstrap, and an honest account of what it was
+    I am an interval from a bootstrap, and a clear account of what it was
     computed from.
 
-    I am what a CI method returns. I am not an analysis result and do not
-    inherit from one: I hold no point estimate, no coefficient name, and no
-    opinion about the data. Something that holds me supplies all of that.
+    I am what a CI method returns and not an analysis result, since I
+    hold no point estimate, no coefficient name, and no
+    opinion about the data.
 
-    I carry the number of resamples that failed rather than a verdict about
-    them. A resample fails when its coefficient is undefined -- a resample
-    containing only one category drives chance agreement to 1, and
-    (p_o - p_e) / (1 - p_e) has nothing to say. Those draws arrive as NaN and
-    are excluded from my bounds. How much that matters depends on whether
+    I carry the number of resamples that failed. A resample commonly fails
+    when it contains only one category, which drives chance agreement to 1.
+    Those draws arrive as NaN and are excluded from my bounds.
+    How much that matters depends on whether
     failing correlates with the coefficient's value, which no count can tell
     you, so I report the count and leave the judgement to whoever holds me.
 
@@ -59,11 +58,7 @@ class BootstrapCIResult(CIResult):
     Tibshirani (1986) section 9. I compare against the usable count rather
     than the requested one, because 1000 draws with 900 failures leaves 100,
     and 100 is what the quantiles were taken over. This is disclosure, not a
-    verdict: an interval from too few draws is noisy, not wrong, and nothing
-    here refuses to produce one. Unlike my other disclosures it does not
-    warn, because one analysis builds many of me -- a pairwise run makes one
-    per rater pair -- and fifteen identical warnings for one command teaches
-    people to silence warnings.
+    verdict.
 
     Attributes
     ----------
@@ -73,8 +68,7 @@ class BootstrapCIResult(CIResult):
         How many of those were unusable -- NaN, which is how an undefined
         coefficient arrives, or infinite.
     method_intended : str
-        The method that was asked for: 'percentile' or 'bca'. Set by which
-        CI function ran, never read from a config.
+        The method that was asked for: 'percentile' or 'bca'.
     method_used : str | None
         The method that actually produced my bounds, or None when no method
         could be applied at all. None is an absence, not a substitution:
@@ -103,13 +97,13 @@ class BootstrapCIResult(CIResult):
 
     def __post_init__(self) -> None:
         """
-        Validate my attributes after construction, before I freeze.
+        Validate my attributes after construction.
 
         Structural only. Each of these describes an interval no correct
         computation could have produced, so reaching one means a bug upstream
         rather than awkward data. Too few usable draws for the method that ran
-        is a real concern and not one of mine: it takes judgement, it has no
-        defensible cutoff, and whoever holds me is the one who can weigh it.
+        is a real concern, but is not one of mine. I hold the counts, so
+        whoever holds or prints me can weigh them.
         """
 
         # Counts must be ints, and must agree with each other

@@ -185,6 +185,7 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
             point=point,
             z_statistic=z,
             null_variance=var_null,
+            null_variance_source=self._null_variance_source(),
             alternative=ht_config.alternative,
         )
 
@@ -337,6 +338,20 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
             upper=point + z_crit * se_null,
             alpha=self.config.alpha,
             variance_source="null",
+            variance_reference=self._null_variance_source(),
+        )
+
+    def _null_variance_source(self) -> str:
+        """Fleiss, Cohen & Everitt (1969): Eq. 9 weighted, Eq. 14 unweighted."""
+        from .variance_functions import (
+            COHEN_NULL_VARIANCE_SOURCE,
+            COHEN_UNWEIGHTED_NULL_VARIANCE_SOURCE,
+        )
+
+        weighted = self.weights is not None and not self.weights.is_identity
+        return (
+            COHEN_NULL_VARIANCE_SOURCE if weighted
+            else COHEN_UNWEIGHTED_NULL_VARIANCE_SOURCE
         )
 
     def _parametric_null_interval(self, point: float) -> ParametricCIResult:

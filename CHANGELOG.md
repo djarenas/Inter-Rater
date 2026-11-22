@@ -70,6 +70,12 @@ versioning follows [semver](https://semver.org/).
 
 ### Added
 
+- Parametric results name their null variance: `HypothesisTestResult`
+  gains `null_variance_source` (required for `parametric_null`) and
+  `ParametricCIResult` gains `variance_reference`. Both are printed, e.g.
+  "Fleiss, Nee & Landis (1979), Eq. 12" for Fleiss and Scott, "Fleiss,
+  Cohen & Everitt (1969), Eq. 9" (Eq. 14 unweighted) for Cohen.
+
 - `HypothesisTestResult` records the permutation `scheme` and
   `random_state`, in its printout and `summary()`, so a permutation test can
   be rerun from its result alone. Both are None for `parametric_null`, and a
@@ -95,7 +101,18 @@ versioning follows [semver](https://semver.org/).
   agree with each other. `tests/test_example_data/test_external_validation.py`
   checks the package against the saved values on every push.
 
+### Fixed
+
+- `ScottsAnalyzer` checked for two raters before the injection, so an
+  injected rater gave Fleiss' kappa under Scott's name. It now checks
+  after.
+
 ### Changed
+
+- `FleissKappaAnalyzer` no longer converts ratings to `BalancedRatings`;
+  `GroupAnalyzer` already refuses unbalanced data under
+  `balanced_data_only: true`, now with its message. Fleiss and Scott use
+  `category_proportions` instead of their own copies. Results are unchanged.
 
 - `permutation_p_value_from_counts` is renamed `compute_permutation_p_value`,
   a verb like the package's other helpers that do something.

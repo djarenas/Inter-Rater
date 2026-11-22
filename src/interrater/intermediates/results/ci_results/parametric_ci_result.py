@@ -23,9 +23,8 @@ class ParametricCIResult(CIResult):
     I am an interval from a closed-form variance rather than a resampling.
 
     I have no resamples, so nothing about me can fail partway: either the
-    formula applied or it did not. That is why I carry no counts, no method
-    pair and no fallback -- there is no second method for me to fall back to,
-    and nothing for me to disclose about a choice I never made.
+    formula applied or it did not. I carry no counts, no method
+    pair and no second method fallback.
 
     **Read my width carefully, and I will say so every time I print.** The
     variance I am built from is the *null* variance: the variance of the
@@ -37,33 +36,31 @@ class ParametricCIResult(CIResult):
     different variance than it would have at zero, and I do not know by how
     much.
 
-    So I am centred on the point estimate but scaled as though the point
-    estimate were zero. I am kept because that is exactly what several
-    published formulas and several other packages report, which makes me the
-    right object for reproducing a published number or comparing against
-    another implementation. I am the wrong object for reporting the precision
+    The package keeps me as an option to reproduce published analyses that
+    build an interval from the null variance, for coefficients such as
+    Fleiss' kappa. I am the wrong object for reporting the precision
     of an estimate, and a bootstrap interval is what that calls for.
 
-    **How far off is it?** Measured against percentile bootstrap intervals on
-    this package's own datasets, my width runs from about 56% too narrow
-    (Fleiss' kappa on Fleiss 1971 and on SR1 prelim) to 29% too wide (Cohen's
-    kappa on Gwet cont3x3). The direction depends on the coefficient, so
-    there is no correction factor to apply and no safe direction to assume.
+    **How far off is it?** Against percentile bootstrap intervals on this
+    package's datasets, my width runs from about 60% too narrow (Fleiss'
+    kappa on SR1 prelim) to more than twice as wide (quadratic-weighted
+    Cohen's kappa on Gwet cont3x3). The direction depends on the data, not
+    only on the coefficient: Fleiss' kappa is too narrow on most datasets and
+    too wide on Gwet cont3x3. So there is no correction factor to apply and
+    no safe direction to assume.
 
-    **I warn on construction, and again every time I print.** Unlike
-    BootstrapCIResult, which stays quiet about its resample count because one
-    pairwise analysis builds C(n,2) of me and fifteen identical warnings
-    teach people to filter warnings, there is exactly one of me per analysis,
-    and I only exist because somebody asked for a non-default method. The
-    config warns too, earlier, about the parameter -- that one says where the
-    knob is, this one says how wrong the number is. Different facts are
-    useful at the two moments.
+    I warn once when I am built, and my printout carries the caveat. The
+    config warns earlier, when parametric_null is chosen. There is one of me
+    per analysis, so the warning does not repeat.
 
     Attributes
     ----------
     variance_source : str
         Which variance produced my half-width. 'null' is the variance under
         H0: coefficient = 0.
+    variance_reference : str
+        Where the variance formula comes from, e.g. "Fleiss, Nee & Landis
+        (1979), Eq. 12". I print it.
 
     See Also
     --------
@@ -73,6 +70,7 @@ class ParametricCIResult(CIResult):
     """
 
     variance_source: str
+    variance_reference: str
 
     # Constructor ------------------------------------------------------------ #
 
@@ -83,6 +81,12 @@ class ParametricCIResult(CIResult):
             raise ValueError(
                 f"{_ERROR_PREFIX}: variance_source must be one of "
                 f"{list(_VALID_VARIANCE_SOURCES)}, got {self.variance_source!r}"
+            )
+        if not isinstance(self.variance_reference, str) or not self.variance_reference.strip():
+            raise ValueError(
+                f"{_ERROR_PREFIX}: variance_reference must name the formula's "
+                f"source, e.g. 'Fleiss, Nee & Landis (1979), Eq. 12'; got "
+                f"{self.variance_reference!r}"
             )
 
         # Parent validates the bounds and the level, and coerces them
@@ -98,9 +102,9 @@ class ParametricCIResult(CIResult):
                 f"estimate but scaled as though that estimate were zero -- "
                 f"its width comes from the variance under H0: kappa = 0. "
                 f"Measured against percentile bootstrap intervals on this "
-                f"package's datasets, that width runs from about 56% too "
-                f"narrow (Fleiss) to 29% too wide (Cohen), and the direction "
-                f"depends on the coefficient. Treat it as a reproduction of "
+                f"package's datasets, that width runs from about 60% too "
+                f"narrow to more than twice as wide, and the direction "
+                f"depends on the data. Treat it as a reproduction of "
                 f"the published formula, not as this estimate's uncertainty.",
                 UserWarning,
                 stacklevel=5,
@@ -115,7 +119,8 @@ class ParametricCIResult(CIResult):
         The caveat travels with the number rather than living only in the
         documentation, because the number is what gets copied into a table:
 
-            [0.401, 0.639] (95% CI, null variance -- width assumes kappa = 0,
+            [0.401, 0.639] (95% CI, null variance of Fleiss, Nee & Landis
+                            (1979), Eq. 12 -- width assumes kappa = 0,
                             reproduction only)
 
         I stay on one line. Whoever holds me prints me inside their own
@@ -128,8 +133,10 @@ class ParametricCIResult(CIResult):
             if self.is_defined else "[undefined]"
         )
         caveat = (
-            "null variance -- width assumes kappa = 0, reproduction only"
-            if self.variance_source == "null" else self.variance_source
+            f"null variance of {self.variance_reference} -- width assumes "
+            f"kappa = 0, reproduction only"
+            if self.variance_source == "null"
+            else f"{self.variance_source} variance of {self.variance_reference}"
         )
         return f"{bounds} ({self.confidence_level:.0%} CI, {caveat})"
 
@@ -141,7 +148,8 @@ class ParametricCIResult(CIResult):
         -------
         dict
             Keys: 'lower', 'upper' (float), 'alpha', 'confidence_level'
-            (float), 'is_defined' (bool), 'variance_source' (str).
+            (float), 'is_defined' (bool), 'variance_source',
+            'variance_reference' (str).
         """
         return {
             "lower":            self.lower,
@@ -150,4 +158,5 @@ class ParametricCIResult(CIResult):
             "confidence_level": self.confidence_level,
             "is_defined":       self.is_defined,
             "variance_source":  self.variance_source,
+            "variance_reference": self.variance_reference,
         }

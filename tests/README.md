@@ -1,6 +1,6 @@
 # Tests
 
-2265 tests across nine packages and two top-level files, run with `pytest tests/`.
+2275 tests across nine packages and two top-level files, run with `pytest tests/`.
 
 Every count in this file is a **collected** count -- what `pytest` prints, not
 what you get by counting `def test_` in the source. The two differ because
@@ -68,7 +68,7 @@ RatingsCleaner pipeline.
 | conftest.py | Shared fixtures: UnorderedCategories (K=2), RatingsSemantics (ann, bob), CLEAN_DF (4x2 no problems), MESSY_DF (4x2 with null/missing/typo), default CleanerConfig | -- |
 
 
-## test_intermediates/ (698 tests)
+## test_intermediates/ (704 tests)
 
 Tests for the intermediates layer: estimator parts, data profiles, utility
 functions, and the full analysis-result hierarchy. One test file per
@@ -100,7 +100,7 @@ appear here only as inputs, built by the `_ci()` helper at the top of
 | test_agreement_profile.py | AgreementProfile: prevalence equals the p_j the chance terms use, per-category agreement, per-rater marginals | 18 |
 | test_prevalence_bias_index.py | PrevalenceBiasIndex (Byrt, Bishop and Carlin 1993): the four cells, prevalence and bias indices, positive category and rater order | 11 |
 | test_not_computed.py | NotComputed: carries a reason, no truth value, repr, equality | 8 |
-| test_analysis_results.py | PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary, scheme and seed), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 476 |
+| test_analysis_results.py | PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary, scheme and seed, null variance source), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 482 |
 | conftest.py | Shared fixtures: BALANCED_NIJ (4x3x3, all rows sum to 3), UNBALANCED_NIJ (4x2, variable row sums), SIMPLE_INDEX (2x3, for index-based tests), SIMPLE_SHARED (3x3 symmetric, for shared-matrix tests) | -- |
 
 
@@ -130,7 +130,7 @@ during cleaning and analysis.
 | conftest.py | Shared fixtures: DropPass instances, MatchingReport instances | -- |
 
 
-## test_analyzers/ (830 tests)
+## test_analyzers/ (834 tests)
 
 Tests for the analyzer layer: the classes that wire agreement functions,
 CI methods, bootstrap loops, and hypothesis tests into a single `estimate()`
@@ -152,7 +152,7 @@ call. Built bottom-up along the inheritance tree:
 |------|---------------|-------|
 | test_configs.py | AnalyzerConfig (defaults, custom, CI methods, random_state, frozen, validation, error prefix, summary, build_from_dict), HypothesisTestConfig (defaults, custom, methods/schemes, frozen, validation, error prefix), GroupCoefficientConfig (defaults, type guards, error prefix), FleissKappaConfig / ScottsConfig / GwetAC1Config / BrennanPredigerConfig / KrippendorffAlphaConfig (defaults, parametric_null accepted or rejected per coefficient, parametric_null warning, error prefix), IndividualMarginalConfig (defaults, validation, error prefix), CohenKappaConfig / CongerKappaConfig / LightKappaConfig (defaults, parametric_null, auto-correction, error prefix), PermutationBootstrapMeanConfig (methods, validation, error prefix), PermutationConfig / PairwisePermutationConfig / SubsetPermutationConfig (construction, validation, build_from_dict, cross-validation, error prefix) | 194 |
 | test_agreement_functions.py | Fleiss' kappa (observed agreement, category proportions, chance, kappa value, unweighted/linear/quadratic weights, NijMatrix/EstimatorInput paths), Krippendorff's alpha, Cohen's kappa, Brennan-Prediger, Scott's pi, Gwet's AC1, Conger's kappa (point estimates against hand-computed expected values from Fleiss 1971 and 2-rater datasets) | 126 |
-| test_analyzer_classes.py | Error prefixes (all 8 leaf analyzers), permutation tests record scheme and seed (all 8), class hierarchy (parent class and `_ACCEPTS_WEIGHTS`), config type validation (wrong config rejected for each analyzer), no counts constructor on any analyzer, rater constraints (2-rater enforcement for Scott's/Cohen), hypothesis test guards, smoke estimates (point estimate + CI for all 8), balance profile propagation, CI method in result, ParametricCIResult disclosure (config warning, construction warning, validation-before-warning, bootstrap path stays silent) | 231 |
+| test_analyzer_classes.py | Error prefixes (all 8 leaf analyzers), permutation tests record scheme and seed (all 8), parametric results name their variance, Scott refuses an injected third rater, class hierarchy (parent class and `_ACCEPTS_WEIGHTS`), config type validation (wrong config rejected for each analyzer), no counts constructor on any analyzer, rater constraints (2-rater enforcement for Scott's/Cohen), hypothesis test guards, smoke estimates (point estimate + CI for all 8), balance profile propagation, CI method in result, ParametricCIResult disclosure (config warning, construction warning, validation-before-warning, bootstrap path stays silent) | 235 |
 | test_ci_methods.py | Error prefixes, percentile_ci (normal, edge alpha, sorted, empty, scalar), _acceleration (formula, sign, degenerate input, noise gate), bca_ci (normal, edge cases, jackknife required, fallback to percentile and its disclosure), TestEfronLawSchool (reproduces the published acceleration, z0, and central 90% interval from Efron & Tibshirani 1986 Example 3), cross-method consistency | 54 |
 | test_permutation_analysis.py | PermutationAnalysis (construction, validation, weights, _compute_ci, all 7 estimators), PairwisePermutationAnalysis (construction, observed values, per-pair bootstrap, mean bootstrap correlated/independent, result fields, Fleiss 1971 15-pair), SubsetPermutationAnalysis (construction, observed values, measurable pool per subset, per-subset bootstrap, mean bootstrap, result fields, distribution threshold), MultiKSubsetResult (construction, validation, container API, __str__, summary) | 129 |
 | test_resampling_functions.py | subject_bootstrap (count, shape, rows-from-original, K and weights kept, reproducibility, seeds), subject_jackknife (count, shape, leave-one-out, K and weights kept), within_rater_shuffle / within_subject_shuffle / pool_and_redistribute (count, shape, multiset preservation, missing values, reproducibility, changes data) | 57 |

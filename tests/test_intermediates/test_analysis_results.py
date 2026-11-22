@@ -541,7 +541,7 @@ class TestPointEstimateResultConstruction:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             ci = ParametricCIResult(
-                lower=0.401, upper=0.639, alpha=0.05, variance_source="null",
+                lower=0.401, upper=0.639, alpha=0.05, variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
             )
         r = PointEstimateResult(0.52, ci, None, _bp(), **_NOT_UNDER_TEST)
         assert r.confidence_interval is ci
@@ -860,7 +860,7 @@ class TestPointEstimateResultDrawsMatchInterval:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             ci = ParametricCIResult(
-                lower=0.401, upper=0.639, alpha=0.05, variance_source="null",
+                lower=0.401, upper=0.639, alpha=0.05, variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
             )
         with pytest.raises(ValueError, match="ParametricCIResult"):
             PointEstimateResult(0.52, ci, np.array([0.5, 0.5]), _bp(), **_NOT_UNDER_TEST)
@@ -978,7 +978,7 @@ class TestHypothesisTestResultConstruction:
             p_value=0.001,
             alpha=0.05,
             reject_null=True,
-            method="parametric_null",
+            method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
             point=0.65,
             z_statistic=3.42,
             null_variance=0.036,
@@ -1028,7 +1028,7 @@ class TestHypothesisTestResultConstruction:
         """Frozen dataclass: cannot reassign attributes."""
         r = HypothesisTestResult(
             0.001, 0.05, True, "parametric_null", 0.65,
-            z_statistic=3.42, null_variance=0.036,
+            z_statistic=3.42, null_variance=0.036, null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
             coefficient="fleiss_kappa",
         )
         with pytest.raises(AttributeError):
@@ -1179,7 +1179,7 @@ class TestHypothesisTestResultValidation:
         with pytest.raises(ValueError, match="z_statistic must not be None"):
             HypothesisTestResult(
                 p_value=0.001, alpha=0.05, reject_null=True,
-                method="parametric_null", point=0.65,
+                method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12", point=0.65,
                 null_variance=0.036,
                 coefficient="fleiss_kappa",
             )
@@ -1188,7 +1188,7 @@ class TestHypothesisTestResultValidation:
         with pytest.raises(ValueError, match="null_variance must not be None"):
             HypothesisTestResult(
                 p_value=0.001, alpha=0.05, reject_null=True,
-                method="parametric_null", point=0.65,
+                method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12", point=0.65,
                 z_statistic=3.42,
                 coefficient="fleiss_kappa",
             )
@@ -1207,7 +1207,7 @@ class TestHypothesisTestResultValidation:
         with pytest.raises(TypeError, match="z_statistic must be float"):
             HypothesisTestResult(
                 p_value=0.001, alpha=0.05, reject_null=True,
-                method="parametric_null", point=0.65,
+                method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12", point=0.65,
                 z_statistic="3.42", null_variance=0.036,
                 coefficient="fleiss_kappa",
             )
@@ -1216,7 +1216,7 @@ class TestHypothesisTestResultValidation:
         with pytest.raises(TypeError, match="null_variance must be float"):
             HypothesisTestResult(
                 p_value=0.001, alpha=0.05, reject_null=True,
-                method="parametric_null", point=0.65,
+                method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12", point=0.65,
                 z_statistic=3.42, null_variance="0.036",
                 coefficient="fleiss_kappa",
             )
@@ -1225,7 +1225,7 @@ class TestHypothesisTestResultValidation:
         with pytest.raises(ValueError, match="null_variance must be >= 0"):
             HypothesisTestResult(
                 p_value=0.001, alpha=0.05, reject_null=True,
-                method="parametric_null", point=0.65,
+                method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12", point=0.65,
                 z_statistic=3.42, null_variance=-0.01,
                 coefficient="fleiss_kappa",
             )
@@ -1277,7 +1277,7 @@ class TestHypothesisTestResultStr:
             p_value=0.0006,
             alpha=0.05,
             reject_null=True,
-            method="parametric_null",
+            method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
             point=0.65,
             z_statistic=3.42,
             null_variance=0.036,
@@ -1309,7 +1309,7 @@ class TestHypothesisTestResultStr:
         """p < 0.000001 uses 'p < 0.000001' format."""
         r = HypothesisTestResult(
             1e-10, 0.05, True, "parametric_null", 0.9,
-            z_statistic=8.0, null_variance=0.012,
+            z_statistic=8.0, null_variance=0.012, null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
             coefficient="fleiss_kappa",
         )
         s = str(r)
@@ -1343,11 +1343,12 @@ class TestHypothesisTestResultSummary:
         """z_statistic and null_variance included when present."""
         d = HypothesisTestResult(
             0.001, 0.05, True, "parametric_null", 0.65,
-            z_statistic=3.42, null_variance=0.036,
+            z_statistic=3.42, null_variance=0.036, null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
             coefficient="fleiss_kappa",
         ).summary()
         assert d["z_statistic"] == 3.42
         assert d["null_variance"] == 0.036
+        assert d["null_variance_source"] == "Fleiss, Nee & Landis (1979), Eq. 12"
         assert "n_permutations" not in d
 
     def test_permutation_keys(self):
@@ -1456,6 +1457,47 @@ class TestHypothesisTestResultCounts:
         assert (d["n_usable"], d["n_at_or_above"], d["n_at_or_below"]) == (9, 2, 7)
 
 
+class TestNullVarianceSource:
+    """A parametric result names its null variance; a permutation result has none."""
+
+    def _parametric(self, **fields):
+        kwargs = dict(p_value=0.001, alpha=0.05, reject_null=True,
+                      method="parametric_null", point=0.65, z_statistic=3.42,
+                      null_variance=0.036, coefficient="fleiss_kappa",
+                      null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12")
+        kwargs.update(fields)
+        return HypothesisTestResult(**kwargs)
+
+    def test_printed(self):
+        assert "z = 3.42 (null variance: Fleiss, Nee & Landis (1979), Eq. 12)" in str(self._parametric())
+
+    @pytest.mark.parametrize("source", [None, "", "   "])
+    def test_required_for_parametric(self, source):
+        with pytest.raises(ValueError, match="null_variance_source must name"):
+            self._parametric(null_variance_source=source)
+
+    def test_refused_for_permutation(self):
+        with pytest.raises(ValueError, match="null_variance_source must be None"):
+            HypothesisTestResult(
+                p_value=0.5, alpha=0.05, reject_null=False, method="permutation",
+                point=0.1, n_permutations=10, coefficient="fleiss_kappa",
+                null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
+            )
+
+    def test_interval_names_its_variance(self):
+        import warnings
+        from interrater.intermediates.results.ci_results import ParametricCIResult
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ci = ParametricCIResult(lower=0.4, upper=0.6, alpha=0.05,
+                                    variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12")
+            assert "null variance of Fleiss, Nee & Landis (1979), Eq. 12" in str(ci)
+            assert ci.summary()["variance_reference"] == "Fleiss, Nee & Landis (1979), Eq. 12"
+            with pytest.raises(ValueError, match="variance_reference must name"):
+                ParametricCIResult(lower=0.4, upper=0.6, alpha=0.05,
+                                   variance_source="null", variance_reference="")
+
+
 class TestHypothesisTestResultSchemeAndSeed:
     """scheme and random_state: permutation only, validated when given."""
 
@@ -1499,7 +1541,7 @@ class TestHypothesisTestResultSchemeAndSeed:
     def test_parametric_with_scheme_refused(self):
         with pytest.raises(ValueError, match="must be None for method='parametric_null'"):
             HypothesisTestResult(
-                p_value=0.5, alpha=0.05, reject_null=False, method="parametric_null",
+                p_value=0.5, alpha=0.05, reject_null=False, method="parametric_null", null_variance_source="Fleiss, Nee & Landis (1979), Eq. 12",
                 point=0.1, z_statistic=0.6, null_variance=0.01,
                 coefficient="fleiss_kappa", random_state=42,
             )

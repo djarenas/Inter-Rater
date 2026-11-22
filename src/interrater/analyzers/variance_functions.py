@@ -28,6 +28,12 @@ import numpy as np
 _ERROR_PREFIX = "[variance_functions] Error"
 
 
+# Where each null variance comes from, as results print it.
+FLEISS_NULL_VARIANCE_SOURCE = "Fleiss, Nee & Landis (1979), Eq. 12"
+COHEN_NULL_VARIANCE_SOURCE = "Fleiss, Cohen & Everitt (1969), Eq. 9"
+COHEN_UNWEIGHTED_NULL_VARIANCE_SOURCE = "Fleiss, Cohen & Everitt (1969), Eq. 14"
+
+
 def fleiss_null_variance(
     pj: np.ndarray,
     n_subjects: int,

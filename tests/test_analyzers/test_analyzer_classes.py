@@ -1223,7 +1223,7 @@ class TestParametricNullDisclosure:
 
         with pytest.warns(UserWarning, match="reproduction of the published"):
             ci = ParametricCIResult(
-                lower=0.383, upper=0.478, alpha=0.05, variance_source="null",
+                lower=0.383, upper=0.478, alpha=0.05, variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
             )
         assert ci.variance_source == "null"
 
@@ -1238,7 +1238,7 @@ class TestParametricNullDisclosure:
             warnings.simplefilter("always")
             with pytest.raises(ValueError):
                 ParametricCIResult(
-                    lower=0.9, upper=0.1, alpha=0.05, variance_source="null",
+                    lower=0.9, upper=0.1, alpha=0.05, variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
                 )
 
         assert len(caught) == 0
@@ -1598,6 +1598,49 @@ class TestPermutationTestRecordsHowItRan:
     def test_parametric_records_neither(self, request):
         result = _ht_analyzer("fleiss_parametric", request).hypothesis_test()
         assert result.scheme is None and result.random_state is None
+
+
+class TestScottsAfterInjection:
+    """Scott's pi checks for two raters after the injection, which can add raters."""
+
+    def test_injected_third_rater_refused(self):
+        from interrater.analyzers import ScottsAnalyzer
+        from interrater.analyzers.configs import ScottsConfig
+        from interrater.injectors.configs.pooled_injector_config import (
+            PooledInjectorConfig,
+        )
+
+        with pytest.raises(ValueError, match="exactly 2 raters, got 3"):
+            ScottsAnalyzer(
+                _three_cat_ratings(2),
+                ScottsConfig(injection=PooledInjectorConfig(), n_resamples=10),
+            )
+
+
+class TestParametricResultsNameTheirVariance:
+    """Every parametric interval and test says which published formula it used."""
+
+    @pytest.mark.parametrize("name, n_raters, source", [
+        ("FleissKappa", 3, "Fleiss, Nee & Landis (1979), Eq. 12"),
+        ("ScottsAnalyzer", 2, "Fleiss, Nee & Landis (1979), Eq. 12"),
+        ("CohenKappa", 2, "Fleiss, Cohen & Everitt (1969), Eq. 14"),
+    ])
+    def test_source_recorded(self, name, n_raters, source):
+        import warnings
+        from interrater.analyzers.configs.hypothesis_test_config import (
+            HypothesisTestConfig,
+        )
+
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            config = config_cls(
+                ci_method="parametric_null",
+                hypothesis_test_config=HypothesisTestConfig(method="parametric_null"),
+            )
+            analyzer = analyzer_cls(_three_cat_ratings(n_raters), config)
+            assert analyzer.estimate().confidence_interval.variance_reference == source
+            assert analyzer.hypothesis_test().null_variance_source == source
 
 
 class TestResultsCarryTheRaters:

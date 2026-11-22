@@ -136,7 +136,10 @@ class FleissKappaAnalyzer(GroupAnalyzer):
         bias correction of Eq. 17.
         """
         from ..intermediates.results import HypothesisTestResult
-        from .variance_functions import fleiss_null_variance
+        from .variance_functions import (
+            FLEISS_NULL_VARIANCE_SOURCE,
+            fleiss_null_variance,
+        )
 
         ht_config = self._hypothesis_test_config()
         nij = self.estimator_input.nij
@@ -169,6 +172,7 @@ class FleissKappaAnalyzer(GroupAnalyzer):
             point=point,
             z_statistic=z,
             null_variance=var_null,
+            null_variance_source=FLEISS_NULL_VARIANCE_SOURCE,
             alternative=ht_config.alternative,
         )
 
@@ -225,7 +229,10 @@ class FleissKappaAnalyzer(GroupAnalyzer):
         so whenever it is printed -- see its docstring for why that matters.
         """
         from scipy import stats
-        from .variance_functions import fleiss_null_variance
+        from .variance_functions import (
+            FLEISS_NULL_VARIANCE_SOURCE,
+            fleiss_null_variance,
+        )
 
         nij = self.estimator_input.nij
         n_subjects = nij.n_subjects
@@ -243,6 +250,7 @@ class FleissKappaAnalyzer(GroupAnalyzer):
             upper=point + z_crit * se_null,
             alpha=self.config.alpha,
             variance_source="null",
+            variance_reference=FLEISS_NULL_VARIANCE_SOURCE,
         )
 
     def _result(
