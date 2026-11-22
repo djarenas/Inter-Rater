@@ -137,10 +137,10 @@ and `ci_method: percentile`.
 
 - `method` (str, default "permutation"): "permutation" or "parametric_null"
 - `scheme` (str, default "within_rater_shuffle"): "within_rater_shuffle" or "pool_and_redistribute". Both keep the missing-data structure: answers move only between rated cells. `"within_subject"` (cannot test coefficient = 0) is refused with a message saying so
-- `alternative` (str, default "two-sided"): "two-sided", "greater" or "less". Two-sided by default because below-chance agreement (a scale read backwards, two labels swapped) is a real finding a one-sided test misses
+- `alternative` (str, default "greater"): "greater", "two-sided" or "less". "greater" asks whether agreement is above chance. "two-sided" exists because below-chance agreement (a scale read backwards, two labels swapped) is a real finding a one-sided test misses
 - `n_permutations` (int, default 5000)
 - `alpha` (float, default 0.05)
-- `random_state` (int | None, default 42)
+- `random_state` (int, default 42): None is refused, so every test can be rerun
 
 Numeric fields check for `bool` first, since `True` is an `int` in Python.
 
@@ -171,7 +171,7 @@ balanced_data_only: true
 hypothesis_test:                     # alias for hypothesis_test_config
   method: permutation
   scheme: within_rater_shuffle
-  alternative: two-sided
+  alternative: greater
   n_permutations: 5000
 ```
 

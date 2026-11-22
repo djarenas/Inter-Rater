@@ -18,15 +18,13 @@ class HypothesisTestConfig:
 
     I define the method, permutation scheme, and parameters for hypothesis
     testing. I am stored as an optional attribute on AnalyzerConfig and read
-    by each leaf analyzer's hypothesis_test() method.
+    by the analyzer's hypothesis_test().
 
     Two methods are supported:
-    - "permutation": build null distribution by shuffling ratings. Requires
-      Ratings data (not NijMatrix). The scheme parameter controls how
-      ratings are shuffled.
-    - "parametric_null": use an analytical null variance formula. Coefficient-
-      specific (e.g., Fleiss 1979 Eq. 12 for Fleiss' kappa). Works with
-      both Ratings and NijMatrix.
+    - "permutation": build the null distribution by shuffling ratings. The
+      scheme controls how they are shuffled.
+    - "parametric_null": use an analytical null variance (e.g. Fleiss 1979
+      Eq. 12 for Fleiss' kappa). Only Fleiss, Scott and Cohen have one.
 
     Two permutation schemes are supported (only used when method="permutation"):
     - "within_rater_shuffle": shuffle each rater's answers across subjects. Preserves
@@ -42,10 +40,11 @@ class HypothesisTestConfig:
     H₀: coefficient = 0.
 
     Three alternatives are supported, for both methods:
-    - "two-sided" (default): agreement differs from chance, above or below.
-      Below-chance agreement is a real finding -- raters who read a scale
-      backwards, or swap two labels -- and a one-sided test cannot see it.
-    - "greater": agreement is above chance.
+    - "greater" (default): agreement is above chance, the question a test of
+      agreement usually asks.
+    - "two-sided": agreement differs from chance, above or below.
+      Below-chance agreement is a real finding (e.g. raters who read a scale
+      backwards, or swap two labels).
     - "less": agreement is below chance.
 
     Attributes
@@ -66,7 +65,7 @@ class HypothesisTestConfig:
 
     method: str = "permutation"
     scheme: str = "within_rater_shuffle"
-    alternative: str = "two-sided"
+    alternative: str = "greater"
     n_permutations: int = 5000
     alpha: float = 0.05
     random_state: int = 42
@@ -106,8 +105,8 @@ class HypothesisTestConfig:
                 f"{sorted(_VALID_ALTERNATIVES)}, got '{self.alternative}'."
             )
 
-        # Check the bool python bug. After around Python2.3, bools were made to inherit
-        # int for backwards compatibility 
+        # bool is a subclass of int (PEP 285, Python 2.3), so True would pass
+        # as 1. Refuse it explicitly.
         for name in ("n_permutations", "random_state", "alpha"):
             if isinstance(getattr(self, name), bool):
                 raise TypeError(

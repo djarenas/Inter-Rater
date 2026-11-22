@@ -22,6 +22,7 @@ from ..intermediates.results.analyzer_results.scotts_pi_result import (
     KAPPA_MAX_NOT_COMPUTED,
 )
 from .agreement_functions.group_agreement import (
+    category_proportions,
     chance_fleiss,
     observed_agreement,
     scotts_pi,
@@ -150,7 +151,7 @@ class ScottsAnalyzer(GroupAnalyzer):
         ht_config = self._hypothesis_test_config()
         nij = self.estimator_input.nij
         point = scotts_pi(self.estimator_input)
-        pj = self._compute_pj(nij)
+        pj = category_proportions(nij)
 
         n_subjects = nij.n_subjects
         n_raters = int(nij.n_per_subject[0])
@@ -195,12 +196,6 @@ class ScottsAnalyzer(GroupAnalyzer):
                 f"got {ratings.n_raters}. For {ratings.n_raters} raters, use "
                 f"FleissKappaAnalyzer instead (Fleiss reduces to Scott's pi at n=2)."
             )
-
-    def _compute_pj(self, nij: NijMatrix) -> np.ndarray:
-        """Compute category proportions (pj) from NijMatrix."""
-        n_per_subject = nij.n_per_subject
-        proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
-        return np.mean(proportions_per_subject, axis=0)
 
     def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
@@ -254,7 +249,7 @@ class ScottsAnalyzer(GroupAnalyzer):
         ``ci_method="parametric_null"``: no bootstrap, so no draws.
         """
         return self._parametric_null_ci(
-            point, self._compute_pj(self.estimator_input.nij)
+            point, category_proportions(self.estimator_input.nij)
         )
 
     def _result(

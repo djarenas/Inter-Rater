@@ -787,7 +787,7 @@ class TestPValueAgreesAcrossCoefficients:
             category_index=rng.integers(0, 3, (30, 3)).astype(np.int8),
             semantics=RatingsSemantics(raters=3, categories=cats),
         )
-        ht = HypothesisTestConfig(n_permutations=200)
+        ht = HypothesisTestConfig(n_permutations=200, alternative="two-sided")
         config = getattr(C, f"{name}Config")(hypothesis_test_config=ht)
         result = getattr(A, f"{name}Analyzer")(ratings, config).hypothesis_test()
         assert result.alternative == "two-sided"
@@ -1552,6 +1552,52 @@ class TestHypothesisTestSignature:
         analyzer_cls, _ = _analyzer_and_config(name)
         for cls in (Analyzer, analyzer_cls):
             assert list(inspect.signature(cls.hypothesis_test).parameters) == ["self"], cls
+
+
+class TestPermutationTestRecordsHowItRan:
+    """
+    A permutation result records its scheme and seed, so the test can be
+    rerun from the result alone; a parametric result records neither.
+    """
+
+    @pytest.mark.parametrize("name, n_raters", _ALL_ANALYZERS)
+    @pytest.mark.parametrize("scheme", ["within_rater_shuffle", "pool_and_redistribute"])
+    def test_every_analyzer_records_scheme_and_seed(self, name, n_raters, scheme):
+        from interrater.analyzers.configs.hypothesis_test_config import (
+            HypothesisTestConfig,
+        )
+
+        analyzer_cls, config_cls = _analyzer_and_config(name)
+        ht = HypothesisTestConfig(
+            method="permutation", scheme=scheme, n_permutations=20, random_state=7,
+        )
+        result = analyzer_cls(
+            _three_cat_ratings(n_raters), config_cls(hypothesis_test_config=ht),
+        ).hypothesis_test()
+        assert (result.scheme, result.random_state) == (scheme, 7)
+        assert f"{scheme}, seed 7" in str(result)
+
+    def test_rerun_from_the_result_gives_the_same_draws(self):
+        """The recorded scheme and seed are enough to reproduce the null distribution."""
+        from interrater.analyzers.configs.hypothesis_test_config import (
+            HypothesisTestConfig,
+        )
+
+        analyzer_cls, config_cls = _analyzer_and_config("FleissKappa")
+        ratings = _three_cat_ratings(3)
+        first = analyzer_cls(ratings, config_cls(hypothesis_test_config=HypothesisTestConfig(
+            method="permutation", scheme="pool_and_redistribute", n_permutations=30, random_state=3,
+        ))).hypothesis_test()
+        again = analyzer_cls(ratings, config_cls(hypothesis_test_config=HypothesisTestConfig(
+            method=first.method, scheme=first.scheme, n_permutations=first.n_permutations,
+            random_state=first.random_state, alternative=first.alternative,
+        ))).hypothesis_test()
+        np.testing.assert_array_equal(first.null_distribution, again.null_distribution)
+        assert first.p_value == again.p_value
+
+    def test_parametric_records_neither(self, request):
+        result = _ht_analyzer("fleiss_parametric", request).hypothesis_test()
+        assert result.scheme is None and result.random_state is None
 
 
 class TestResultsCarryTheRaters:

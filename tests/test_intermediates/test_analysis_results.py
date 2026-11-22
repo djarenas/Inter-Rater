@@ -41,7 +41,7 @@ from interrater.intermediates.results import (
     CongerKappaResult,
 )
 from interrater.intermediates.results.hypothesis_test_result import (
-    permutation_p_value_from_counts,
+    compute_permutation_p_value,
 )
 from interrater.intermediates.results.analyzer_results.individual_marginal_result import (
     IndividualMarginalResult,
@@ -1377,15 +1377,15 @@ class TestHypothesisTestResultCounts:
         ("greater", 0.3), ("less", 0.8), ("two-sided", 0.6),
     ])
     def test_formula(self, alternative, expected):
-        assert permutation_p_value_from_counts(2, 7, 9, alternative) == pytest.approx(expected)
+        assert compute_permutation_p_value(2, 7, 9, alternative) == pytest.approx(expected)
 
     def test_two_sided_capped_at_one(self):
         """Both tails at 0.6; twice the smaller would be 1.2."""
-        assert permutation_p_value_from_counts(5, 5, 9, "two-sided") == 1.0
+        assert compute_permutation_p_value(5, 5, 9, "two-sided") == 1.0
 
     def test_never_zero(self):
         """No permutation as extreme as the observed: 1/(B+1), not 0."""
-        assert permutation_p_value_from_counts(0, 9, 9, "greater") == pytest.approx(0.1)
+        assert compute_permutation_p_value(0, 9, 9, "greater") == pytest.approx(0.1)
 
     def _result(self, **overrides):
         kwargs = dict(
@@ -1454,6 +1454,55 @@ class TestHypothesisTestResultCounts:
         d = self._result().summary()
         assert d["alternative"] == "two-sided"
         assert (d["n_usable"], d["n_at_or_above"], d["n_at_or_below"]) == (9, 2, 7)
+
+
+class TestHypothesisTestResultSchemeAndSeed:
+    """scheme and random_state: permutation only, validated when given."""
+
+    def _result(self, **fields):
+        kwargs = dict(p_value=0.5, alpha=0.05, reject_null=False,
+                      method="permutation", point=0.1, n_permutations=10,
+                      coefficient="fleiss_kappa")
+        kwargs.update(fields)
+        return HypothesisTestResult(**kwargs)
+
+    def test_recorded(self):
+        r = self._result(scheme="pool_and_redistribute", random_state=42)
+        assert (r.scheme, r.random_state) == ("pool_and_redistribute", 42)
+        assert "(10 permutations, pool_and_redistribute, seed 42)" in str(r)
+        d = r.summary()
+        assert (d["scheme"], d["random_state"]) == ("pool_and_redistribute", 42)
+
+    def test_two_sided_permutation_names_the_doubling(self):
+        """The printout says how a two-sided permutation p-value was made."""
+        note = "Two-sided p is twice the smaller one-sided p (Fisher's rule; Kulinskaya 2008)"
+        two = self._result(alternative="two-sided", n_usable=9, n_at_or_above=4,
+                           n_at_or_below=5, p_value=1.0)
+        one = self._result(alternative="greater", n_usable=9, n_at_or_above=4,
+                           n_at_or_below=5, p_value=0.5)
+        assert str(two).endswith(note)
+        assert "Kulinskaya" not in str(one)
+
+    def test_seed_not_recorded_is_none(self):
+        r = self._result(scheme="within_rater_shuffle", random_state=None)
+        assert "seed" not in str(r)
+        assert "random_state" not in r.summary()
+
+    def test_unknown_scheme_refused(self):
+        with pytest.raises(ValueError, match="scheme must be 'within_rater_shuffle'"):
+            self._result(scheme="within_subject")
+
+    def test_bool_seed_refused(self):
+        with pytest.raises(TypeError, match="random_state must be int"):
+            self._result(random_state=True)
+
+    def test_parametric_with_scheme_refused(self):
+        with pytest.raises(ValueError, match="must be None for method='parametric_null'"):
+            HypothesisTestResult(
+                p_value=0.5, alpha=0.05, reject_null=False, method="parametric_null",
+                point=0.1, z_statistic=0.6, null_variance=0.01,
+                coefficient="fleiss_kappa", random_state=42,
+            )
 
 
 # ============================================================================ #

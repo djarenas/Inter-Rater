@@ -44,8 +44,7 @@ class Analyzer(ABC):
     Attributes
     ----------
     ratings : Ratings
-        The validated ratings data. Type varies by analyzer:
-        FleissKappaAnalyzer may require BalancedRatings if config.balanced_data_only=True.
+        The validated ratings data, after any injection.
     config : AnalyzerConfig
         The analysis configuration (FleissKappaConfig, etc.).
         Defines bootstrap resamples, confidence level, CI method, hypothesis
@@ -391,7 +390,9 @@ class Analyzer(ABC):
     """How hypothesis test results name the coefficient (e.g. "fleiss_kappa"). Set by each leaf."""
 
     def _hypothesis_test_config(self):
-        """The hypothesis test settings in my config; ValueError if there are none."""
+        """
+        The hypothesis test settings in my config; ValueError if there are none.
+        """
         ht_config = self.config.hypothesis_test_config
         if ht_config is None:
             raise ValueError(
@@ -415,6 +416,8 @@ class Analyzer(ABC):
             within_rater_shuffle,
         )
 
+        # Check that the config object arrives with valid hypothesis test settings
+        # and that you are not running a permutation test when something else was chosen.
         ht_config = self._hypothesis_test_config()
         prefix = f"[{type(self).__name__}] Error"
         if ht_config.method != "permutation":
@@ -455,6 +458,8 @@ class Analyzer(ABC):
             point=point,
             null_distribution=null_distribution,
             n_permutations=ht_config.n_permutations,
+            scheme=ht_config.scheme,
+            random_state=ht_config.random_state,
             **counts,
         )
 
@@ -568,11 +573,11 @@ class Analyzer(ABC):
 
         Returns the keyword arguments HypothesisTestResult records:
         p_value, n_usable, n_at_or_above, n_at_or_below and alternative.
-        The formula is ``permutation_p_value_from_counts``, which the
+        The formula is ``compute_permutation_p_value``, which the
         result uses to check them.
         """
         from ..intermediates.results.hypothesis_test_result import (
-            permutation_p_value_from_counts,
+            compute_permutation_p_value,
         )
 
         null = np.asarray(null_distribution, dtype=float)
@@ -596,7 +601,7 @@ class Analyzer(ABC):
         n_usable = int(usable.size)
 
         return {
-            "p_value": permutation_p_value_from_counts(
+            "p_value": compute_permutation_p_value(
                 n_at_or_above, n_at_or_below, n_usable, alternative
             ),
             "alternative": alternative,

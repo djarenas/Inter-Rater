@@ -196,8 +196,8 @@ class TestHypothesisTestConfig:
             HypothesisTestConfig(scheme="invalid")
 
     def test_alternative_default_two_sided_and_all_accepted(self):
-        """Two-sided by default: below-chance agreement is a real finding."""
-        assert HypothesisTestConfig().alternative == "two-sided"
+        """Greater by default: is agreement above chance?"""
+        assert HypothesisTestConfig().alternative == "greater"
         for alt in ("two-sided", "greater", "less"):
             assert HypothesisTestConfig(alternative=alt).alternative == alt
 

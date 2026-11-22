@@ -12,6 +12,7 @@ from ..intermediates.results.ci_results import ParametricCIResult
 from .configs import FleissKappaConfig
 
 from .agreement_functions.group_agreement import (
+    category_proportions,
     chance_fleiss,
     fleiss_kappa,
     observed_agreement,
@@ -29,22 +30,21 @@ _ERROR_PREFIX = "[FleissKappaAnalyzer] Error"
 
 class FleissKappaAnalyzer(GroupAnalyzer):
     """
-    I am the analyzer for Fleiss' kappa, the multi-rater agreement coefficient.
+    I am the analyzer for Fleiss' kappa, the multi-rater agreement
+    coefficient. It reads how many raters chose each category for each
+    subject, not who chose it, and has a weighted form.
 
-    Fleiss' kappa measures agreement among many raters (n >= 2) on categorical
-    data. It discards rater identity and reads a counts matrix. It supports
-    weighting for ordinal data.
+    I check that the config is a FleissKappaConfig and that parametric_null
+    is asked for only on balanced, unweighted data. I supply the coefficient
+    (``_estimate_from_input``), my result (``_result``), and the parametric
+    null interval and test (Fleiss, Nee & Landis 1979). Analyzer does the
+    bootstrap and the permutation test.
 
-    I validate that:
-    - Config is FleissKappaConfig
-    - Ratings are balanced (or auto-convert if needed)
-    - Data structure is appropriate for Fleiss' kappa
-
-    I compute:
-    - Point estimate of Fleiss' kappa
-    - Bootstrap confidence interval (percentile or BCa)
-    - Balance profile and exact/approximate flag
-    - Return FleissKappaResult with all metadata
+    References
+    ----------
+    Fleiss, J. L., Nee, J. C. M., & Landis, J. R. (1979). Large sample
+        variance of kappa in the case of different sets of raters.
+        Psychological Bulletin, 86(5), 974-977.
 
     Attributes
     ----------
@@ -59,9 +59,12 @@ class FleissKappaAnalyzer(GroupAnalyzer):
         The analysis configuration for Fleiss' kappa.
     weights : Weights | None
         The weights object (from Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from (from Analyzer).
     is_exact : bool
-        Whether the exact formula applies (data is perfectly balanced).
-        Computed during initialization based on balance_profile.
+        Whether every subject has the same number of raters. Fleiss' kappa is
+        exact then; on unbalanced data it is an approximation, and my result
+        says so.
     """
 
     # Has a weighted form: Analyzer reads the weights from the semantics
@@ -86,7 +89,7 @@ class FleissKappaAnalyzer(GroupAnalyzer):
 
     def __init__(self, ratings: Ratings, config: FleissKappaConfig) -> None:
         """
-        Initialize Fleiss' kappa analyzer: validate config and convert ratings if needed.
+        Run the parent's checks, then check the config type and parametric_null.
 
         Parameters
         ----------
@@ -98,31 +101,11 @@ class FleissKappaAnalyzer(GroupAnalyzer):
         Raises
         ------
         TypeError
-            If config is not FleissKappaConfig.
-            If ratings is not a Ratings object.
+            If ratings is not a Ratings object, or config is not FleissKappaConfig.
         ValueError
-            If config.balanced_data_only=True but data is not balanced.
+            If config.balanced_data_only=True but data is not balanced, or
+            parametric_null is asked for on unbalanced or weighted data.
         """
-        from ..data_objects.ratings import Ratings as RatingsBase
-        from ..data_objects.balanced_ratings import BalancedRatings
-
-        # Validate ratings is at least a Ratings object
-        if not isinstance(ratings, RatingsBase):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ratings must be a Ratings object, "
-                f"got {type(ratings).__name__}"
-            )
-
-        # Auto-convert Ratings to BalancedRatings if config requires it
-        if config.balanced_data_only and not isinstance(ratings, BalancedRatings):
-            try:
-                ratings = BalancedRatings.build_from_ratings(ratings)
-            except ValueError as e:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: config.balanced_data_only=True but data is not balanced. "
-                    f"Details: {str(e)}"
-                ) from e
-
         # Call parent __init__ (validates group config; Analyzer builds the Weights)
         # Wrap to propagate errors with FleissKappaAnalyzer context
         try:
@@ -158,11 +141,13 @@ class FleissKappaAnalyzer(GroupAnalyzer):
         ht_config = self._hypothesis_test_config()
         nij = self.estimator_input.nij
         point = fleiss_kappa(self.estimator_input)
-        pj = self._compute_pj(nij)
+        pj = category_proportions(nij)
 
         n_subjects = nij.n_subjects
-        n_raters = int(nij.n_per_subject[0])  # Assumes balanced
+        # Balanced: _refuse_parametric_null_if_invalid refused anything else
+        n_raters = int(nij.n_per_subject[0])
 
+        # Fleiss, Nee & Landis (1979), Psychological Bulletin 86(5), Eq. 12
         var_null = fleiss_null_variance(pj, n_subjects, n_raters)
         se_null = np.sqrt(var_null)
 
@@ -180,7 +165,7 @@ class FleissKappaAnalyzer(GroupAnalyzer):
             alpha=ht_config.alpha,
             reject_null=self._reject_null(p_value, ht_config.alpha),
             method="parametric_null",
-            coefficient="fleiss_kappa",
+            coefficient=self._COEFFICIENT_KEY,
             point=point,
             z_statistic=z,
             null_variance=var_null,
@@ -203,27 +188,6 @@ class FleissKappaAnalyzer(GroupAnalyzer):
                 f"{_ERROR_PREFIX}: config must be FleissKappaConfig, "
                 f"got {type(self.config).__name__}"
             )
-
-    def _compute_pj(self, nij: NijMatrix) -> np.ndarray:
-        """
-        Compute category proportions (pj) from NijMatrix.
-
-        Each subject contributes equally: pj is the mean of per-subject
-        proportions, not the global pooled proportion.
-
-        Parameters
-        ----------
-        nij : NijMatrix
-            The counts matrix.
-
-        Returns
-        -------
-        np.ndarray
-            Category proportions, shape (n_categories,), summing to 1.
-        """
-        n_per_subject = nij.n_per_subject
-        proportions_per_subject = nij.matrix / n_per_subject[:, np.newaxis]
-        return np.mean(proportions_per_subject, axis=0)
 
     def _estimate_from_input(self, data: EstimatorInput) -> float:
         """
@@ -249,37 +213,28 @@ class FleissKappaAnalyzer(GroupAnalyzer):
             weighted=self.weights is not None and not self.weights.is_identity,
         )
 
-    def _parametric_null_ci(
-        self, point: float, pj: np.ndarray
-    ) -> ParametricCIResult:
+    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
         """
-        Compute confidence interval using Fleiss (1979) null variance.
+        The interval from the Fleiss, Nee & Landis (1979) null variance
+        (Eq. 12), for ``ci_method="parametric_null"``: no bootstrap, so no
+        draws.
 
         The half-width comes from the variance of kappa under H0: kappa = 0,
         so the interval is centred on the observed estimate but scaled as
         though the estimate were zero. The returned ParametricCIResult says
         so whenever it is printed -- see its docstring for why that matters.
-
-        Parameters
-        ----------
-        point : float
-            The point estimate of kappa.
-        pj : np.ndarray
-            Category proportions.
-
-        Returns
-        -------
-        ParametricCIResult
-            Bounds, the level, and the variance they were built from.
         """
         from scipy import stats
         from .variance_functions import fleiss_null_variance
 
         nij = self.estimator_input.nij
         n_subjects = nij.n_subjects
-        n_raters = int(nij.n_per_subject[0])  # Assumes balanced
+        # Balanced: _refuse_parametric_null_if_invalid refused anything else
+        n_raters = int(nij.n_per_subject[0])
 
-        var_null = fleiss_null_variance(pj, n_subjects, n_raters)
+        var_null = fleiss_null_variance(
+            category_proportions(nij), n_subjects, n_raters
+        )
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
@@ -288,15 +243,6 @@ class FleissKappaAnalyzer(GroupAnalyzer):
             upper=point + z_crit * se_null,
             alpha=self.config.alpha,
             variance_source="null",
-        )
-
-    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
-        """
-        The interval from Fleiss (1979) null variance, for
-        ``ci_method="parametric_null"``: no bootstrap, so no draws.
-        """
-        return self._parametric_null_ci(
-            point, self._compute_pj(self.estimator_input.nij)
         )
 
     def _result(

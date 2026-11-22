@@ -7,6 +7,10 @@ versioning follows [semver](https://semver.org/).
 
 ### Breaking
 
+- The default hypothesis test alternative is now `greater` (agreement above
+  chance), not `two-sided`. A config that does not set `alternative` gives
+  a one-sided p-value; set `alternative: two-sided` for the old behaviour.
+
 - Analyzers are built from `Ratings` only. `build_from_nij_matrix()` and
   `estimate_from_nij_matrix()` are removed from every group analyzer, as are
   `BalanceProfile.build_from_nij_matrix()`,
@@ -66,6 +70,15 @@ versioning follows [semver](https://semver.org/).
 
 ### Added
 
+- `HypothesisTestResult` records the permutation `scheme` and
+  `random_state`, in its printout and `summary()`, so a permutation test can
+  be rerun from its result alone. Both are None for `parametric_null`, and a
+  parametric result that sets them is refused.
+- A two-sided permutation result's printout says how its p-value was made:
+  "Two-sided p is twice the smaller one-sided p (Fisher's rule; Kulinskaya
+  2008)". `compute_permutation_p_value` documents the +1 (Phipson & Smyth
+  2010) and the doubling (Kulinskaya 2008; Gibbons & Pratt 1975).
+
 - Gwet's AC2, the weighted AC1. `GwetAC1Analyzer` computes it when the
   semantics declares ordered or weighted categories, as Fleiss' kappa does;
   pairwise and subset permutation accept it too. The chance term is
@@ -83,6 +96,9 @@ versioning follows [semver](https://semver.org/).
   checks the package against the saved values on every push.
 
 ### Changed
+
+- `permutation_p_value_from_counts` is renamed `compute_permutation_p_value`,
+  a verb like the package's other helpers that do something.
 
 - The permutation test is written once, as `Analyzer._permutation_test`,
   instead of once in each of the 8 analyzers. `hypothesis_test()` stays
