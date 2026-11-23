@@ -115,6 +115,12 @@ versioning follows [semver](https://semver.org/).
 
 ### Changed
 
+- `PermutationConfig` is now abstract, as its docstrings always described
+  it: build `PairwisePermutationConfig` or `SubsetPermutationConfig`.
+  Building the base directly now raises `TypeError`. Its
+  `build_from_dict` could never turn `config_of_coefficient` into a
+  config, so no YAML could have used it.
+
 - `FleissKappaAnalyzer` no longer converts ratings to `BalancedRatings`;
   `GroupAnalyzer` already refuses unbalanced data under
   `balanced_data_only: true`, now with its message. Fleiss and Scott use

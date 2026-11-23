@@ -25,17 +25,17 @@ class BrennanPredigerConfig(GroupCoefficientConfig):
     proportions.
 
     The weighted form replaces 1/K with sum(W) / K^2, where W is the weight
-    matrix. The chance term remains independent of what the raters actually
-    did (the hallmark of Brennan-Prediger) and the weighted coefficient
-    is the unweighted one with identity W as a special case. The formula is
-    the one in Gwet's irrCAC 1.4 (``bp.coeff.raw``).
+    matrix. The formula is the one in Gwet's irrCAC 1.4 (``bp.coeff.raw``).
+    The chance term remains independent of what the raters actually did
+    (the hallmark of Brennan-Prediger) and the weighted coefficient is the
+    unweighted one with identity W as a special case.
 
     Weights are declared in the semantics of the ratings (categories kind
     'ordered' or 'weighted'). The analyzer reads the weight matrix from there
     at construction time.
 
-    There is no parametric null variance formula for Brennan-Prediger, so
-    ``ci_method='parametric_null'`` and hypothesis test
+    The package does not implement a parametric null for Brennan-Prediger,
+    so ``ci_method='parametric_null'`` and hypothesis test
     ``method='parametric_null'`` are both rejected. Use bootstrap CIs
     (percentile or BCa) and permutation tests instead.
 
@@ -44,8 +44,6 @@ class BrennanPredigerConfig(GroupCoefficientConfig):
     - Brennan, R. L., & Prediger, D. J. (1981). Coefficient kappa: Some
       uses, misuses, and alternatives. Educational and Psychological
       Measurement, 41(3), 687--699.
-    - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
-      Advanced Analytics, LLC.
     - Gwet, K. L. (2026). irrCAC: Computing the Extent of Agreement among
       Raters with Chance-Corrected Agreement Coefficient (CAC). R package
       version 1.4.
@@ -83,13 +81,13 @@ class BrennanPredigerConfig(GroupCoefficientConfig):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # B-P has no parametric null variance formula, so reject it as ci_method
+        # No parametric null is implemented for B-P, so refuse it
         if self.ci_method == "parametric_null":
             raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Brennan-Prediger. There is no closed-form null variance for "
-                f"this coefficient. "
-                f"Use 'percentile' or 'bca' instead."
+                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not "
+                f"available for Brennan-Prediger. The package does not "
+                f"implement a parametric null for it. Use 'percentile' or "
+                f"'bca' instead."
             )
 
         # Also reject parametric_null as hypothesis test method
@@ -98,7 +96,8 @@ class BrennanPredigerConfig(GroupCoefficientConfig):
             and self.hypothesis_test_config.method == "parametric_null"
         ):
             raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' is not "
-                f"available for Brennan-Prediger. There is no closed-form null "
-                f"variance for this coefficient. Use method='permutation' instead."
+                f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' "
+                f"is not available for Brennan-Prediger. The package does not "
+                f"implement a parametric null for it. Use "
+                f"method='permutation' instead."
             )

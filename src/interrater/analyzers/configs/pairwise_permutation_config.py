@@ -18,8 +18,11 @@ class PairwisePermutationConfig(PermutationConfig):
     I am the configuration for pairwise permutation analysis.
 
     I compute a coefficient for all C(n_raters, 2) pairs of raters. This is
-    useful for detecting which raters may be problematic or for understanding
+    useful for detecting which raters may not be interchangeable or for understanding
     how each pair of raters agrees independently.
+    It should be mentioned that a rater with pairs that have more disagreement
+    does not mean that this rater is wrong - maybe they have more training
+    or more context etc... perhaps a more accurate more like it is not interchangeable
 
     I enforce that:
     - coefficient_to_compute is in PAIRWISE_PERMUTATION_COEFFICIENTS

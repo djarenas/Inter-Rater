@@ -19,7 +19,7 @@ Hierarchy:
     │   ├── CongerKappaConfig
     │   └── LightKappaConfig
     │
-    └── PermutationConfig (holds nested AnalyzerConfig)
+    └── PermutationConfig (abstract; holds nested AnalyzerConfig)
         ├── PairwisePermutationConfig
         └── SubsetPermutationConfig
 

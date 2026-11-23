@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
@@ -15,9 +16,12 @@ _ERROR_PREFIX = "[PermutationConfig] Error"
 
 
 @dataclass(frozen=True)
-class PermutationConfig:
+class PermutationConfig(ABC):
     """
-    I am the configuration for permutation analysis.
+    I am the abstract base configuration for permutation analysis. Build
+    PairwisePermutationConfig or SubsetPermutationConfig; I cannot be built
+    myself, since only they know how to turn config_of_coefficient into its
+    config.
 
     Permutation analysis computes a coefficient across multiple rater
     combinations (pairs, subsets). I hold three things:
@@ -31,7 +35,7 @@ class PermutationConfig:
     I validate that the coefficient name is one of the known, allowed
     coefficients. Subclasses (PairwisePermutationConfig,
     SubsetPermutationConfig) further validate that the coefficient is
-    appropriate for their specific permutation mode, that
+    appropriate for their specific permutation mode, and that
     config_of_coefficient is the right type. I check the "independent"
     mean against config_of_coefficient, since it draws from the
     per-combination bootstrap that config controls.
@@ -45,7 +49,7 @@ class PermutationConfig:
     config_of_coefficient : AnalyzerConfig
         The nested config (FleissKappaConfig, CohenKappaConfig, etc.) that
         specifies analytical decisions: n_resamples, alpha, random_state,
-        ci_method, weights_type, etc. This controls per-combination
+        ci_method, etc. This controls per-combination
         bootstrap (resampling subjects within a combination).
     subset_k : int | list[int] | str | None, default None
         Subset size(s) for subset permutation. Accepts a single int,
@@ -137,7 +141,7 @@ class PermutationConfig:
                     f"{_ERROR_PREFIX}: subset_k must be int, list[int], "
                     f"'all', or None, "
                     f"got {type(self.subset_k).__name__}"
-                )          
+                )
             if not isinstance(self.subset_k, (int, list, str)):
                 raise TypeError(
                     f"{_ERROR_PREFIX}: subset_k must be int, list[int], "
@@ -181,17 +185,15 @@ class PermutationConfig:
                     f"got {type(self.bootstrap_mean_config).__name__}"
                 )
 
-        # Every interval here is a bootstrap interval. A closed-form null
-        # variance does not apply: combinations sharing a rater are
-        # correlated, so there is no formula for their spread. Refused now,
+        # Every interval here is a bootstrap interval. The package does not
+        # implement a parametric null for permutation analyses. Refused now,
         # rather than once the analysis has started.
         if self.config_of_coefficient.ci_method == "parametric_null":
             raise ValueError(
                 f"{_ERROR_PREFIX}: config_of_coefficient.ci_method="
                 f"'parametric_null' is not available for permutation "
-                f"analyses: combinations sharing a rater are correlated, so "
-                f"no closed-form variance describes them. Use 'percentile' "
-                f"or 'bca'."
+                f"analyses: the package does not implement a parametric null "
+                f"for them. Use 'percentile' or 'bca'."
             )
 
         if self.bootstrap_mean_config is not None:
@@ -221,20 +223,19 @@ class PermutationConfig:
                         f"'correlated'."
                     )
 
-
-    # Public API ------------------------------------------------------------- #
+    # Private helpers -------------------------------------------------------- #
 
     @classmethod
     def _prepare_dict(cls, data_dict: dict) -> dict:
         """
         Validate inputs and hydrate shared nested configs.
 
-        I do the work that is common to all PermutationConfig children:
-        validate that data_dict is a dict, normalize YAML key aliases,
-        and hydrate bootstrap_mean_config from a sub-dict into a
+        Does the work that is common to all PermutationConfig children:
+        validates that data_dict is a dict, normalizes YAML key aliases,
+        and hydrates bootstrap_mean_config from a sub-dict into a
         PermutationBootstrapMeanConfig object.
 
-        I do NOT hydrate config_of_coefficient -- that requires knowing
+        Does NOT hydrate config_of_coefficient -- that requires knowing
         which AnalyzerConfig subclass to use, which is the child's job.
 
         Parameters
@@ -252,7 +253,7 @@ class PermutationConfig:
         TypeError
             If data_dict is not a dict.
         ValueError
-            If data_dict is None.
+            If data_dict is None, or holds an unknown key.
         """
         if data_dict is None:
             raise ValueError(
@@ -271,7 +272,9 @@ class PermutationConfig:
         normalize_yaml_key(data_dict, "bootstrap_mean_config")
 
         # After the aliases, so 'bootstrap_mean' is accepted
-        refuse_unknown_keys(data_dict, {f.name for f in fields(cls)}, cls.__name__)
+        refuse_unknown_keys(
+            data_dict, {f.name for f in fields(cls)}, cls.__name__
+        )
 
         # Hydrate: convert sub-dict to typed config object
         if "bootstrap_mean_config" in data_dict:
@@ -283,19 +286,17 @@ class PermutationConfig:
 
         return data_dict
 
+    # Public API ------------------------------------------------------------- #
+
     @classmethod
+    @abstractmethod
     def build_from_dict(cls, data_dict: dict) -> PermutationConfig:
         """
         Build a config from a plain dictionary.
 
-        I normalize YAML key aliases and hydrate nested objects.
-        Hydration means converting a plain sub-dict into its typed
-        config object -- e.g. a ``bootstrap_mean`` dict becomes a
-        ``PermutationBootstrapMeanConfig``.
-
-        Children override this to also hydrate config_of_coefficient
-        into the correct AnalyzerConfig subclass, calling
-        ``cls._prepare_dict(data_dict)`` for the shared work.
+        Abstract: each child calls ``cls._prepare_dict(data_dict)`` for the
+        shared work, then turns config_of_coefficient into the right
+        AnalyzerConfig subclass, which only the child knows.
 
         Parameters
         ----------
@@ -306,25 +307,17 @@ class PermutationConfig:
         -------
         PermutationConfig
             Instantiated config object with validation applied.
-
-        Raises
-        ------
-        TypeError
-            If data_dict is not a dict, or if config_of_coefficient
-            is still a raw dict (not hydrated by a child class).
-        ValueError
-            If data_dict is None or validation fails.
         """
-        cls._prepare_dict(data_dict)
-        return cls(**data_dict)
 
     @classmethod
     def build_from_yaml(cls, path: str) -> PermutationConfig:
         """
         Load configuration from a YAML file.
 
-        I read the file and delegate to ``build_from_dict``, which
-        normalizes aliases, refuses unknown keys and hydrates the rest.
+        Reads the file and delegates to ``build_from_dict``, which
+        normalizes aliases, refuses unknown keys, and turns the nested
+        ``bootstrap_mean`` entry into its config object; children also turn
+        ``config_of_coefficient`` into its config.
         Children that override ``build_from_dict`` get
         correct dispatch via ``cls`` without overriding this method.
 
@@ -361,8 +354,8 @@ class PermutationConfig:
         -------
         dict
             Keys: coefficient_to_compute, subset_k, balanced_data_only,
-            keep_draws, max_evaluations, config_of_coefficient (nested summary),
-            bootstrap_mean_config (nested summary or None).
+            keep_draws, max_evaluations, config_of_coefficient (nested
+            summary), bootstrap_mean_config (nested summary or None).
         """
         result = {
             "coefficient_to_compute": self.coefficient_to_compute,

@@ -600,10 +600,21 @@ class TestPermutationBootstrapMeanConfig:
 
 
 class TestPermutationConfig:
-    """Tests for PermutationConfig (base)."""
+    """Tests for PermutationConfig (abstract base).
+
+    The shared validation runs through PairwisePermutationConfig, since the
+    base cannot be built.
+    """
+
+    def test_base_is_abstract(self):
+        with pytest.raises(TypeError, match="abstract"):
+            PermutationConfig(
+                coefficient_to_compute="cohen_kappa",
+                config_of_coefficient=CohenKappaConfig(),
+            )
 
     def test_construction(self):
-        cfg = PermutationConfig(
+        cfg = PairwisePermutationConfig(
             coefficient_to_compute="cohen_kappa",
             config_of_coefficient=CohenKappaConfig(),
         )
@@ -619,7 +630,7 @@ class TestPermutationConfig:
     ])
     def test_max_evaluations_refused(self, value, error):
         with pytest.raises(error, match="max_evaluations must be"):
-            PermutationConfig(
+            PairwisePermutationConfig(
                 coefficient_to_compute="cohen_kappa",
                 config_of_coefficient=CohenKappaConfig(),
                 max_evaluations=value,
@@ -627,7 +638,7 @@ class TestPermutationConfig:
 
     def test_keep_draws_non_bool_rejected(self):
         with pytest.raises(TypeError, match="keep_draws must be bool"):
-            PermutationConfig(
+            PairwisePermutationConfig(
                 coefficient_to_compute="cohen_kappa",
                 config_of_coefficient=CohenKappaConfig(),
                 keep_draws=0,
@@ -635,20 +646,20 @@ class TestPermutationConfig:
 
     def test_invalid_coefficient_rejected(self):
         with pytest.raises(ValueError, match="coefficient_to_compute"):
-            PermutationConfig(
+            PairwisePermutationConfig(
                 coefficient_to_compute="not_a_real_coefficient",
                 config_of_coefficient=CohenKappaConfig(),
             )
 
     def test_non_analyzer_config_rejected(self):
         with pytest.raises(TypeError, match="config_of_coefficient"):
-            PermutationConfig(
+            PairwisePermutationConfig(
                 coefficient_to_compute="cohen_kappa",
                 config_of_coefficient="not_a_config",
             )
 
     def test_summary_keys(self):
-        cfg = PermutationConfig(
+        cfg = PairwisePermutationConfig(
             coefficient_to_compute="cohen_kappa",
             config_of_coefficient=CohenKappaConfig(),
         )
