@@ -13,18 +13,19 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[AnalyzerConfig] Error"
 _WARNING_PREFIX = "[AnalyzerConfig] Warning"
 
+
 @dataclass(frozen=True)
 class AnalyzerConfig:
     """
     I am the base configuration for all inter-rater agreement analyzers.
 
     Every analyzer needs these decisions: how many bootstrap resamples, what
-    confidence level, which CI method, and what random seed for
-    reproducibility. I validate these choices upfront so they're documented in
-    YAML and auditable in every analysis.
+    confidence level, which confidence-interval (CI) method, and what random
+    seed for reproducibility. I validate these choices upfront so they're
+    documented in YAML and auditable in every analysis.
 
-    There is currently a placeholder for convergence diagnostics, the ability to
-    verify that your n_resamples is large enough that CI bounds have
+    There is currently a placeholder for convergence diagnostics, the ability
+    to verify that your n_resamples is large enough that CI bounds have
     stabilized.
 
     My summary includes the package version, for reproducibility.
@@ -34,20 +35,23 @@ class AnalyzerConfig:
     n_resamples : int, default 1000
         Number of bootstrap draws to take. Higher is more stable but slower.
     alpha : float, default 0.05
-        Significance level. For alpha=0.05, compute 95% CI via [0.025, 0.975].
-    random_state : int | None, default 42
-        Random seed for reproducibility. None for unseeded randomness.
+        Significance level. For alpha=0.05, a 95% interval.
+    random_state : int, default 42
+        Random seed for reproducibility. None is refused, so every run can
+        be reproduced.
     ci_method : str, default "percentile"
-        Method for computing confidence interval: "percentile" or "bca"
-        (bias-corrected and accelerated).
+        Method for computing confidence interval: "percentile", "bca"
+        (bias-corrected and accelerated), or "parametric_null" (Fleiss,
+        Cohen and Scott only; the other configs refuse it).
     convergence_test : ConvergenceTest | None, default None
         Convergence diagnostics are not supported in this version yet, so
         anything but None is refused when the config is built. The field
         stays so that configs carrying ``convergence_test: null`` load.
     hypothesis_test_config : HypothesisTestConfig | None, default None
-        Optional configuration for hypothesis testing against H₀: coefficient = 0.
-        When set, defines the method (permutation or parametric_null), permutation
-        scheme, and number of permutations. None means no hypothesis test.
+        Optional configuration for hypothesis testing against
+        H₀: coefficient = 0. When set, defines the method (permutation or
+        parametric_null), permutation scheme, and number of permutations.
+        None means no hypothesis test.
     injection : tuple[InjectorConfig, ...] | None, default None
         Injection pipeline -- a sequence of injection steps applied to
         the Ratings before analysis. Each step adds synthetic raters.
@@ -60,7 +64,7 @@ class AnalyzerConfig:
 
     n_resamples: int = 1000
     alpha: float = 0.05
-    random_state: int | None = 42
+    random_state: int = 42
     ci_method: str = "percentile"
     convergence_test: ConvergenceTest | None = None
     hypothesis_test_config: HypothesisTestConfig | None = None
@@ -71,8 +75,9 @@ class AnalyzerConfig:
     def __post_init__(self) -> None:
         """Validate configuration after construction."""
 
-        # bool is a subclass of int (PEP 285), so True would pass the int
-        # checks below
+        # Check that integer variables are not fed as booleans.
+        # bool is a subclass of int (PEP 285); True would pass the int
+        # check
         for name in ("n_resamples", "alpha", "random_state"):
             if isinstance(getattr(self, name), bool):
                 raise TypeError(
@@ -103,13 +108,13 @@ class AnalyzerConfig:
                 f"got {self.alpha}"
             )
 
-        # Validate random_state
-        if self.random_state is not None:
-            if not isinstance(self.random_state, int):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: random_state must be int or None, "
-                    f"got {type(self.random_state).__name__}"
-                )
+        # Validate random_state: no None, so every run can be reproduced
+        if not isinstance(self.random_state, int):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: random_state must be an int (default 42) "
+                f"so the run can be reproduced, "
+                f"got {type(self.random_state).__name__}"
+            )
 
         # Validate ci_method
         if not isinstance(self.ci_method, str):
@@ -120,8 +125,8 @@ class AnalyzerConfig:
 
         if self.ci_method not in {"percentile", "bca", "parametric_null"}:
             raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile', 'bca', or 'parametric_null', "
-                f"got '{self.ci_method}'"
+                f"{_ERROR_PREFIX}: ci_method must be 'percentile', 'bca', or "
+                f"'parametric_null', got '{self.ci_method}'"
             )
 
         # Validate convergence_test type
@@ -130,7 +135,8 @@ class AnalyzerConfig:
 
             if not isinstance(self.convergence_test, ConvergenceTest):
                 raise TypeError(
-                    f"{_ERROR_PREFIX}: convergence_test must be ConvergenceTest or None, "
+                    f"{_ERROR_PREFIX}: convergence_test must be "
+                    f"ConvergenceTest or None, "
                     f"got {type(self.convergence_test).__name__}"
                 )
             # Refused here, not in estimate(): a permutation analysis and
@@ -147,7 +153,8 @@ class AnalyzerConfig:
 
             if not isinstance(self.hypothesis_test_config, HypothesisTestConfig):
                 raise TypeError(
-                    f"{_ERROR_PREFIX}: hypothesis_test_config must be HypothesisTestConfig or None, "
+                    f"{_ERROR_PREFIX}: hypothesis_test_config must be "
+                    f"HypothesisTestConfig or None, "
                     f"got {type(self.hypothesis_test_config).__name__}"
                 )
 
@@ -196,18 +203,16 @@ class AnalyzerConfig:
         """
         Warn that ``ci_method='parametric_null'`` is a reproduction tool.
 
-        **I am not called from __post_init__.** Only the three configs whose
-        coefficient has a published closed-form null variance call me --
+        **Not called from __post_init__.** Only the three configs whose
+        coefficient has a published closed-form null variance call this --
         Fleiss, Cohen and Scott. The other five reject ``parametric_null``
-        outright, and they do it *after* calling ``super().__post_init__()``,
-        so a warning fired from the base class would tell someone how to
-        interpret an interval they are about to be told they cannot have.
+        outright, and they do it *after* calling ``super().__post_init__()``.
 
-        I fire at config construction rather than when the interval appears,
-        because this is the moment the choice was made and the moment the
-        caller still knows which parameter to change. The interval warns
-        again when it is built, in different words: by then the useful thing
-        to say is how far off the width is, not where the knob lives.
+        It fires at config construction rather than when the interval
+        appears, because this is the moment the choice was made and the
+        moment the caller still knows which parameter to change. The interval
+        warns again when it is built, in different words: by then the useful
+        thing to say is how far off the width is, not where the knob lives.
         """
         import warnings
 
@@ -230,10 +235,10 @@ class AnalyzerConfig:
         """
         Build a config from a plain dictionary.
 
-        I normalize YAML key aliases and hydrate nested objects.
-        Hydration means converting a plain sub-dict into its typed
-        config object -- e.g. a ``hypothesis_test`` dict becomes a
-        ``HypothesisTestConfig``.
+        Normalizes YAML key aliases and hydrates nested objects.
+        Hydration here means converting a plain sub-dict into its typed
+        config object (e.g. a ``hypothesis_test`` dict becomes a
+        ``HypothesisTestConfig``).
 
         Parameters
         ----------
@@ -250,10 +255,11 @@ class AnalyzerConfig:
         Raises
         ------
         TypeError
-            If data_dict is not a dict.
+            If data_dict is not a dict, or it holds a key removed in 2.1.0
+            (weights_type, custom_weights_path).
         ValueError
-            If data_dict is None or configuration values fail
-            validation.
+            If data_dict is None, holds an unknown key, or configuration
+            values fail validation.
 
         Examples
         --------
@@ -327,8 +333,10 @@ class AnalyzerConfig:
         """
         Load configuration from a YAML file.
 
-        I read the file and delegate to ``build_from_dict``, which
-        normalizes aliases, refuses unknown keys and hydrates the rest.
+        This method reads the file and then delegates to ``build_from_dict``,
+        which normalizes aliases, refuses unknown keys, and turns the nested
+        ``hypothesis_test`` and ``injection`` entries into their config
+        objects.
 
         Parameters
         ----------

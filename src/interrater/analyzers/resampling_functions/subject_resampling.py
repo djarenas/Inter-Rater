@@ -14,7 +14,7 @@ _ERROR_PREFIX = "[subject_resampling] Error"
 def subject_bootstrap(
     data: EstimatorInput,
     n_resamples: int = 1000,
-    random_state: int | None = 42,
+    random_state: int = 42,
 ) -> Iterator[EstimatorInput]:
     """
     Resample subjects (rows) with replacement, yielding one at a time.
@@ -36,9 +36,9 @@ def subject_bootstrap(
         The ratings array, K and weights, validated already by Ratings.
     n_resamples : int, default 1000
         Number of bootstrap draws to yield.
-    random_state : int | None, default 42
-        Random seed for reproducibility. Default of 42 ensures reproducible
-        results unless explicitly overridden. Pass None for unseeded randomness.
+    random_state : int, default 42
+        Random seed for reproducibility. None is refused, so every run can
+        be reproduced.
 
     Yields
     ------
@@ -49,7 +49,7 @@ def subject_bootstrap(
     ------
     TypeError
         If data is not an EstimatorInput, n_resamples is not int, or
-        random_state is not int or None.
+        random_state is not an int.
     ValueError
         If n_resamples < 1.
 
@@ -72,9 +72,10 @@ def subject_bootstrap(
             f"{_ERROR_PREFIX}: n_resamples must be int, "
             f"got {type(n_resamples).__name__}"
         )
-    if random_state is not None and not isinstance(random_state, int):
+    if isinstance(random_state, bool) or not isinstance(random_state, int):
         raise TypeError(
-            f"{_ERROR_PREFIX}: random_state must be int or None, "
+            f"{_ERROR_PREFIX}: random_state must be an int (default 42) "
+            f"so the draws can be reproduced, "
             f"got {type(random_state).__name__}"
         )
 

@@ -26,7 +26,7 @@ class IndependentMeanDraws:
     """
 
     def __init__(
-        self, units: list, n_resamples: int, random_state: int | None
+        self, units: list, n_resamples: int, random_state: int
     ) -> None:
         """
         Start an empty running total.
@@ -38,7 +38,7 @@ class IndependentMeanDraws:
             in the order they will be added.
         n_resamples : int
             How many draws to build.
-        random_state : int | None
+        random_state : int
             Seed for the picks: config_of_coefficient's random_state.
         """
         self._units = list(units)

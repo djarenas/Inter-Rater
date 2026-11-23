@@ -28,14 +28,14 @@ class InjectorConfig:
     ----------
     n_new_raters : int
         How many synthetic raters to inject. Each draws independently.
-    random_state : int or None, default 42
-        Seed for reproducibility, as in every other config. None means
-        unseeded (non-reproducible). Every injector uses this, mixed with
+    random_state : int, default 42
+        Seed for reproducibility, as in every other config. None is refused,
+        so every run can be reproduced. Every injector uses this, mixed with
         its position in the pipeline, to initialise its RNG.
     """
 
     n_new_raters: int = 1
-    random_state: int | None = 42
+    random_state: int = 42
 
     # Constructor ------------------------------------------------------------ #
 
@@ -55,20 +55,20 @@ class InjectorConfig:
                 f"got {self.n_new_raters}"
             )
 
-        # random_state: int or None, no bools
-        if self.random_state is not None:
-            if isinstance(self.random_state, bool) or not isinstance(
-                self.random_state, int
-            ):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: random_state must be int or None, "
-                    f"got {type(self.random_state).__name__}"
-                )
-            if self.random_state < 0:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: random_state must be non-negative, "
-                    f"got {self.random_state}"
-                )
+        # random_state: int, no None (every run can be reproduced), no bools
+        if isinstance(self.random_state, bool) or not isinstance(
+            self.random_state, int
+        ):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: random_state must be an int (default 42) "
+                f"so the run can be reproduced, "
+                f"got {type(self.random_state).__name__}"
+            )
+        if self.random_state < 0:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: random_state must be non-negative, "
+                f"got {self.random_state}"
+            )
 
     # Public API ------------------------------------------------------------- #
 

@@ -84,9 +84,11 @@ class TestSubjectBootstrapValidation:
         with pytest.raises(TypeError, match="n_resamples must be int"):
             list(subject_bootstrap(data_3x2, n_resamples=5.0))
 
-    def test_random_state_not_int_or_none(self, data_3x2):
-        with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(subject_bootstrap(data_3x2, random_state="bad"))
+    @pytest.mark.parametrize("seed", ["bad", None, True])
+    def test_random_state_not_int(self, data_3x2, seed):
+        """None is refused too, so every run can be reproduced."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            list(subject_bootstrap(data_3x2, random_state=seed))
 
     def test_n_resamples_zero(self, data_3x2):
         with pytest.raises(ValueError, match="n_resamples must be >= 1"):
@@ -135,10 +137,6 @@ class TestSubjectBootstrapBehavior:
             for a, b in zip(draws_a, draws_b)
         )
         assert any_different
-
-    def test_none_seed_runs(self, data_3x2):
-        draws = list(subject_bootstrap(data_3x2, n_resamples=3, random_state=None))
-        assert len(draws) == 3
 
     def test_default_random_state_is_42(self, data_3x2):
         """Default seed must be 42."""
@@ -220,9 +218,11 @@ class TestWithinRaterShuffleValidation:
         with pytest.raises(TypeError, match="n_permutations must be int"):
             list(within_rater_shuffle(ratings_3x2, n_permutations=5.0))
 
-    def test_random_state_not_int_or_none(self, ratings_3x2):
-        with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(within_rater_shuffle(ratings_3x2, random_state="bad"))
+    @pytest.mark.parametrize("seed", ["bad", None, True])
+    def test_random_state_not_int(self, ratings_3x2, seed):
+        """None is refused too, so every run can be reproduced."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            list(within_rater_shuffle(ratings_3x2, random_state=seed))
 
     def test_category_index_not_2d(self):
         with pytest.raises(ValueError, match="category_index must be 2D"):
@@ -315,9 +315,11 @@ class TestWithinSubjectShuffleValidation:
         with pytest.raises(TypeError, match="n_permutations must be int"):
             list(within_subject_shuffle(ratings_3x2, n_permutations=5.0))
 
-    def test_random_state_not_int_or_none(self, ratings_3x2):
-        with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(within_subject_shuffle(ratings_3x2, random_state="bad"))
+    @pytest.mark.parametrize("seed", ["bad", None, True])
+    def test_random_state_not_int(self, ratings_3x2, seed):
+        """None is refused too, so every run can be reproduced."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            list(within_subject_shuffle(ratings_3x2, random_state=seed))
 
     def test_category_index_not_2d(self):
         with pytest.raises(ValueError, match="category_index must be 2D"):
@@ -414,9 +416,11 @@ class TestPoolAndRedistributeValidation:
         with pytest.raises(TypeError, match="n_permutations must be int"):
             list(pool_and_redistribute(ratings_3x2, n_permutations=5.0))
 
-    def test_random_state_not_int_or_none(self, ratings_3x2):
-        with pytest.raises(TypeError, match="random_state must be int or None"):
-            list(pool_and_redistribute(ratings_3x2, random_state="bad"))
+    @pytest.mark.parametrize("seed", ["bad", None, True])
+    def test_random_state_not_int(self, ratings_3x2, seed):
+        """None is refused too, so every run can be reproduced."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            list(pool_and_redistribute(ratings_3x2, random_state=seed))
 
     def test_category_index_not_2d(self):
         with pytest.raises(ValueError, match="category_index must be 2D"):

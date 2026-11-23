@@ -90,10 +90,7 @@ class RaterInjector(ABC):
         both into one seed, so two steps given the same ``random_state`` get
         unrelated streams, and different pairs cannot collide the way
         ``seed + position`` can. One rule for every step, the first included.
-        ``random_state=None`` means fresh randomness, as before.
         """
-        if self.config.random_state is None:
-            return np.random.default_rng()
         return np.random.default_rng([self.config.random_state, self.step_position])
 
     # Public API ------------------------------------------------------------- #

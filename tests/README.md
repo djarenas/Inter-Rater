@@ -1,6 +1,6 @@
 # Tests
 
-2276 tests across nine packages and two top-level files, run with `pytest tests/`.
+2287 tests across nine packages and two top-level files, run with `pytest tests/`.
 
 Every count in this file is a **collected** count -- what `pytest` prints, not
 what you get by counting `def test_` in the source. The two differ because
@@ -130,7 +130,7 @@ during cleaning and analysis.
 | conftest.py | Shared fixtures: DropPass instances, MatchingReport instances | -- |
 
 
-## test_analyzers/ (835 tests)
+## test_analyzers/ (846 tests)
 
 Tests for the analyzer layer: the classes that wire agreement functions,
 CI methods, bootstrap loops, and hypothesis tests into a single `estimate()`
@@ -150,12 +150,12 @@ call. Built bottom-up along the inheritance tree:
 
 | File | What it tests | Tests |
 |------|---------------|-------|
-| test_configs.py | AnalyzerConfig (defaults, custom, CI methods, random_state, frozen, validation, error prefix, summary, build_from_dict), HypothesisTestConfig (defaults, custom, methods/schemes, frozen, validation, error prefix), GroupCoefficientConfig (defaults, type guards, error prefix), FleissKappaConfig / ScottsConfig / GwetAC1Config / BrennanPredigerConfig / KrippendorffAlphaConfig (defaults, parametric_null accepted or rejected per coefficient, parametric_null warning, error prefix), IndividualMarginalConfig (defaults, validation, error prefix), CohenKappaConfig / CongerKappaConfig / LightKappaConfig (defaults, parametric_null, auto-correction, error prefix), PermutationBootstrapMeanConfig (methods, validation, error prefix), PermutationConfig / PairwisePermutationConfig / SubsetPermutationConfig (construction, validation, build_from_dict, cross-validation, error prefix) | 194 |
+| test_configs.py | AnalyzerConfig (defaults, custom, CI methods, random_state (None refused), frozen, validation, error prefix, summary, build_from_dict), HypothesisTestConfig (defaults, custom, methods/schemes, frozen, validation, error prefix), GroupCoefficientConfig (defaults, type guards, error prefix), FleissKappaConfig / ScottsConfig / GwetAC1Config / BrennanPredigerConfig / KrippendorffAlphaConfig (defaults, parametric_null accepted or rejected per coefficient, parametric_null warning, error prefix), IndividualMarginalConfig (defaults, validation, error prefix), CohenKappaConfig / CongerKappaConfig / LightKappaConfig (defaults, parametric_null, auto-correction, error prefix), PermutationBootstrapMeanConfig (methods, validation, error prefix), PermutationConfig / PairwisePermutationConfig / SubsetPermutationConfig (construction, validation, build_from_dict, cross-validation, error prefix) | 198 |
 | test_agreement_functions.py | Fleiss' kappa (observed agreement, category proportions, chance, kappa value, unweighted/linear/quadratic weights, NijMatrix/EstimatorInput paths), Krippendorff's alpha, Cohen's kappa, Brennan-Prediger, Scott's pi, Gwet's AC1, Conger's kappa, Light's kappa (point estimates against hand-computed expected values from Fleiss 1971, Light 1971 Figure 6 and 2-rater datasets) | 127 |
 | test_analyzer_classes.py | Error prefixes (all 8 leaf analyzers), permutation tests record scheme and seed (all 8), parametric results name their variance, Scott refuses an injected third rater, class hierarchy (parent class and `_ACCEPTS_WEIGHTS`), config type validation (wrong config rejected for each analyzer), no counts constructor on any analyzer, rater constraints (2-rater enforcement for Scott's/Cohen), hypothesis test guards, smoke estimates (point estimate + CI for all 8), balance profile propagation, CI method in result, ParametricCIResult disclosure (config warning, construction warning, validation-before-warning, bootstrap path stays silent) | 235 |
 | test_ci_methods.py | Error prefixes, percentile_ci (normal, edge alpha, sorted, empty, scalar), _acceleration (formula, sign, degenerate input, noise gate), bca_ci (normal, edge cases, jackknife required, fallback to percentile and its disclosure), TestEfronLawSchool (reproduces the published acceleration, z0, and central 90% interval from Efron & Tibshirani 1986 Example 3), cross-method consistency | 54 |
 | test_permutation_analysis.py | PermutationAnalysis (construction, validation, weights, _compute_ci, all 7 estimators), PairwisePermutationAnalysis (construction, observed values, per-pair bootstrap, mean bootstrap correlated/independent, result fields, Fleiss 1971 15-pair), SubsetPermutationAnalysis (construction, observed values, measurable pool per subset, per-subset bootstrap, mean bootstrap, result fields, distribution threshold), MultiKSubsetResult (construction, validation, container API, __str__, summary) | 129 |
-| test_resampling_functions.py | subject_bootstrap (count, shape, rows-from-original, K and weights kept, reproducibility, seeds), subject_jackknife (count, shape, leave-one-out, K and weights kept), within_rater_shuffle / within_subject_shuffle / pool_and_redistribute (count, shape, multiset preservation, missing values, reproducibility, changes data) | 57 |
+| test_resampling_functions.py | subject_bootstrap (count, shape, rows-from-original, K and weights kept, reproducibility, seeds), subject_jackknife (count, shape, leave-one-out, K and weights kept), within_rater_shuffle / within_subject_shuffle / pool_and_redistribute (count, shape, multiset preservation, missing values, reproducibility, changes data, None seed refused) | 64 |
 | test_shared_subjects.py | A point and its interval describe the same subjects: pairs and subsets resample the pool they were computed on (the measurable pool), on balanced and partially crossed data | 12 |
 | test_variance_functions.py | fleiss_null_variance (K=2 equal/skewed, K=3 uniform, hand-computed, validation), cohen_null_variance unweighted/weighted (symmetric, asymmetric, identity=None, positive, validation), cross-consistency (Fleiss=Cohen for 2-rater identical marginals) | 27 |
 | conftest.py | Shared fixtures: Fleiss 1971 (NijMatrix + expanded Ratings), 2-rater (10x2, K=2), 3-rater (10x3, K=2), expected-value dicts, minimal configs for all 8 coefficients, PairwisePermutationConfig instances | -- |

@@ -40,7 +40,7 @@ class WithinSubjectInjectorConfig(InjectorConfig):
     n_new_raters : int
         Inherited from InjectorConfig. How many synthetic raters to
         inject.
-    random_state : int or None, default 42
+    random_state : int, default 42
         Inherited from InjectorConfig. Seed for reproducibility.
     """
 

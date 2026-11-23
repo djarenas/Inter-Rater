@@ -48,7 +48,7 @@ class GroupCoefficientConfig(AnalyzerConfig):
     # Inherited from parent class AnalyzerConfig
     n_resamples: int
     alpha: float
-    random_state: int | None
+    random_state: int
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None

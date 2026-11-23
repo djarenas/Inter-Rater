@@ -76,8 +76,8 @@ Seeds don't collide either. Each step's generator is seeded with the pair
 pipeline (0, 1, 2, ...), which numpy mixes into one seed. Two steps given
 the same `random_state` therefore produce different raters, and a whole
 pipeline still reruns identically. Reordering steps changes the results,
-since order is part of the pipeline. `random_state=None` means fresh
-randomness on every run.
+since order is part of the pipeline. `random_state` must be an int; None
+is refused, so every run can be reproduced.
 
 A later step draws from every rater present when it runs, including
 those injected by earlier steps. A pooled or bootstrap step after a

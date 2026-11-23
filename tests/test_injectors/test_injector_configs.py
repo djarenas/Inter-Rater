@@ -71,9 +71,10 @@ class TestInjectorConfigValidation:
 
     # -- random_state -------------------------------------------------------- #
 
-    def test_random_state_none_accepted(self):
-        cfg = InjectorConfig(random_state=None)
-        assert cfg.random_state is None
+    def test_random_state_none_refused(self):
+        """None is refused, so every run can be reproduced."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            InjectorConfig(random_state=None)
 
     def test_random_state_zero_accepted(self):
         cfg = InjectorConfig(random_state=0)

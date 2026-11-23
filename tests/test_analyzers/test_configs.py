@@ -55,6 +55,17 @@ class TestAnalyzerConfig:
         with pytest.raises(AttributeError):
             cfg.n_resamples = 999
 
+    @pytest.mark.parametrize("seed", [None, "42", 4.2])
+    def test_random_state_must_be_int(self, seed):
+        """None is refused too, so every run can be reproduced."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            AnalyzerConfig(random_state=seed)
+
+    def test_random_state_none_refused_from_yaml(self):
+        """``random_state: null`` in a YAML file is refused the same way."""
+        with pytest.raises(TypeError, match="random_state must be an int"):
+            AnalyzerConfig.build_from_dict({"random_state": None})
+
     def test_n_resamples_zero_rejected(self):
         with pytest.raises(ValueError, match="n_resamples"):
             AnalyzerConfig(n_resamples=0)

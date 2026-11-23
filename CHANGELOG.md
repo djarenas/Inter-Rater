@@ -11,6 +11,12 @@ versioning follows [semver](https://semver.org/).
   chance), not `two-sided`. A config that does not set `alternative` gives
   a one-sided p-value; set `alternative: two-sided` for the old behaviour.
 
+- `random_state` must be an int everywhere: analyzer configs, injector
+  configs and the resampling functions. `None` (unseeded randomness) is
+  refused, so every run can be reproduced. The default stays 42.
+  `HypothesisTestResult.random_state` is still None when the test was not
+  a permutation test.
+
 - Analyzers are built from `Ratings` only. `build_from_nij_matrix()` and
   `estimate_from_nij_matrix()` are removed from every group analyzer, as are
   `BalanceProfile.build_from_nij_matrix()`,

@@ -63,7 +63,7 @@ Fields every analyzer shares:
 
 - `n_resamples` (int, default 1000): bootstrap draws
 - `alpha` (float, default 0.05): 0.05 gives a 95% interval
-- `random_state` (int | None, default 42): seed; None for unseeded
+- `random_state` (int, default 42): seed; None is refused, so every run can be reproduced
 - `ci_method` (str, default "percentile"): "percentile", "bca", or "parametric_null"
 - `convergence_test` (ConvergenceTest | None, default None): not supported yet, so anything but `null` is refused
 - `hypothesis_test_config` (HypothesisTestConfig | None, default None): test against H₀: coefficient = 0

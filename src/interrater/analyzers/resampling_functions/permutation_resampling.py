@@ -43,7 +43,7 @@ _ERROR_PREFIX = "[permutation_resampling] Error"
 def within_rater_shuffle(
     category_index: np.ndarray,
     n_permutations: int = 5000,
-    random_state: int | None = 42,
+    random_state: int = 42,
 ) -> Iterator[np.ndarray]:
     """
     Shuffle each rater's answers across the subjects that rater rated.
@@ -67,7 +67,7 @@ def within_rater_shuffle(
         where -1 indicates missing. Validated already by Ratings.
     n_permutations : int, default 5000
         Number of permuted arrays to yield.
-    random_state : int | None, default 42
+    random_state : int, default 42
         Random seed for reproducibility.
 
     Yields
@@ -80,7 +80,7 @@ def within_rater_shuffle(
     ------
     TypeError
         If category_index is not np.ndarray, n_permutations is not int,
-        or random_state is not int or None.
+        or random_state is not an int.
     ValueError
         If category_index is not 2D or n_permutations < 1.
     """
@@ -95,9 +95,10 @@ def within_rater_shuffle(
             f"{_ERROR_PREFIX}: n_permutations must be int, "
             f"got {type(n_permutations).__name__}"
         )
-    if random_state is not None and not isinstance(random_state, int):
+    if isinstance(random_state, bool) or not isinstance(random_state, int):
         raise TypeError(
-            f"{_ERROR_PREFIX}: random_state must be int or None, "
+            f"{_ERROR_PREFIX}: random_state must be an int (default 42) "
+            f"so the draws can be reproduced, "
             f"got {type(random_state).__name__}"
         )
 
@@ -131,7 +132,7 @@ def within_rater_shuffle(
 def within_subject_shuffle(
     category_index: np.ndarray,
     n_permutations: int = 5000,
-    random_state: int | None = 42,
+    random_state: int = 42,
 ) -> Iterator[np.ndarray]:
     """
     Shuffle category assignments within each subject's row.
@@ -163,7 +164,7 @@ def within_subject_shuffle(
         where -1 indicates missing. Validated already by Ratings.
     n_permutations : int, default 5000
         Number of permuted arrays to yield.
-    random_state : int | None, default 42
+    random_state : int, default 42
         Random seed for reproducibility.
 
     Yields
@@ -176,7 +177,7 @@ def within_subject_shuffle(
     ------
     TypeError
         If category_index is not np.ndarray, n_permutations is not int,
-        or random_state is not int or None.
+        or random_state is not an int.
     ValueError
         If category_index is not 2D or n_permutations < 1.
     """
@@ -191,9 +192,10 @@ def within_subject_shuffle(
             f"{_ERROR_PREFIX}: n_permutations must be int, "
             f"got {type(n_permutations).__name__}"
         )
-    if random_state is not None and not isinstance(random_state, int):
+    if isinstance(random_state, bool) or not isinstance(random_state, int):
         raise TypeError(
-            f"{_ERROR_PREFIX}: random_state must be int or None, "
+            f"{_ERROR_PREFIX}: random_state must be an int (default 42) "
+            f"so the draws can be reproduced, "
             f"got {type(random_state).__name__}"
         )
 
@@ -227,7 +229,7 @@ def within_subject_shuffle(
 def pool_and_redistribute(
     category_index: np.ndarray,
     n_permutations: int = 5000,
-    random_state: int | None = 42,
+    random_state: int = 42,
 ) -> Iterator[np.ndarray]:
     """
     Pool all ratings and redistribute them randomly into the rated cells.
@@ -249,7 +251,7 @@ def pool_and_redistribute(
         where -1 indicates missing. Validated already by Ratings.
     n_permutations : int, default 5000
         Number of permuted arrays to yield.
-    random_state : int | None, default 42
+    random_state : int, default 42
         Random seed for reproducibility.
 
     Yields
@@ -262,7 +264,7 @@ def pool_and_redistribute(
     ------
     TypeError
         If category_index is not np.ndarray, n_permutations is not int,
-        or random_state is not int or None.
+        or random_state is not an int.
     ValueError
         If category_index is not 2D or n_permutations < 1.
     """
@@ -277,9 +279,10 @@ def pool_and_redistribute(
             f"{_ERROR_PREFIX}: n_permutations must be int, "
             f"got {type(n_permutations).__name__}"
         )
-    if random_state is not None and not isinstance(random_state, int):
+    if isinstance(random_state, bool) or not isinstance(random_state, int):
         raise TypeError(
-            f"{_ERROR_PREFIX}: random_state must be int or None, "
+            f"{_ERROR_PREFIX}: random_state must be an int (default 42) "
+            f"so the draws can be reproduced, "
             f"got {type(random_state).__name__}"
         )
 
