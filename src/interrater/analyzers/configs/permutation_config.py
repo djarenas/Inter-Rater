@@ -286,6 +286,34 @@ class PermutationConfig(ABC):
 
         return data_dict
 
+    @staticmethod
+    def _resolve_config_class(coefficient: str) -> type | None:
+        """
+        The AnalyzerConfig subclass for a coefficient name, or None if
+        unknown.
+
+        The one map both children use, to check config_of_coefficient and to
+        build it from a dict. The leaf configs are imported inside, so
+        importing this module does not import all of them.
+        """
+        from .brennan_prediger_config import BrennanPredigerConfig
+        from .cohen_kappa_config import CohenKappaConfig
+        from .conger_kappa_config import CongerKappaConfig
+        from .fleiss_kappa_config import FleissKappaConfig
+        from .gwet_ac1_config import GwetAC1Config
+        from .krippendorff_alpha_config import KrippendorffAlphaConfig
+        from .scotts_config import ScottsConfig
+
+        return {
+            "cohen_kappa": CohenKappaConfig,
+            "scotts_pi": ScottsConfig,
+            "conger_kappa": CongerKappaConfig,
+            "gwet_ac1": GwetAC1Config,
+            "fleiss_kappa": FleissKappaConfig,
+            "brennan_prediger": BrennanPredigerConfig,
+            "krippendorff_alpha": KrippendorffAlphaConfig,
+        }.get(coefficient)
+
     # Public API ------------------------------------------------------------- #
 
     @classmethod
@@ -308,6 +336,12 @@ class PermutationConfig(ABC):
         PermutationConfig
             Instantiated config object with validation applied.
         """
+        # Just an extra precaution to ensure proper inheritance of the
+        # abstract method.
+        raise NotImplementedError(
+            f"{_ERROR_PREFIX}: build_from_dict() must be implemented by "
+            f"subclass"
+        )
 
     @classmethod
     def build_from_yaml(cls, path: str) -> PermutationConfig:
@@ -318,7 +352,7 @@ class PermutationConfig(ABC):
         normalizes aliases, refuses unknown keys, and turns the nested
         ``bootstrap_mean`` entry into its config object; children also turn
         ``config_of_coefficient`` into its config.
-        Children that override ``build_from_dict`` get
+        Children that implement ``build_from_dict`` get
         correct dispatch via ``cls`` without overriding this method.
 
         Parameters
@@ -344,6 +378,7 @@ class PermutationConfig(ABC):
         with open(path) as f:
             data_dict = yaml.safe_load(f)
 
+        # Uses the build_from_dict defined by the child classes
         return cls.build_from_dict(data_dict)
 
     def summary(self) -> dict:

@@ -204,8 +204,8 @@ computed on pairs of raters. All agreement coefficients work on 2 raters:
 - Brennan-Prediger (uniform chance, group coefficient)
 - Krippendorff's alpha (reliability coefficient, any number of raters)
 
-Pairwise permutation is useful for detecting raters that may be problematic
-or for understanding how each pair of raters agrees.
+Pairwise permutation is useful for detecting raters who may not be
+interchangeable, or for understanding how each pair of raters agrees.
 """
 
 SUBSET_PERMUTATION_COEFFICIENTS: frozenset[str] = frozenset([

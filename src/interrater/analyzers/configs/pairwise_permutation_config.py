@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ...contracts import PAIRWISE_PERMUTATION_COEFFICIENTS
 from .permutation_config import PermutationConfig
-from .analyzer_config import AnalyzerConfig
-from .permutation_bootstrap_mean_config import PermutationBootstrapMeanConfig
+
+if TYPE_CHECKING:
+    from .analyzer_config import AnalyzerConfig
+    from .permutation_bootstrap_mean_config import (
+        PermutationBootstrapMeanConfig,
+    )
 
 _ERROR_PREFIX = "[PairwisePermutationConfig] Error"
 
@@ -17,12 +22,12 @@ class PairwisePermutationConfig(PermutationConfig):
     """
     I am the configuration for pairwise permutation analysis.
 
-    I compute a coefficient for all C(n_raters, 2) pairs of raters. This is
-    useful for detecting which raters may not be interchangeable or for understanding
-    how each pair of raters agrees independently.
-    It should be mentioned that a rater with pairs that have more disagreement
-    does not mean that this rater is wrong - maybe they have more training
-    or more context etc... perhaps a more accurate more like it is not interchangeable
+    I configure a coefficient computed for each of the C(n_raters, 2) pairs
+    of raters. This shows which pairs agree less than others, which can point
+    to raters who are not interchangeable. A rater whose pairs disagree more
+    is not necessarily wrong: they may have more training or more context.
+    Low agreement suggests the raters are not interchangeable, not which of
+    them is right.
 
     I enforce that:
     - coefficient_to_compute is in PAIRWISE_PERMUTATION_COEFFICIENTS
@@ -33,8 +38,11 @@ class PairwisePermutationConfig(PermutationConfig):
 
     # Inherited from PermutationConfig
     coefficient_to_compute: str
-    config_of_coefficient: AnalyzerConfig # In this object, checked that you want an analyzer that is consistent with pairwise permutations
-    subset_k: int | None  # Checks that this value is None. Subsets should not happen in Pairwise permutations, but a user may put by mistake from a leftover config
+    # Checked against coefficient_to_compute
+    config_of_coefficient: AnalyzerConfig
+    # Must be None: pairwise is k = 2 (a leftover from a subset config is
+    # refused)
+    subset_k: int | None
     bootstrap_mean_config: PermutationBootstrapMeanConfig | None
     balanced_data_only: bool
     keep_draws: bool
@@ -57,12 +65,14 @@ class PairwisePermutationConfig(PermutationConfig):
         if self.subset_k is not None:
             raise ValueError(
                 f"{_ERROR_PREFIX}: subset_k must be None for pairwise "
-                f"permutation (pairwise is always k=2). "
-                f"Got subset_k={self.subset_k}"
+                f"permutation (pairwise is always k=2), "
+                f"got subset_k={self.subset_k}"
             )
 
-        # Validate that coefficient is pairwise-capable
-        if self.coefficient_to_compute not in PAIRWISE_PERMUTATION_COEFFICIENTS:
+        # Validate that coefficient is pairwise-capable. Every coefficient
+        # is today, so this only guards a future one that cannot run on pairs.
+        coefficient = self.coefficient_to_compute
+        if coefficient not in PAIRWISE_PERMUTATION_COEFFICIENTS:
             raise ValueError(
                 f"{_ERROR_PREFIX}: '{self.coefficient_to_compute}' does "
                 f"not support pairwise permutation. Allowed coefficients: "
@@ -70,25 +80,13 @@ class PairwisePermutationConfig(PermutationConfig):
             )
 
         # Validate that config_of_coefficient matches the coefficient
-        expected_config_map = {
-            "cohen_kappa": "CohenKappaConfig",
-            "scotts_pi": "ScottsConfig",
-            "conger_kappa": "CongerKappaConfig",
-            "gwet_ac1": "GwetAC1Config",
-            "fleiss_kappa": "FleissKappaConfig",
-            "brennan_prediger": "BrennanPredigerConfig",
-            "krippendorff_alpha": "KrippendorffAlphaConfig",
-        }
-
-        expected_config_class = expected_config_map[self.coefficient_to_compute]
-        actual_config_class = type(self.config_of_coefficient).__name__
-
-        if actual_config_class != expected_config_class:
+        expected = self._resolve_config_class(self.coefficient_to_compute)
+        if not isinstance(self.config_of_coefficient, expected):
             raise TypeError(
                 f"{_ERROR_PREFIX}: coefficient_to_compute="
                 f"'{self.coefficient_to_compute}' requires "
-                f"config_of_coefficient to be {expected_config_class}, "
-                f"got {actual_config_class}"
+                f"config_of_coefficient to be {expected.__name__}, "
+                f"got {type(self.config_of_coefficient).__name__}"
             )
 
     # Public API ------------------------------------------------------------- #
@@ -98,14 +96,13 @@ class PairwisePermutationConfig(PermutationConfig):
         """
         Build a pairwise permutation config from a plain dictionary.
 
-        I do everything the parent's ``_prepare_dict`` does (validate
+        Does everything the parent's ``_prepare_dict`` does (validate
         inputs, normalize YAML aliases, hydrate bootstrap_mean_config),
-        then I hydrate ``config_of_coefficient`` into the correct
+        then hydrates ``config_of_coefficient`` into the correct
         AnalyzerConfig subclass based on ``coefficient_to_compute``.
 
-        If ``coefficient_to_compute`` is not in the pairwise map, I skip
-        hydration and let ``__post_init__`` reject it with its own clear
-        error message.
+        If ``coefficient_to_compute`` is unknown, hydration is skipped and
+        ``__post_init__`` rejects it with its own clear error message.
 
         Parameters
         ----------
@@ -127,28 +124,9 @@ class PairwisePermutationConfig(PermutationConfig):
         """
         cls._prepare_dict(data_dict)
 
-        # Map pairwise coefficients to their config classes
-        from .cohen_kappa_config import CohenKappaConfig
-        from .conger_kappa_config import CongerKappaConfig
-        from .scotts_config import ScottsConfig
-        from .gwet_ac1_config import GwetAC1Config
-        from .fleiss_kappa_config import FleissKappaConfig
-        from .brennan_prediger_config import BrennanPredigerConfig
-        from .krippendorff_alpha_config import KrippendorffAlphaConfig
-
-        config_class_map = {
-            "cohen_kappa": CohenKappaConfig,
-            "scotts_pi": ScottsConfig,
-            "conger_kappa": CongerKappaConfig,
-            "gwet_ac1": GwetAC1Config,
-            "fleiss_kappa": FleissKappaConfig,
-            "brennan_prediger": BrennanPredigerConfig,
-            "krippendorff_alpha": KrippendorffAlphaConfig,
-        }
-
         # Hydrate config_of_coefficient if it is still a raw dict
         coefficient = data_dict.get("coefficient_to_compute")
-        config_class = config_class_map.get(coefficient)
+        config_class = cls._resolve_config_class(coefficient)
 
         if config_class is not None:
             coc = data_dict.get("config_of_coefficient")
@@ -158,7 +136,3 @@ class PairwisePermutationConfig(PermutationConfig):
                 )
 
         return cls(**data_dict)
-
-    def summary(self) -> dict:
-        """Return configuration (inherited from parent)."""
-        return super().summary()

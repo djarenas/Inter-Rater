@@ -93,30 +93,19 @@ class SubsetPermutationConfig(PermutationConfig):
             )
 
         # Validate that config_of_coefficient matches the coefficient
-        # Map coefficient names to expected config class names
-        expected_config_map = {
-            "fleiss_kappa": "FleissKappaConfig",
-            "gwet_ac1": "GwetAC1Config",
-            "brennan_prediger": "BrennanPredigerConfig",
-            "krippendorff_alpha": "KrippendorffAlphaConfig",
-        }
-
-        expected_config_class = expected_config_map.get(
-            self.coefficient_to_compute
-        )
-        if expected_config_class is None:
+        expected = self._resolve_config_class(self.coefficient_to_compute)
+        if expected is None:
             # This shouldn't happen if contracts are correct, but guard it
             raise ValueError(
                 f"{_ERROR_PREFIX}: Unknown coefficient '{self.coefficient_to_compute}'"
             )
 
-        actual_config_class = type(self.config_of_coefficient).__name__
-
-        if actual_config_class != expected_config_class:
+        if not isinstance(self.config_of_coefficient, expected):
             raise TypeError(
-                f"{_ERROR_PREFIX}: coefficient_to_compute='{self.coefficient_to_compute}' "
-                f"requires config_of_coefficient to be {expected_config_class}, "
-                f"got {actual_config_class}"
+                f"{_ERROR_PREFIX}: coefficient_to_compute="
+                f"'{self.coefficient_to_compute}' requires "
+                f"config_of_coefficient to be {expected.__name__}, "
+                f"got {type(self.config_of_coefficient).__name__}"
             )
 
     # Public API ------------------------------------------------------------- #
@@ -155,24 +144,11 @@ class SubsetPermutationConfig(PermutationConfig):
         """
         cls._prepare_dict(data_dict)
 
-        # Map subset coefficients to their config classes
-        from .fleiss_kappa_config import FleissKappaConfig
-        from .gwet_ac1_config import GwetAC1Config
-        from .brennan_prediger_config import BrennanPredigerConfig
-        from .krippendorff_alpha_config import KrippendorffAlphaConfig
-
-        config_class_map = {
-            "fleiss_kappa": FleissKappaConfig,
-            "gwet_ac1": GwetAC1Config,
-            "brennan_prediger": BrennanPredigerConfig,
-            "krippendorff_alpha": KrippendorffAlphaConfig,
-        }
-
         # Hydrate config_of_coefficient if it is still a raw dict
         coefficient = data_dict.get("coefficient_to_compute")
         if coefficient == "scotts_pi":
             raise ValueError(f"{_ERROR_PREFIX}: {_SCOTTS_PI_NOT_FOR_SUBSETS}")
-        config_class = config_class_map.get(coefficient)
+        config_class = cls._resolve_config_class(coefficient)
 
         if config_class is not None:
             coc = data_dict.get("config_of_coefficient")
@@ -182,10 +158,6 @@ class SubsetPermutationConfig(PermutationConfig):
                 )
 
         return cls(**data_dict)
-
-    def summary(self) -> dict:
-        """Return configuration (version and nested config from parent)."""
-        return super().summary()
 
     # Private helpers -------------------------------------------------------- #
 
