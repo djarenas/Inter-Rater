@@ -265,9 +265,9 @@ class OrderedCategories(DistanceCategories):
         return self.weighting == other.weighting
 
     def weight_matrix(self) -> np.ndarray:
-        k        = self.n_categories
-        rank     = np.arange(k)
-        distance = np.abs(rank[:, None] - rank[None, :]).astype(np.float64)
+        n_categories = self.n_categories
+        rank         = np.arange(n_categories)
+        distance     = np.abs(rank[:, None] - rank[None, :]).astype(np.float64)
         if self.weighting == "quadratic":
             distance = distance ** 2
         return 1.0 - distance / distance.max()
@@ -315,12 +315,13 @@ class WeightedCategories(DistanceCategories):
             raise type(exc)(f"{self._ERROR_PREFIX}: {exc}") from exc
 
         name = type(self).__name__
-        k    = self.n_categories
+        n_categories = self.n_categories
 
-        if self.weights.shape != (k, k):
+        if self.weights.shape != (n_categories, n_categories):
             raise ValueError(
-                f"{name}.weights must be ({k}, {k}) to match its {k} "
-                f"categories, got {self.weights.shape}."
+                f"{name}.weights must be ({n_categories}, {n_categories}) "
+                f"to match its {n_categories} categories, got "
+                f"{self.weights.shape}."
             )
         if not np.allclose(self.weights, self.weights.T):
             raise ValueError(

@@ -131,8 +131,8 @@ class BalanceProfilePlotter:
         # Labels
         # ------------------------------------------------------------------ #
 
-        def _raters(k: int) -> str:
-            return f"{k} rater" if k == 1 else f"{k} raters"
+        def _raters(n: int) -> str:
+            return f"{n} rater" if n == 1 else f"{n} raters"
 
         if profile.is_balanced:
             title = f"Balanced: every subject has {_raters(profile.raters_per_subject)}"

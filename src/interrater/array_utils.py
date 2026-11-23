@@ -62,7 +62,9 @@ def n_per_rater(category_index: np.ndarray) -> np.ndarray:
     return present_mask(category_index).sum(axis=0).astype(np.int32)
 
 
-def category_counts(category_index: np.ndarray, k: int) -> np.ndarray:
+def category_counts(
+    category_index: np.ndarray, n_categories: int
+) -> np.ndarray:
     """
     Calculates the n_ij matrix as a np.ndarray
     n_ij matrix: How many raters put each subject in each category. i: Subject index; j: Category index. 
@@ -75,9 +77,11 @@ def category_counts(category_index: np.ndarray, k: int) -> np.ndarray:
     n_subjects = category_index.shape[0]
     present    = present_mask(category_index)
     row_index  = np.repeat(np.arange(n_subjects), present.sum(axis=1))
-    flat       = row_index * k + category_index[present].astype(np.int64)
-    counts     = np.bincount(flat, minlength=n_subjects * k)
-    return counts.reshape(n_subjects, k).astype(np.int32)
+    flat       = (
+        row_index * n_categories + category_index[present].astype(np.int64)
+    )
+    counts     = np.bincount(flat, minlength=n_subjects * n_categories)
+    return counts.reshape(n_subjects, n_categories).astype(np.int32)
 
 
 # Shared subjects -------------------------------------------------------------  #

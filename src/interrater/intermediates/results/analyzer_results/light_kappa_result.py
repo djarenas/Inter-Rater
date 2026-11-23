@@ -239,8 +239,9 @@ class LightKappaResult(PointEstimateResult):
     def _made_of_line(self) -> str:
         """The pair kappas the mean is made of, and where each pair's terms are."""
         kappas = [
-            k for k in (p.coefficient() for p in self.pair_parts.values())
-            if not math.isnan(k)
+            kappa
+            for kappa in (p.coefficient() for p in self.pair_parts.values())
+            if not math.isnan(kappa)
         ]
         where = "each pair's Po and Pe in pair_parts, κ_max in pair_kappa_max"
         if not kappas:

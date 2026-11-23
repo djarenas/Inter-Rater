@@ -1,12 +1,12 @@
-"""Pairwise permutation analysis -- runs a coefficient across every
+"""Pairwise permutation analysis. Runs a coefficient across every
 C(n_raters, 2) rater pair.
 
-I execute the three computations described in README.md:
+Runs the three computations described in README.md:
 
 - A (observed): coefficient for each pair, subjects per pair, mean.
 - B (per-pair bootstrap): resample subjects within each pair, produce
   per-pair distributions and CIs.
-- C (mean bootstrap): correlated (global resample, all pairs on the
+- C (mean bootstrap, optional): correlated (global resample, all pairs on the
   same draw) or independent (sample from B's per-pair distributions,
   picked while B runs; see IndependentMeanDraws).
 
@@ -23,7 +23,8 @@ import numpy as np
 
 from ...contracts import EMPTY
 from ...intermediates.results.ci_results import BootstrapCIResult
-from .permutation_analysis import IndependentMeanDraws, PermutationAnalysis
+from .independent_mean_draws import IndependentMeanDraws
+from .permutation_analysis import PermutationAnalysis
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
@@ -39,9 +40,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
     """
     I run a pairwise coefficient across every C(n_raters, 2) rater pair.
 
-    I inherit from PermutationAnalysis -- validation, EstimatorInput,
-    estimator resolution, and ``_compute_ci`` are already done. I own
-    ``run()``, which executes Computations A, B, and C and returns a
+    The parent already validated the ratings and config, applied the
+    injection, built the profiles and the EstimatorInput (the ratings with
+    K and weights), and resolved the estimator. I own ``run()``, which
+    executes Computations A, B, and C and returns a
     ``PairwisePermutationResult``.
 
     A and B run always (the analyzer config requires n_resamples >= 1).
@@ -66,10 +68,14 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         Raises
         ------
         TypeError
-            If config is not PairwisePermutationConfig.
+            If config is not PairwisePermutationConfig, or ratings is not
+            Ratings.
         ValueError
             If the run would compute the coefficient more than
-            config.max_evaluations times.
+            config.max_evaluations times, or the parent refuses the data
+            (Conger's kappa on incomplete data, balanced_data_only on an
+            unbalanced panel, or weights on a coefficient without a
+            weighted form).
         """
         from ..configs.pairwise_permutation_config import (
             PairwisePermutationConfig as _PPC,
@@ -102,14 +108,13 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         """
         Execute pairwise permutation analysis.
 
-        Runs Computation A (always), B (if per-pair bootstrap requested),
-        and C (if mean bootstrap requested). Assembles all results into
-        a ``PairwisePermutationResult``.
+        Runs Computations A and B (always) and C (if bootstrap_mean_config
+        is set). Assembles all results into a ``PairwisePermutationResult``.
 
         Returns
         -------
         PairwisePermutationResult
-            Observed values, optional per-pair bootstrap, optional mean
+            Observed values, per-pair bootstrap, and the optional mean
             bootstrap.
         """
         from ...intermediates.results.permutation_results.pairwise_permutation_result import (
@@ -262,7 +267,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         child_seeds = ss.spawn(len(pairs))
 
         distributions: dict[tuple, np.ndarray] = {}
-        cis: dict[tuple, tuple[float, float]] = {}
+        cis: dict[tuple, BootstrapCIResult] = {}
 
         for pair, seed in zip(pairs, child_seeds):
             rng = np.random.default_rng(seed)
@@ -277,10 +282,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             shared = np.flatnonzero(present[:, 0] & present[:, 1])
 
             if shared.size < 2:
-                # Two raters with fewer than two subjects in common have no
-                # coefficient to resample. Every draw fails, so no method
-                # runs -- which the result states rather than implying with
-                # a pair of NaNs.
+                # Fewer than two shared subjects: no coefficient, so every
+                # draw fails and no method runs. The result says so instead
+                # of carrying bare NaNs.
                 if keep_draws:
                     distributions[pair] = np.full(n_resamples, np.nan)
                 cis[pair] = BootstrapCIResult(
@@ -310,10 +314,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 distributions[pair] = draws
             point = pairwise_values[pair]
 
-            # The jackknife leaves out the subjects this pair was computed
-            # from -- `shared`, not every subject. A subject the pair never
-            # rated cannot influence the pair's coefficient, so including it
-            # would contribute a deviation representing no influence at all.
+            # BCa's jackknife uses only the pair's shared subjects (see
+            # README.md, "BCa for a pair: Use only the subjects shared by
+            # the pair").
             def _jackknife(pd=pair_data, sh=shared) -> np.ndarray:
                 return np.array([
                     estimate_subset(
@@ -334,7 +337,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         independent: IndependentMeanDraws | None,
         mean_over_pairs: float,
         defined_pairs: list,
-    ) -> tuple[np.ndarray, tuple[float, float]]:
+    ) -> tuple[np.ndarray, BootstrapCIResult]:
         """
         Computation C: mean bootstrap.
 
@@ -347,8 +350,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         **Independent:** Sample from B's per-pair distributions. For
         each draw, pick one value from each pair's bootstrap
-        distribution, average. Treats pairs as independent -- the CI
-        will be narrower than correlated and may underestimate variance.
+        distribution, average. Ignores the covariance between pairs
+        sharing a rater, so when that covariance is positive the interval
+        is too narrow.
         Cost: 0 estimator calls; the picks were made while B ran (see
         IndependentMeanDraws), so here they are only read off.
 
@@ -366,10 +370,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         Returns
         -------
-        tuple[np.ndarray, tuple[float, float]]
+        tuple[np.ndarray, BootstrapCIResult]
             (mean_distribution, mean_ci)
             distribution: shape (n_resamples,)
-            ci: (lower, upper)
+            ci: the interval of the mean
         """
         # The mean uses the coefficient's draw count, interval method, level
         # and seed. The per-combination draws use child streams spawned from

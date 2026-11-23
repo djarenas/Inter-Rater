@@ -44,6 +44,12 @@ on each. The coefficient is an ``Estimator = Callable[[EstimatorInput], float]``
 - ``GUARD_MAX_SUBSETS`` (in ``contracts``, 10,000) caps how many subsets one
   call may compute.
 
+## independent_mean_draws.py
+
+``IndependentMeanDraws`` builds the independent mean's draws (Computation C,
+method "independent") while B runs: it picks from each unit's draws as the
+unit is made, so B can discard them when ``keep_draws`` is false.
+
 
 ## Three computations
 
@@ -93,6 +99,21 @@ way (`estimate_subsets` passes the whole array and the estimator skips the gaps)
 Resampling the complete cases of a 3-rater subset instead changes the
 estimand; on partially crossed data it shows as an interval that does not
 contain its own point.
+
+#### BCa for a pair: Use only the subjects shared by the pair
+
+BCa's acceleration term is computed from a jackknife: the coefficient is
+recomputed with one subject left out at a time (see ``ci_methods.py``). For
+a pair, the code here leaves out only the subjects both raters rated, the
+same subjects the pair's bootstrap resamples. For a subset, it leaves out
+only subjects in its pool.
+
+If the jackknife also left out subjects the pair did not rate, each of those
+would return the full-data coefficient unchanged. Those repeated values
+still enter the acceleration and shift it, so the BCa interval would depend
+on how many subjects the pair did not rate. For example, leave-one-out
+values 0.50, 0.51, 0.52 and 0.60 with a full-data value of 0.52 give an
+acceleration of -0.087; adding 4 unchanged values makes it -0.118.
 
 #### When a pair or subset has no number
 
@@ -167,9 +188,8 @@ BCa's acceleration comes from leave-one-out estimates, and the unit left out
 must be the unit that was resampled.
 
 - **Per-subset intervals** resample the subjects in the subset's pool, so
-  the jackknife leaves out one of those. Leaving out a subject outside the
-  pool would add a zero deviation, shrink the acceleration toward zero, and
-  still report BCa.
+  the jackknife leaves out one of those (see "BCa for a pair: Use only the
+  subjects shared by the pair").
 - **The correlated mean** resamples subjects globally, so its jackknife is
   global: drop one subject, recompute every subset, average.
 - **The independent mean** never resamples subjects, so there is nothing to

@@ -81,15 +81,18 @@ def rater_marginals(data: EstimatorInput, rows: np.ndarray | None = None) -> np.
     category this rater never chose is a zero rather than an absence.
     """
     index = data.category_index if rows is None else data.category_index[rows]
-    k     = data.n_categories
+    n_categories = data.n_categories
 
-    out = np.zeros((index.shape[1], k), dtype=np.float64)
+    out = np.zeros((index.shape[1], n_categories), dtype=np.float64)
     for r in range(index.shape[1]):
         column = index[:, r]
         column = column[column != EMPTY]
         if column.size == 0:
             continue
-        out[r] = np.bincount(column.astype(np.int64), minlength=k) / column.size
+        out[r] = (
+            np.bincount(column.astype(np.int64), minlength=n_categories)
+            / column.size
+        )
     return out
 
 
@@ -204,10 +207,12 @@ def max_observed_agreement(
 
     from scipy.optimize import linprog
 
-    k = a.size
+    n_categories = a.size
     # One variable per cell of the K x K table, row-major: x[j, l] at j*K + l
-    rows = np.kron(np.eye(k), np.ones((1, k)))   # Sum_l x[j, l] = a_j
-    cols = np.kron(np.ones((1, k)), np.eye(k))   # Sum_j x[j, l] = b_l
+    # Sum_l x[j, l] = a_j
+    rows = np.kron(np.eye(n_categories), np.ones((1, n_categories)))
+    # Sum_j x[j, l] = b_l
+    cols = np.kron(np.ones((1, n_categories)), np.eye(n_categories))
     solved = linprog(
         c=-weights.matrix.reshape(-1),
         A_eq=np.vstack([rows, cols]),
@@ -375,7 +380,7 @@ def light_kappa(data: EstimatorInput) -> float:
         agreement_corrected_by_chance(po, pe)
         for po, pe in light_pair_parts(data).values()
     ]
-    defined = [k for k in kappas if not np.isnan(k)]
+    defined = [kappa for kappa in kappas if not np.isnan(kappa)]
     return float(np.mean(defined)) if defined else float("nan")
 
 

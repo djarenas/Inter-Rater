@@ -198,11 +198,11 @@ def chance_gwet_ac1(nij: NijMatrix, weights: Weights | None = None) -> float:
     categories.
     """
     pj = category_proportions(nij)
-    k = nij.n_categories
-    pe = (pj * (1.0 - pj)).sum() / (k - 1)
+    n_categories = nij.n_categories
+    pe = (pj * (1.0 - pj)).sum() / (n_categories - 1)
     if weights is None or weights.is_identity:
         return float(pe)
-    return float(weights.matrix.sum() / k * pe)
+    return float(weights.matrix.sum() / n_categories * pe)
 
 
 def chance_brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> float:
@@ -226,10 +226,10 @@ def chance_brennan_prediger(nij: NijMatrix, weights: Weights | None = None) -> f
     and the package matches it on every weighted case in
     ``analyses/external_validation/``.
     """
-    k = nij.n_categories
+    n_categories = nij.n_categories
     if weights is None or weights.is_identity:
-        return float(1.0 / k)
-    return float(weights.matrix.sum() / (k * k))
+        return float(1.0 / n_categories)
+    return float(weights.matrix.sum() / (n_categories * n_categories))
 
 
 # Coefficients -----------------------------------------------------------  #

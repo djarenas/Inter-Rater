@@ -27,7 +27,8 @@ import numpy as np
 
 from ...contracts import EMPTY, GUARD_MAX_SUBSETS
 from ...intermediates.results.ci_results import BootstrapCIResult
-from .permutation_analysis import IndependentMeanDraws, PermutationAnalysis
+from .independent_mean_draws import IndependentMeanDraws
+from .permutation_analysis import PermutationAnalysis
 
 if TYPE_CHECKING:
     from ...data_objects.ratings import Ratings
@@ -468,7 +469,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 np.array(subset)
             )
 
-            # At least two of these k raters rated it -- see the docstring
+            # At least two of these k raters (using k for number of raters, why) rated it -- see the docstring
             # for why two, and why not all k.
             present = subset_data.category_index != EMPTY
             measurable = np.flatnonzero(present.sum(axis=1) >= 2)
@@ -507,11 +508,9 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 distributions[subset] = draws
             point = subset_values[subset]
 
-            # The jackknife leaves out the subjects this subset was
-            # computed from -- `measurable`, the same pool the bootstrap
-            # draws from. A subject that contributes nothing to the
-            # coefficient cannot influence it, so including it would add a
-            # deviation representing no influence at all.
+            # BCa's jackknife uses only the subset's pool, `measurable` (see
+            # README.md, "BCa for a pair: Use only the subjects shared by
+            # the pair").
             def _jackknife(sd=subset_data, sh=measurable) -> np.ndarray:
                 return np.array([
                     estimate_subset(

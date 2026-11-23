@@ -98,14 +98,15 @@ def validate_matches_n_subjects(
 def validate_values_in_categories(
     category_index: np.ndarray, semantics: RatingsSemantics, cls_name: str
 ) -> None:
-    k       = semantics.n_categories
-    illegal = (category_index < EMPTY) | (category_index >= k)
-    n_bad   = int(illegal.sum())
+    n_categories = semantics.n_categories
+    illegal      = (category_index < EMPTY) | (category_index >= n_categories)
+    n_bad        = int(illegal.sum())
     if n_bad:
         examples = np.unique(category_index[illegal])[:3].tolist()
         raise ValueError(
             f"{_prefix(cls_name)}: category_index holds {n_bad:,} value(s) outside its "
-            f"categories (e.g. {examples}). Valid values are 0..{k - 1}, "
+            f"categories (e.g. {examples}). Valid values are "
+            f"0..{n_categories - 1}, "
             f"indexing {list(semantics.categories.names)}, or EMPTY ({EMPTY}). "
             f"Use a cleaner to map raw responses onto the categories first."
         )

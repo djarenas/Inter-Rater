@@ -181,18 +181,19 @@ class BrennanPredigerResult(PointEstimateResult):
                 f"Brennan-Prediger ({KAPPA_MAX_NOT_COMPUTED}), "
                 f"got {self.kappa_max!r}"
             )
-        k = len(self.agreement_profile.category_names)
+        n_categories = len(self.agreement_profile.category_names)
         if not weighted:
-            pe, formula = 1.0 / k, f"1/K with K = {k}"
+            pe, formula = 1.0 / n_categories, f"1/K with K = {n_categories}"
         elif self.weight_matrix is not None:
             matrix = np.asarray(self.weight_matrix, dtype=float)
-            if matrix.shape != (k, k):
+            if matrix.shape != (n_categories, n_categories):
                 raise ValueError(
                     f"{_ERROR_PREFIX}: weight_matrix is {matrix.shape[0]}x"
-                    f"{matrix.shape[1]} but the agreement profile has {k} "
-                    f"categories"
+                    f"{matrix.shape[1]} but the agreement profile has "
+                    f"{n_categories} categories"
                 )
-            pe, formula = float(matrix.sum()) / (k * k), "sum(W)/K^2"
+            pe = float(matrix.sum()) / (n_categories * n_categories)
+            formula = "sum(W)/K^2"
         else:
             return
         if abs(pe - self.parts.chance) > _TOL:

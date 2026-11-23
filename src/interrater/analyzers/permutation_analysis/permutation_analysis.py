@@ -1,12 +1,17 @@
 """Base class for permutation analysis across rater subsets.
 
-I am NOT in the Analyzer tree. An Analyzer computes one coefficient on one
-data slice. I enumerate subsets (pairs, leave-one-out, arbitrary size) and
-call an estimator on each, then assemble the results.
+PermutationAnalysis is not in the Analyzer tree. An Analyzer computes one
+coefficient on one data slice; a permutation analysis enumerates pairs or
+subsets of raters and computes the coefficient on each. Three computations:
 
-See README.md in this directory for the full architecture: three
-computations (A observed, B per-pair bootstrap, C mean bootstrap), their
-costs, and why each uses its own resampling scheme.
+- A (observed): the coefficient for each pair or subset, and their mean.
+- B (per-unit bootstrap): resample subjects within each pair or subset,
+  giving its distribution and interval.
+- C (mean bootstrap, optional): correlated (resample subjects once, all
+  units on the same draw) or independent (pick from B's draws).
+
+README.md in this directory has the details: costs, which subjects each
+unit uses, and why B and C resample differently.
 """
 
 from __future__ import annotations
@@ -32,14 +37,6 @@ if TYPE_CHECKING:
     from ..configs.permutation_config import PermutationConfig
 
 _ERROR_PREFIX = "[PermutationAnalysis] Error"
-
-
-
-_WEIGHTABLE_COEFFICIENTS = frozenset(
-    {"cohen_kappa", "fleiss_kappa", "gwet_ac1", "brennan_prediger",
-     "krippendorff_alpha"}
-)
-"""Coefficients with a weighted form, matching the weightable analyzers."""
 
 
 # Every coefficient function takes an EstimatorInput, K and weights included
@@ -77,62 +74,6 @@ def _analyzer_class(coefficient: str) -> type:
     }[coefficient]
 
 
-class IndependentMeanDraws:
-    """
-    I am the independent mean's draws, built while the units are bootstrapped.
-
-    Each draw of the independent mean picks one value from each defined
-    unit's (pair's or subset's) draws and averages the picks. I take the
-    units one at a time, as Computation B makes them: I pick n_resamples
-    values from a unit's draws and add them to a running total. After that
-    the unit's draws can be tossed, so the independent mean never needs
-    every unit's draws at once.
-
-    This is the only way the independent mean is built, whatever
-    keep_draws says, so the same seed gives the same interval whether the
-    draws are kept or not. The picks come from one stream seeded with
-    config_of_coefficient's random_state, taken in unit order.
-
-    A NaN pick makes that draw NaN, so it counts as failed rather than
-    averaging the other units. With no defined unit, every draw is NaN.
-    """
-
-    def __init__(
-        self, units: list, n_resamples: int, random_state: int | None
-    ) -> None:
-        self._units = list(units)
-        self._defined = set(self._units)
-        self._added = 0
-        self._rng = np.random.default_rng(random_state)
-        self._total = np.zeros(n_resamples, dtype=np.float64)
-
-    def add(self, unit: tuple, draws: np.ndarray) -> None:
-        """Pick from a unit's draws; units that are not defined are skipped."""
-        if unit not in self._defined:
-            return
-        # The picks come off one stream, so the order fixes the result.
-        if self._added >= len(self._units) or unit != self._units[self._added]:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: independent mean got unit {unit} out of "
-                f"order; this is a bug, not a property of the data."
-            )
-        picks = self._rng.integers(0, draws.size, size=self._total.size)
-        self._total += draws[picks]
-        self._added += 1
-
-    def draws(self) -> np.ndarray:
-        """The mean's draws, once every defined unit has been added."""
-        if self._added != len(self._units):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: independent mean has {self._added} of "
-                f"{len(self._units)} units; this is a bug, not a property "
-                f"of the data."
-            )
-        if not self._units:
-            return np.full(self._total.size, np.nan)
-        return self._total / len(self._units)
-
-
 class PermutationAnalysis:
     """
     I am the base for permutation analysis across rater subsets.
@@ -152,8 +93,8 @@ class PermutationAnalysis:
       C mean bootstrap)
     - CI computation helpers shared by children
 
-    I do NOT have a run() method -- children define their own, returning
-    the result type they produce (PairwisePermutationResult,
+    I do NOT have a run() method -- child classes define their own,
+    returning the result type they produce (PairwisePermutationResult,
     SubsetPermutationResult).
 
     Attributes
@@ -183,6 +124,7 @@ class PermutationAnalysis:
     ratings: Ratings
     config: PermutationConfig
     balance_profile: BalanceProfile
+    rater_profile: RaterProfile
     estimator_input: EstimatorInput
     estimator: Estimator
 
@@ -208,7 +150,11 @@ class PermutationAnalysis:
         TypeError
             If ratings is not Ratings or config is not PermutationConfig.
         ValueError
-            If ratings is None or coefficient is unknown.
+            If ratings is None or coefficient is unknown; if the
+            coefficient is Conger's kappa and a rating is missing (after
+            injection); if balanced_data_only is true and the panel is
+            unbalanced; or if the coefficient has no weighted form and the
+            semantics declares ordered or weighted categories.
         """
         # Validate ratings
         if ratings is None:
@@ -282,16 +228,15 @@ class PermutationAnalysis:
 
     def apply_injection(self) -> None:
         """
-        I apply the injection pipeline from config_of_coefficient to the ratings.
+        Apply config_of_coefficient's injection pipeline to the ratings.
 
-        I read ``self.config.injection`` and iterate
+        Reads ``self.config.config_of_coefficient.injection`` and iterates
         through each injection step, instantiating the corresponding
         injector and calling ``inject()`` to produce a new Ratings with
         synthetic raters appended. Each step chains -- the output Ratings
         of one step becomes the input to the next.
 
-        I update ``self.ratings`` in place. If injection is None, I do
-        nothing.
+        Replaces my ``ratings`` attribute. Does nothing if injection is None.
 
         Called automatically in ``__init__`` before BalanceProfile is built,
         so all downstream computation (EstimatorInput, subset enumeration)
@@ -322,10 +267,10 @@ class PermutationAnalysis:
 
         Counts the times the coefficient would be computed: the observed
         value of each unit, its bootstrap (n_resamples each), and the
-        correlated mean (n_resamples draws over every unit). With BCa each
+        correlated mean (n_resamples draws over every unit). With BCa, each
         interval adds a jackknife, counted as one evaluation per subject in
-        the panel -- an upper bound, since a unit is jackknifed only over its
-        own subjects. So the count is "at most", and the guard can only
+        the panel (an upper bound, since a unit is jackknifed only over its
+        own subjects). So the count is "at most", and the guard can only
         refuse a little early, never late. The independent mean adds
         nothing: it picks from draws already made.
 
@@ -376,19 +321,14 @@ class PermutationAnalysis:
         draws: np.ndarray | None,
     ):
         """
-        One pair's or subset's result, built by the coefficient's own analyzer.
+        Build one pair's or subset's result with the coefficient's own analyzer.
 
-        The unit's data is its usable subjects: those at least two of its
-        raters rated (for a pair, both). The analyzer is built on that data
-        with injection off -- the panel's injection already happened -- and
-        given the point, interval and draws this analysis computed, through
-        the same ``_result`` its ``estimate()`` uses. So a pair is exactly
-        the result the analyzer would give on those subjects, built and
-        checked the same way.
-
-        Returns NotComputed, with the reason, when the unit cannot be a
-        result: fewer than 2 usable subjects, or a subset rater who rated
-        none of them (the subset would really be a smaller one).
+        The analyzer is built on the unit's usable subjects (rated by at least
+        two of its raters; for a pair, both) with injection off, since the
+        panel's injection already ran. It is handed this analysis's point,
+        interval and draws through its ``_result``, so each unit gets the same
+        result type ``estimate()`` returns. The point is checked against the
+        analyzer's own; the interval and draws are this analysis's.
 
         Parameters
         ----------
@@ -399,12 +339,18 @@ class PermutationAnalysis:
         draws : np.ndarray | None
             The unit's draws, or None when keep_draws is false.
 
+        Returns
+        -------
+        AnalysisResult | NotComputed
+            The analyzer's result, or NotComputed with the reason when the unit
+            has no coefficient: fewer than 2 usable subjects, or a subset rater
+            who rated none of them.
+
         Raises
         ------
         ValueError
-            If the analyzer's point on the unit's data differs from the
-            analysis's point: the two computed different things, which is a
-            bug.
+            If the analyzer's point on the unit's data differs from this
+            analysis's point, which is a bug.
         """
         import dataclasses
 
@@ -521,7 +467,7 @@ class PermutationAnalysis:
         coefficient = self.config.coefficient_to_compute
         if (
             isinstance(categories, DistanceCategories)
-            and coefficient not in _WEIGHTABLE_COEFFICIENTS
+            and not _analyzer_class(coefficient)._ACCEPTS_WEIGHTS
         ):
             raise ValueError(
                 f"{_ERROR_PREFIX}: {coefficient} has no weighted form, but "
@@ -548,14 +494,10 @@ class PermutationAnalysis:
         Map coefficient name to the estimator callable.
 
         The estimator is a pure function (EstimatorInput -> float) used
-        by all three computations: A (observed values via estimate_pairs),
-        B (per-pair bootstrap loop in the child), and C (correlated
-        global resample loop or independent sampling from B's output).
-
-        The adapter functions are defined at module level so they are
-        picklable if we ever move to multiprocessing. Each wraps a
-        coefficient function (which may take extra arguments like weights
-        or expect an NijMatrix) into the Estimator signature.
+        by all three computations: A (observed values via estimate_pairs or
+        estimate_subsets), B (per-unit bootstrap loop in the child), and C
+        (correlated global resample loop or independent sampling from B's
+        output).
 
         Returns
         -------
@@ -588,7 +530,7 @@ class PermutationAnalysis:
         """
         Compute confidence interval from a bootstrap distribution.
 
-        Shared by children for both per-pair CIs and mean CIs.
+        Shared by child classes for both per-pair CIs and mean CIs.
         Delegates to the CI functions in ci_methods.py.
 
         Parameters
@@ -598,9 +540,8 @@ class PermutationAnalysis:
         point : float
             The point estimate.
         ci_method : str
-            "percentile" or "bca". Permutation results do not support
-            "parametric_null" -- subsets sharing a rater are correlated,
-            so there is no closed-form null variance.
+            "percentile" or "bca". The package implements no parametric
+            null for permutation analyses.
         alpha : float
             Significance level (e.g., 0.05 for 95% CI).
         jackknife_fn : Callable[[], np.ndarray] | None
@@ -608,14 +549,11 @@ class PermutationAnalysis:
             than an array because only BCa needs them, and here they are
             expensive -- per pair, one coefficient evaluation per subject.
 
-            **Which subjects to leave out depends on what was resampled.**
-            A per-pair interval bootstraps the subjects that pair shares, so
-            its jackknife leaves those out rather than all subjects: a
-            subject the pair never rated cannot influence the pair's
-            coefficient, so including it would contribute a deviation
-            representing no influence at all. A correlated mean bootstraps
-            subjects globally, so its jackknife is global too. The caller
-            knows which it did, so the caller supplies the function.
+            The jackknife must leave out the subjects that were resampled:
+            a pair's shared subjects for a per-pair interval (see README.md,
+            "BCa for a pair: Use only the subjects shared by the pair"), all
+            subjects for the correlated mean. The caller knows which, so the
+            caller supplies the function.
 
             None means no jackknife exists for this quantity, which is the
             case for the independent mean: it resamples from per-pair
@@ -655,8 +593,6 @@ class PermutationAnalysis:
         else:
             raise ValueError(
                 f"{_ERROR_PREFIX}: unknown ci_method '{ci_method}'. "
-                f"Expected 'percentile' or 'bca'. Permutation results "
-                f"do not support 'parametric_null' (subsets sharing a "
-                f"rater are correlated, so there is no closed-form null "
-                f"variance)."
+                f"Expected 'percentile' or 'bca'. The package implements "
+                f"no parametric null for permutation analyses."
             )

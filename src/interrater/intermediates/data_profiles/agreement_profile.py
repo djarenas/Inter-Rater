@@ -169,14 +169,14 @@ class AgreementProfile:
             In declared order.
         """
         index = np.asarray(category_index)
-        k = len(category_names)
+        n_categories = len(category_names)
         present = index != EMPTY
         pool = present.sum(axis=1) >= 2
         index = index[pool]
         present = present[pool]
 
-        counts = np.zeros((index.shape[0], k), dtype=np.int64)
-        for j in range(k):
+        counts = np.zeros((index.shape[0], n_categories), dtype=np.int64)
+        for j in range(n_categories):
             counts[:, j] = (index == j).sum(axis=1)
 
         marginals = {}
@@ -185,17 +185,19 @@ class AgreementProfile:
             if column.size == 0:
                 marginals[str(rater)] = {c: float("nan") for c in category_names}
             else:
-                shares = np.bincount(column, minlength=k) / column.size
+                shares = (
+                    np.bincount(column, minlength=n_categories) / column.size
+                )
                 marginals[str(rater)] = dict(zip(category_names, map(float, shares)))
 
-        if len(rater_names) == 2 and k == 2:
+        if len(rater_names) == 2 and n_categories == 2:
             prevalence_bias = PrevalenceBiasIndex.build_from_pair(
                 index, tuple(category_names), tuple(map(str, rater_names))
             )
         else:
             prevalence_bias = NotComputed(
                 f"defined for two raters and two categories; this data has "
-                f"{len(rater_names)} raters and {k} categories"
+                f"{len(rater_names)} raters and {n_categories} categories"
             )
         names = tuple(category_names)
         counts = counts.astype(np.float64)

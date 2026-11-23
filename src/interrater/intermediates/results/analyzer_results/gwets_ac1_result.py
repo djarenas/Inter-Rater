@@ -187,19 +187,19 @@ class GwetsAC1Result(PointEstimateResult):
         if math.isnan(self.parts.chance):
             return
         shares = list(self.agreement_profile.prevalence.values())
-        k = len(shares)
-        pe = sum(p * (1 - p) for p in shares) / (k - 1)
+        n_categories = len(shares)
+        pe = sum(p * (1 - p) for p in shares) / (n_categories - 1)
         if weighted:
             if self.weight_matrix is None:
                 return
             matrix = np.asarray(self.weight_matrix, dtype=float)
-            if matrix.shape != (k, k):
+            if matrix.shape != (n_categories, n_categories):
                 raise ValueError(
                     f"{_ERROR_PREFIX}: weight_matrix is {matrix.shape[0]}x"
-                    f"{matrix.shape[1]} but the agreement profile has {k} "
-                    f"categories"
+                    f"{matrix.shape[1]} but the agreement profile has "
+                    f"{n_categories} categories"
                 )
-            pe *= float(matrix.sum()) / k
+            pe *= float(matrix.sum()) / n_categories
         if abs(pe - self.parts.chance) > _TOL:
             raise ValueError(
                 f"{_ERROR_PREFIX}: Pe is {self.parts.chance:.6f}, but the "
