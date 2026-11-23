@@ -21,14 +21,15 @@ class GroupCoefficientConfig(AnalyzerConfig):
     I am the base configuration for group coefficients.
 
     Group coefficients (Fleiss' kappa, Gwet AC1, Brennan-Prediger, Scott's pi,
-    Krippendorff's alpha) read a counts matrix (NijMatrix) that discards rater
-    identity.
+    Krippendorff's alpha) only need a count matrix (NijMatrix) and can discard
+    rater identity.
 
     I add two decisions specific to group analysis:
     - Whether to enforce balance (constant raters per subject).
     - Whether to run leave-one-rater-out diagnostics to see how much each
-      rater matters to the agreement. Not supported as of V2 yet;
-      true is refused, so it is never silently ignored.
+      rater matters to the agreement. Not supported yet; true is refused,
+      so it is never silently ignored. SubsetPermutationAnalysis with
+      subset_k: n_raters - 1 gives leave-one-rater-out today.
 
     Attributes
     ----------
@@ -41,6 +42,8 @@ class GroupCoefficientConfig(AnalyzerConfig):
     rater_jackknife : bool, default False
         Leave-one-rater-out diagnostics: drop each rater in turn and recompute
         the coefficient. Not supported in this version yet; must be False.
+        SubsetPermutationAnalysis with subset_k: n_raters - 1 gives the same
+        numbers meanwhile.
     """
 
     # Attribute declaration
@@ -84,7 +87,9 @@ class GroupCoefficientConfig(AnalyzerConfig):
         if self.rater_jackknife:
             raise ValueError(
                 f"{_ERROR_PREFIX}: rater_jackknife (leave-one-rater-out) is not "
-                f"supported in this version yet. Set rater_jackknife: false."
+                f"supported in this version yet. Set rater_jackknife: false. "
+                f"SubsetPermutationAnalysis with subset_k: n_raters - 1 gives "
+                f"the coefficient without each rater in turn."
             )
 
     # Public API ------------------------------------------------------------- #

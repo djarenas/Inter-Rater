@@ -74,7 +74,7 @@ Fields every analyzer shares:
 Coefficients that read a counts matrix. Adds:
 
 - `balanced_data_only` (bool, default False): require the same number of raters on every subject
-- `rater_jackknife` (bool, default False): leave-one-rater-out; not supported yet, so `true` is refused
+- `rater_jackknife` (bool, default False): leave-one-rater-out; not supported yet, so `true` is refused. Use `SubsetPermutationAnalysis` with `subset_k: n_raters - 1` meanwhile
 
 Both must be a real `bool` (`balanced_data_only=1` is refused).
 

@@ -27,6 +27,8 @@ class IndividualMarginalConfig(AnalyzerConfig):
 
     I do not allow rater_jackknife (leave-one-rater-out diagnostics): it is
     not supported in this version yet, for any coefficient.
+    SubsetPermutationAnalysis with subset_k: n_raters - 1 gives
+    leave-one-rater-out today.
 
     Attributes
     ----------
@@ -64,7 +66,9 @@ class IndividualMarginalConfig(AnalyzerConfig):
         if self.rater_jackknife:
             raise ValueError(
                 f"{_ERROR_PREFIX}: rater_jackknife (leave-one-rater-out) is not "
-                f"supported in this version yet. Set rater_jackknife: false."
+                f"supported in this version yet. Set rater_jackknife: false. "
+                f"SubsetPermutationAnalysis with subset_k: n_raters - 1 gives "
+                f"the coefficient without each rater in turn."
             )
 
     # Public API ------------------------------------------------------------- #
