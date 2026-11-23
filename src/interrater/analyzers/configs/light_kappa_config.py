@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from ..convergence_test import ConvergenceTest
     from .hypothesis_test_config import HypothesisTestConfig
 
-
 _ERROR_PREFIX = "[LightKappaConfig] Error"
 
 
@@ -22,26 +21,30 @@ class LightKappaConfig(IndividualMarginalConfig):
     I am the configuration for Light's kappa analysis.
 
     Light's kappa (Light 1971) is the unweighted mean of all C(n_raters, 2)
-    pairwise Cohen's kappas. It summarises how well raters agree on average across every
-    possible pair, without pooling marginals as Fleiss' kappa does.
+    pairwise Cohen's kappas. It summarises how well raters agree on average
+    across every possible pair, without pooling marginals as Fleiss' kappa
+    does.
 
     Light's kappa keeps rater identity through Cohen's kappa: each pair uses
     its own marginals. The mean then compresses the C(n_raters, 2) values
-    into a single summary. For per-pair detail, spread, and per-rater diagnostics,
-    use the pairwise permutation analyzer -- Light's kappa is the headline
-    number, not the diagnostic.
+    into a single summary. A pair whose kappa is undefined is left out of
+    the mean (a package choice).
 
     At exactly two raters, Light's kappa reduces to Cohen's unweighted kappa
     (there is only one pair).
 
-    I do not support weighting. Light (1971) defined the coefficient as the
-    mean of unweighted pairwise kappas. The analyzer refuses ratings whose
+    I do not support weighting. Light (1971, Eq. 6) built the coefficient
+    from unweighted pairwise disagreements; it equals the mean of the
+    pairwise Cohen's kappas. The analyzer refuses ratings whose
     semantics declares ordered or weighted categories.
 
-    There is no closed-form null variance for Light's kappa. The C(n_raters, 2)
-    pairwise kappas are correlated (pairs sharing a rater are not independent),
-    so the variance of the mean cannot be derived from the individual null
-    variances. Use bootstrap ("percentile" or "bca") for confidence intervals.
+    The package does not implement a parametric null for Light's kappa. Light
+    (1971, Eq. 8) gives a large-sample null variance; the package does not
+    implement it. Use bootstrap ("percentile" or "bca") for confidence
+    intervals.
+
+    For per-pair detail, spread, and per-rater diagnostics, use
+    ``PairwisePermutationAnalysis``.
 
     References
     ----------
@@ -73,9 +76,7 @@ class LightKappaConfig(IndividualMarginalConfig):
     injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
-    # Populated at this level
-    # Must be True. Exists so that every coefficient config accepts the same
-    # keys, and a config moved here is told why False does not apply.
+    # Populated at this level. Must be True; see the docstring.
     balanced_data_only: bool = True
 
     # Constructor ------------------------------------------------------------ #
@@ -90,7 +91,10 @@ class LightKappaConfig(IndividualMarginalConfig):
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
         if not isinstance(self.balanced_data_only, bool):
-            raise TypeError(f"{_ERROR_PREFIX}: balanced_data_only must be bool")
+            raise TypeError(
+                f"{_ERROR_PREFIX}: balanced_data_only must be bool, "
+                f"got {type(self.balanced_data_only).__name__}"
+            )
 
         if not self.balanced_data_only:
             raise ValueError(
@@ -103,14 +107,13 @@ class LightKappaConfig(IndividualMarginalConfig):
                 f"pairwise permutation analysis."
             )
 
-        # Light has no parametric null variance formula, so reject it as ci_method
+        # No parametric null is implemented for Light, so refuse it
         if self.ci_method == "parametric_null":
             raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Light's kappa. The C(n_raters, 2) pairwise kappas are "
-                f"correlated "
-                f"(pairs sharing a rater are not independent), so no closed-form "
-                f"null variance exists. Use 'percentile' or 'bca' instead."
+                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not "
+                f"available for Light's kappa. The package does not implement "
+                f"a parametric null for it (Light 1971, Eq. 8 gives one; it "
+                f"is not implemented). Use 'percentile' or 'bca' instead."
             )
 
         # Also reject parametric_null as hypothesis test method
@@ -119,16 +122,20 @@ class LightKappaConfig(IndividualMarginalConfig):
             and self.hypothesis_test_config.method == "parametric_null"
         ):
             raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' is not "
-                f"available for Light's kappa. The pairwise kappas are correlated, "
-                f"so no closed-form null variance exists. "
-                f"Use method='permutation' instead."
+                f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' "
+                f"is not available for Light's kappa. The package does not "
+                f"implement a parametric null for it (Light 1971, Eq. 8 gives "
+                f"one; it is not implemented). Use method='permutation' "
+                f"instead."
             )
 
     # Public API ------------------------------------------------------------- #
 
     def summary(self) -> dict:
-        """Return configuration, with balanced_data_only as the group configs report it."""
+        """
+        Return configuration, with balanced_data_only as the group configs
+        report it.
+        """
         result = super().summary()
         result["balanced_data_only"] = self.balanced_data_only
         return result

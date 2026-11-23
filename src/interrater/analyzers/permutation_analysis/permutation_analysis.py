@@ -540,7 +540,7 @@ class PermutationAnalysis:
         point : float
             The point estimate.
         ci_method : str
-            "percentile" or "bca". The package implements no parametric
+            "percentile" or "bca". The package does not implement a parametric
             null for permutation analyses.
         alpha : float
             Significance level (e.g., 0.05 for 95% CI).

@@ -14,13 +14,14 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[CongerKappaConfig] Error"
 
+
 @dataclass(frozen=True)
 class CongerKappaConfig(IndividualMarginalConfig):
     """
     I am the configuration for Conger's kappa analysis.
 
-    Conger's kappa (Conger 1980) generalises Cohen's kappa to any number of
-    raters (n >= 2) while preserving individual marginals. Where Fleiss' kappa
+    Conger's kappa (Conger 1980) generalises Cohen's kappa to two or more
+    raters while preserving individual marginals. Where Fleiss' kappa
     pools marginal distributions across raters, Conger's kappa keeps each
     rater's own category distribution in the chance term -- the same principle
     as Cohen's, extended beyond a single pair.
@@ -29,15 +30,14 @@ class CongerKappaConfig(IndividualMarginalConfig):
     family. At exactly two raters, Conger's kappa reduces to Cohen's unweighted
     kappa.
 
-    I do not support weighting. Conger (1980) defined the coefficient for
-    nominal data only; there is no standard weighted generalisation. The
+    I do not support weighting. The package does not implement a weighted form;
+    Conger (1980) defined the coefficient for nominal data only. The
     analyzer refuses ratings whose semantics declares ordered or weighted
     categories.
 
-    There is no known closed-form null variance for Conger's kappa, so
+    The package does not implement a parametric null for Conger's kappa, so
     ci_method="parametric_null" is not available. Use bootstrap
     ("percentile" or "bca") for confidence intervals.
-
 
     References
     ----------
@@ -68,11 +68,8 @@ class CongerKappaConfig(IndividualMarginalConfig):
     injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
-    # Populated at this level
-    # Must be True. Exists so that every coefficient config accepts the same
-    # keys, and a config moved here is told why False does not apply.
+    # Populated at this level. Must be True; see the docstring.
     balanced_data_only: bool = True
-     
 
     # Constructor ------------------------------------------------------------ #
 
@@ -85,8 +82,11 @@ class CongerKappaConfig(IndividualMarginalConfig):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        if not isinstance (self.balanced_data_only, bool):
-            raise TypeError(f"{_ERROR_PREFIX}: balanced_data_only must be bool")
+        if not isinstance(self.balanced_data_only, bool):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: balanced_data_only must be bool, "
+                f"got {type(self.balanced_data_only).__name__}"
+            )
 
         if not self.balanced_data_only:
             raise ValueError(
@@ -99,13 +99,13 @@ class CongerKappaConfig(IndividualMarginalConfig):
                 f"pairwise permutation analysis."
             )
 
-
-        # Conger has no parametric null variance formula, so reject it as ci_method
+        # No parametric null is implemented for Conger, so refuse it
         if self.ci_method == "parametric_null":
             raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Conger's kappa. There is no closed-form null variance for "
-                f"Conger's kappa. Use 'percentile' or 'bca' instead."
+                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not "
+                f"available for Conger's kappa. The package does not "
+                f"implement a parametric null for it. Use 'percentile' or "
+                f"'bca' instead."
             )
 
         # Also reject parametric_null as hypothesis test method
@@ -114,15 +114,19 @@ class CongerKappaConfig(IndividualMarginalConfig):
             and self.hypothesis_test_config.method == "parametric_null"
         ):
             raise ValueError(
-                f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' is not "
-                f"available for Conger's kappa. There is no closed-form null "
-                f"variance. Use method='permutation' instead."
+                f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' "
+                f"is not available for Conger's kappa. The package does not "
+                f"implement a parametric null for it. Use "
+                f"method='permutation' instead."
             )
 
     # Public API ------------------------------------------------------------- #
 
     def summary(self) -> dict:
-        """Return configuration, with balanced_data_only as the group configs report it."""
+        """
+        Return configuration, with balanced_data_only as the group configs
+        report it.
+        """
         result = super().summary()
         result["balanced_data_only"] = self.balanced_data_only
         return result

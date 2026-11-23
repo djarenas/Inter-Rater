@@ -146,9 +146,9 @@ class LightKappaResult(PointEstimateResult):
         if self.ci_method not in {"percentile", "bca"}:
             raise ValueError(
                 f"{_ERROR_PREFIX}: ci_method must be 'percentile' or 'bca', "
-                f"got '{self.ci_method}'. Light's kappa has no closed-form "
-                f"null variance (pairwise kappas are correlated), so "
-                f"'parametric_null' is not available."
+                f"got '{self.ci_method}'. The package does not implement a "
+                f"parametric null for Light's kappa (Light 1971, Eq. 8 gives "
+                f"one), so 'parametric_null' is not available."
             )
 
         # Call parent validation (validates point, confidence_interval,

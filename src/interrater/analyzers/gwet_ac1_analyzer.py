@@ -123,7 +123,7 @@ class GwetAC1Analyzer(GroupAnalyzer):
         """
         Test H_0: AC1 = 0 by permutation (``_permutation_test``).
 
-        The package implements no parametric null for AC1.
+        The package does not implement a parametric null for AC1.
         """
         return self._permutation_test()
 

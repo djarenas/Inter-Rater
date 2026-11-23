@@ -54,12 +54,12 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     that. If you have only counts, you want Fleiss'
     kappa, not Conger's.
 
-    The package implements no weighted form for Conger's kappa. Conger
+    The package does not implement a weighted form for Conger's kappa. Conger
     (1980) defined the coefficient for nominal data only. I refuse ordered
     or weighted semantics (``_refuse_weights_if_unsupported``), and
     ``conger_kappa`` raises NotImplementedError on non-identity weights.
 
-    The package implements no parametric null for Conger's kappa, so
+    The package does not implement a parametric null for Conger's kappa, so
     confidence intervals use bootstrap (percentile or BCa) and hypothesis
     tests use permutation only.
 
@@ -149,7 +149,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         Test H_0: kappa = 0 by permutation (``_permutation_test``).
 
-        The package implements no parametric null for Conger's kappa.
+        The package does not implement a parametric null for Conger's kappa.
         """
         return self._permutation_test()
 
@@ -208,7 +208,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         My result: the point, interval and draws ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
 
-        Only percentile and bca intervals: the package implements no
+        Only percentile and bca intervals: the package does not implement a
         parametric null for Conger's kappa.
         """
         return CongerKappaResult(

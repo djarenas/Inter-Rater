@@ -61,11 +61,11 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     Light's kappa reads rater identity -- who said what -- and counts discard
     that.
 
-    The package implements no weighted form for Light's kappa. Light
+    The package does not implement a weighted form for Light's kappa. Light
     (1971, Eq. 6) built the coefficient from unweighted pairwise
     disagreements; it equals the mean of the pairwise Cohen's kappas.
 
-    The package implements no parametric null for Light's kappa, so
+    The package does not implement a parametric null for Light's kappa, so
     confidence intervals use bootstrap (percentile or BCa) and hypothesis
     tests use permutation only. Light (1971, Eq. 8) gives a large-sample
     null variance; the package does not implement it.
@@ -157,7 +157,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         Test H_0: kappa = 0 by permutation (``_permutation_test``).
 
-        The package implements no parametric null for Light's kappa.
+        The package does not implement a parametric null for Light's kappa.
         """
         return self._permutation_test()
 
@@ -218,7 +218,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         My result: the point, interval and draws ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
 
-        Only percentile and bca intervals: the package implements no
+        Only percentile and bca intervals: the package does not implement a
         parametric null for Light's kappa.
         """
         n_pairs = comb(self.rater_profile.n_raters, 2)

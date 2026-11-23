@@ -52,8 +52,8 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
     the observed and expected disagreement terms identically. Identity
     weights give the nominal (unweighted) case.
 
-    The package implements no parametric null for Krippendorff's alpha, so
-    confidence intervals use bootstrap (percentile or BCa) and hypothesis
+    The package does not implement a parametric null for Krippendorff's alpha,
+    so confidence intervals use bootstrap (percentile or BCa) and hypothesis
     tests use permutation only.
 
     I validate that:
@@ -136,7 +136,8 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
         """
         Test H_0: alpha = 0 by permutation (``_permutation_test``).
 
-        The package implements no parametric null for Krippendorff's alpha.
+        The package does not implement a parametric null for Krippendorff's
+        alpha.
         """
         return self._permutation_test()
 

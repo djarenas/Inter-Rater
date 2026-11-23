@@ -26,26 +26,28 @@ class ScottsConfig(GroupCoefficientConfig):
 
     **Why this class exists:**
 
-    Scott's pi is historically important and appears in many systematic reviews.
-    It is defined only for two raters. Fleiss (1971) generalized it to many
-    raters by keeping the same observed agreement and chance formulas. At two
-    raters, Fleiss' kappa *is* Scott's pi -- they are algebraically identical.
+    Scott's pi is historically important. It is defined only for two raters.
+    Fleiss (1971) generalized it to many raters by keeping the same observed
+    agreement and chance formulas. At two raters, Fleiss' kappa *is* Scott's
+    pi -- they are algebraically identical.
 
     This class exists to:
-    - Honor Scott's priority and the many papers citing him
+    - Honor Scott's contribution and the many papers citing him
     - Provide a clear, two-rater-only entry point (no confusion about whether
       to use Scott or Fleiss for many-rater data)
-    - Document the nominal-data-only constraint explicitly
+    - Say explicitly that the package does not implement a weighted form for
+      Scott's pi
 
     For many raters, use FleissKappaConfig instead (it reduces to Scott's pi
-    at n=2 and is the established generalization).
+    at two raters and is the established generalization).
 
-    I am unweighted. The analyzer refuses ratings whose semantics declares
+    I am unweighted: the package does not implement a weighted form for Scott's
+    pi. The analyzer refuses ratings whose semantics declares
     ordered or weighted categories, with a ValueError.
 
     Because Scott's pi is algebraically identical to Fleiss' kappa at two
-    raters, the parametric null variance formula (Fleiss 1979, Eq. 12) is
-    available here -- ci_method='parametric_null' is allowed.
+    raters, the parametric null variance formula (Fleiss, Nee & Landis 1979,
+    Eq. 12) is available here -- ci_method='parametric_null' is allowed.
 
     References
     ----------
@@ -53,8 +55,9 @@ class ScottsConfig(GroupCoefficientConfig):
         nominal scale coding. Public Opinion Quarterly, 19(3), 321--325.
     Fleiss, J. L. (1971). Measuring nominal scale agreement among many
         raters. Psychological Bulletin, 76(5), 378--382.
-    Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
-        Advanced Analytics, LLC.
+    Fleiss, J. L., Nee, J. C. M., & Landis, J. R. (1979). Large sample
+        variance of kappa in the case of different sets of raters.
+        Psychological Bulletin, 86(5), 974--977.
 
     Attributes
     ----------

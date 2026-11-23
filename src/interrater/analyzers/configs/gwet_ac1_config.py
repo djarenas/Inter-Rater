@@ -20,16 +20,15 @@ class GwetAC1Config(GroupCoefficientConfig):
     """
     I am the configuration for Gwet's AC1 analysis.
 
-    Gwet's AC1 is a chance-corrected agreement coefficient for nominal data
-    with any number of raters (n >= 2). It addresses the "kappa paradox" --
-    the counter-intuitive collapse of Cohen/Fleiss kappa under extreme
-    prevalence -- with a different chance term (Gwet 2008, Equation 38):
+    Gwet's AC1 is a chance-corrected agreement coefficient for categorical
+    data with two or more raters. It addresses the low values of Cohen's and
+    Fleiss' kappa under skewed prevalence. Its chance term (Gwet 2008,
+    Equation 38) is:
 
         Pe = sum_j p_j (1 - p_j) / (K - 1)
 
-    When prevalence is skewed (one category dominates), Pe is small and AC1
-    stays high -- matching the intuition that raters who mostly agree really
-    do agree, even when categories are imbalanced.
+    When prevalence is skewed (one category dominates), Pe is small, so AC1
+    stays close to Po.
 
     With ordered or weighted categories in the semantics, the analyzer
     computes AC2, the weighted AC1. Weights are not configured here.
@@ -41,29 +40,24 @@ class GwetAC1Config(GroupCoefficientConfig):
     - Gwet, K. L. (2008). Computing inter-rater reliability and its variance
       in the presence of high agreement. British Journal of Mathematical and
       Statistical Psychology, 61(1), 29--48.
-    - Gwet, K. L. (2014). Handbook of Inter-Rater Reliability (4th ed.).
-      Advanced Analytics, LLC.
     - Gwet, K. L. (2021). Handbook of Inter-Rater Reliability (5th ed.),
       Vol. 1: Analysis of Categorical Ratings. AgreeStat Analytics.
       Chapter 4, AC2.
-    - Wongpakaran, N., et al. (2013). A comparison of Cohen's Kappa and
-      Gwet's AC1 when calculating inter-rater reliability coefficients:
-      a study conducted with personality disorder samples.
-      BMC Medical Research Methodology, 13, 61.
 
     Attributes
     ----------
     balanced_data_only : bool, default False
         AC1 works on both balanced and unbalanced data. The formula
         naturally generalizes to varying raters per subject.
-    (all other fields inherited from GroupCoefficientConfig and AnalyzerConfig)
+    (all other fields inherited from GroupCoefficientConfig and
+    AnalyzerConfig)
     """
 
     # Attribute declaration
 
     # Inherited from parent class AnalyzerConfig
-    n_resamples: int 
-    alpha: float 
+    n_resamples: int
+    alpha: float
     random_state: int
     ci_method: str
     convergence_test: ConvergenceTest | None
@@ -84,13 +78,13 @@ class GwetAC1Config(GroupCoefficientConfig):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # AC1 has no parametric null variance formula, so reject it as ci_method
+        # No parametric null is implemented for AC1, so refuse it
         if self.ci_method == "parametric_null":
             raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Gwet's AC1. There is no closed-form null variance for this "
-                f"coefficient. "
-                f"Use 'percentile' or 'bca' instead."
+                f"{_ERROR_PREFIX}: ci_method='parametric_null' is not "
+                f"available for Gwet's AC1. The package does not implement a "
+                f"parametric null for Gwet's AC1. Use 'percentile' or 'bca' "
+                f"instead."
             )
 
         # Also reject parametric_null as hypothesis test method
@@ -100,6 +94,6 @@ class GwetAC1Config(GroupCoefficientConfig):
         ):
             raise ValueError(
                 f"{_ERROR_PREFIX}: hypothesis test method='parametric_null' is not "
-                f"available for Gwet's AC1. There is no closed-form null variance "
-                f"for AC1. Use method='permutation' instead."
+                f"available for Gwet's AC1. The package does not implement a "
+                f"parametric null for it. Use method='permutation' instead."
             )

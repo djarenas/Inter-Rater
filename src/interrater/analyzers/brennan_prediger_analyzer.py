@@ -43,7 +43,7 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
     weights sum(I) = K, so Pe = K/K^2 = 1/K -- the unweighted coefficient is
     the special case.
 
-    The package implements no parametric null for Brennan-Prediger, so
+    The package does not implement a parametric null for Brennan-Prediger, so
     confidence intervals use bootstrap (percentile or BCa) and hypothesis
     tests use permutation only.
 
@@ -133,7 +133,7 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
         """
         Test H_0: Brennan-Prediger = 0 by permutation (``_permutation_test``).
 
-        The package implements no parametric null for Brennan-Prediger.
+        The package does not implement a parametric null for Brennan-Prediger.
         """
         return self._permutation_test()
 

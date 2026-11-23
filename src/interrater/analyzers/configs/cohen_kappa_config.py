@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 _ERROR_PREFIX = "[CohenKappaConfig] Error"
 
+
 @dataclass(frozen=True)
 class CohenKappaConfig(IndividualMarginalConfig):
     """
@@ -22,8 +23,7 @@ class CohenKappaConfig(IndividualMarginalConfig):
     Cohen's kappa (Cohen 1960) measures agreement between exactly two raters
     on categorical data, correcting for chance using each rater's individual
     marginal distribution. Unlike Scott's pi or Fleiss' kappa, which pool
-    marginals across raters, Cohen's kappa preserves rater identity -- it
-    compares what rater A actually said with what rater B actually said.
+    marginals across raters, Cohen's kappa preserves rater identity.
 
     I support weighting for ordinal data (Cohen 1968). When the semantics of
     the ratings declares ordered categories ("linear" or "quadratic") or a
@@ -68,7 +68,7 @@ class CohenKappaConfig(IndividualMarginalConfig):
     injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class IndividualMarginalConfig
     rater_jackknife: bool
-    # Populated at this level: Changing default 
+    # Populated at this level, with a different default
     balanced_data_only: bool = True
 
     # Constructor ------------------------------------------------------------ #
@@ -82,8 +82,11 @@ class CohenKappaConfig(IndividualMarginalConfig):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        if not isinstance (self.balanced_data_only, bool):
-            raise TypeError(f"{_ERROR_PREFIX}: balanced_data_only must be bool")
+        if not isinstance(self.balanced_data_only, bool):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: balanced_data_only must be bool, "
+                f"got {type(self.balanced_data_only).__name__}"
+            )
 
         if not self.balanced_data_only:
             raise ValueError(
@@ -104,7 +107,10 @@ class CohenKappaConfig(IndividualMarginalConfig):
     # Public API ------------------------------------------------------------- #
 
     def summary(self) -> dict:
-        """Return configuration, with balanced_data_only as the group configs report it."""
+        """
+        Return configuration, with balanced_data_only as the group configs
+        report it.
+        """
         result = super().summary()
         result["balanced_data_only"] = self.balanced_data_only
         return result

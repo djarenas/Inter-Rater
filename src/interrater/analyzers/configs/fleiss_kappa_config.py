@@ -21,21 +21,35 @@ class FleissKappaConfig(GroupCoefficientConfig):
     I am the configuration for Fleiss' kappa analysis.
 
     Fleiss' kappa works exactly on balanced data (constant raters per subject).
-    On unbalanced data, an approximation is available using per-subject
-    averaging of marginals.
+    On unbalanced data an approximation is available: every subject counts
+    once, and p_j is the mean of each subject's own proportions (see
+    ``category_proportions``).
 
     I default balanced_data_only=True (prefer exact formula), but the user can
     set it to False to allow the approximation. The result then says which
     was used.
 
-    Attributes
-    ----------
-    balanced_data_only : bool, default True
-        If True, the analyzer will throw an error on unbalanced data (exact formula only).
-        If False, the analyzer will allow unbalanced data (use the approximation).
     Fleiss' kappa supports weighting for ordinal data. Weights are declared
     in the semantics of the ratings (categories kind 'ordered' or 'weighted'),
     not here.
+
+    ci_method="parametric_null" is available (Fleiss, Nee & Landis 1979,
+    Eq. 12) for balanced, unweighted data; the analyzer refuses it otherwise.
+
+    References
+    ----------
+    Fleiss, J. L. (1971). Measuring nominal scale agreement among many
+        raters. Psychological Bulletin, 76(5), 378-382.
+    Fleiss, J. L., Nee, J. C. M., & Landis, J. R. (1979). Large sample
+        variance of kappa in the case of different sets of raters.
+        Psychological Bulletin, 86(5), 974-977.
+
+    Attributes
+    ----------
+    balanced_data_only : bool, default True
+        If True, the analyzer will throw an error on unbalanced data (exact
+        formula only). If False, the analyzer will allow unbalanced data
+        (use the approximation).
     (all other fields inherited from GroupCoefficientConfig and parents)
     """
 
@@ -43,7 +57,7 @@ class FleissKappaConfig(GroupCoefficientConfig):
 
     # Inherited from parent class AnalyzerConfig
     n_resamples: int
-    alpha: float 
+    alpha: float
     random_state: int
     ci_method: str
     convergence_test: ConvergenceTest | None
