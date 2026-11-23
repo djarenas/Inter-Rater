@@ -11,8 +11,8 @@ the results.
 
 ```
 PermutationAnalysis                (parent: shared validation, estimator resolution)
-  ├── PairwisePermutationAnalysis  (every C(n,2) pair)
-  └── SubsetPermutationAnalysis    (every C(n,k) subset)
+  ├── PairwisePermutationAnalysis  (every C(n_raters, 2) pair)
+  └── SubsetPermutationAnalysis    (every C(n_raters, k) subset)
 ```
 
 Scott's pi is pairwise only. It is defined for two raters; on three or more
@@ -63,7 +63,7 @@ The estimator on each pair, on the actual data:
   checked against the subjects its result was built on
 - `mean_over_subsets(values)`: `mean_over_pairs`
 
-Cost: C(n,2) estimator calls. Needs nothing from the config beyond the
+Cost: C(n_raters, 2) estimator calls. Needs nothing from the config beyond the
 coefficient.
 
 ### B: per-subset bootstrap (always)
@@ -72,7 +72,7 @@ For each subset: keep the subjects it can be measured on, resample within
 them, compute the coefficient each draw. Gives each subset's draws and
 interval: how stable is this subset's coefficient?
 
-Cost: C(n,k) x n_resamples estimator calls. Set by `config_of_coefficient`
+Cost: C(n_raters, k) x n_resamples estimator calls. Set by `config_of_coefficient`
 (n_resamples, alpha, ci_method); it always runs, since n_resamples >= 1.
 
 #### Which subjects a subset can be measured on
@@ -142,7 +142,7 @@ Gives the mean's draws and interval: how stable is the average across pairs?
 **Correlated:** resample subjects once per draw, compute every pair on the
 same resample, average. Pairs sharing a rater move together, and this keeps
 that correlation, so the interval is wider than if the pairs were
-independent. Cost: n_resamples x C(n,2) estimator calls.
+independent. Cost: n_resamples x C(n_raters, 2) estimator calls.
 
 **Independent:** pick one value from each pair's draws (from B) and average.
 This treats the pairs as independent, so the interval is narrower, usually
@@ -237,17 +237,17 @@ intervals. The global draws are for the mean.
 
 | Configuration              | Estimator calls                            |
 |----------------------------|--------------------------------------------|
-| A + B                      | C(n,2) x (1 + n_resamples)                |
-| A + B + C independent      | C(n,2) x (1 + n_resamples)                |
-| A + B + C correlated       | C(n,2) x (1 + 2 x n_resamples)            |
+| A + B                      | C(n_raters, 2) x (1 + n_resamples)         |
+| A + B + C independent      | C(n_raters, 2) x (1 + n_resamples)         |
+| A + B + C correlated       | C(n_raters, 2) x (1 + 2 x n_resamples)     |
 
-| n_raters | C(n,2) | A + B (n_resamples = 4,000) | A + B + C correlated |
-|----------|--------|-----------------------------|----------------------|
-| 2        | 1      | 4,001                       | 8,001                |
-| 4        | 6      | 24,006                      | 48,006               |
-| 6        | 15     | 60,015                      | 120,015              |
-| 10       | 45     | 180,045                     | 360,045              |
-| 20       | 190    | 760,190                     | 1,520,190            |
+| n_raters | C(n_raters, 2) | A + B (n_resamples = 4,000) | A + B + C correlated |
+|----------|----------------|-----------------------------|----------------------|
+| 2        | 1              | 4,001                       | 8,001                |
+| 4        | 6              | 24,006                      | 48,006               |
+| 6        | 15             | 60,015                      | 120,015              |
+| 10       | 45             | 180,045                     | 360,045              |
+| 20       | 190            | 760,190                     | 1,520,190            |
 
 ### The cost guard
 

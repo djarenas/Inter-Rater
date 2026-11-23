@@ -341,7 +341,7 @@ def conger_parts(data: EstimatorInput) -> tuple[float, float]:
 
 def light_kappa(data: EstimatorInput) -> float:
     """
-    Light's kappa: the mean of all C(n, 2) pairwise Cohen's kappas.
+    Light's kappa: the mean of all C(n_raters, 2) pairwise Cohen's kappas.
 
     Light (1971). Each pair of raters gets its own Cohen's kappa -- computed
     on the subjects they share, with their own marginals -- and the headline

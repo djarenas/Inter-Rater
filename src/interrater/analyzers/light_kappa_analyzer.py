@@ -38,8 +38,8 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     every pair of raters.
 
     Light's kappa (Light 1971) keeps rater identity through Cohen's kappa;
-    each pair uses its own marginals. The mean then compresses the C(m, 2)
-    values, for m raters, into a single summary. A pair whose kappa is
+    each pair uses its own marginals. The mean then compresses the
+    C(n_raters, 2) values into a single summary. A pair whose kappa is
     undefined is left out of the mean (a package choice; Light's formula is
     then undefined). For per-pair detail, spread, and per-rater
     diagnostics, use ``PairwisePermutationAnalysis``.
@@ -206,8 +206,8 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples is written once on Analyzer in terms of this. Light's
-        kappa is the mean of the C(m, 2) pairwise Cohen's kappas, so every
-        rater pair is re-formed from the column positions of data.
+        kappa is the mean of the C(n_raters, 2) pairwise Cohen's kappas, so
+        every rater pair is re-formed from the column positions of data.
         """
         return light_kappa(data)
 

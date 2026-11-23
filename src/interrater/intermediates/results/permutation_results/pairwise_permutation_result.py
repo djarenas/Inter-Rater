@@ -46,7 +46,7 @@ class PairwisePermutationResult(PermutationResult):
     Two bootstrap procedures are supported, recorded in
     ``bootstrap_mean_method``:
 
-    - "correlated": resample subjects once per draw, compute all C(n,2)
+    - "correlated": resample subjects once per draw, compute all C(n_raters, 2)
       pairwise coefficients on the same resampled subjects, then average.
       Preserves the correlation structure between pairs sharing a rater.
     - "independent": bootstrap each pair separately. Per-pair CIs and

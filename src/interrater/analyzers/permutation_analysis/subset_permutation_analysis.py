@@ -1,13 +1,13 @@
 """Subset permutation analysis -- runs a coefficient across every
 C(n_raters, k) rater subset, for one or more values of k.
 
-I execute the three computations described in README.md, once per k:
+Runs the three computations described in README.md, once per k:
 
 - A (observed): coefficient for each subset, subjects per subset, mean.
 - B (per-subset bootstrap): resample subjects within each subset, produce
   per-subset distributions and CIs.
-- C (mean bootstrap): correlated (global resample, all subsets on the
-  same draw) or independent (sample from B's per-subset distributions,
+- C (mean bootstrap, optional): correlated (global resample, all subsets on
+  the same draw) or independent (sample from B's per-subset distributions,
   picked while B runs; see IndependentMeanDraws).
 
 Each k is independent -- "average agreement among pairs" and "average
@@ -48,10 +48,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
     I run a coefficient across every C(n_raters, k) rater subset, for
     one or more values of k.
 
-    I inherit from PermutationAnalysis -- validation, EstimatorInput,
-    estimator resolution, and ``_compute_ci`` are already done. I own
-    ``run()``, which loops over each k in ``self.ks``, executes
-    Computations A, B, and C, and returns a ``MultiKSubsetResult``
+    The parent already validated the ratings and config, applied the
+    injection, built the profiles and the EstimatorInput, and resolved the
+    estimator. I own ``run()``, which loops over each k in ``self.ks``,
+    executes Computations A, B, and C, and returns a ``MultiKSubsetResult``
     wrapping one ``SubsetPermutationResult`` per k.
 
     A and B run always (the analyzer config requires n_resamples >= 1).
@@ -91,11 +91,16 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Raises
         ------
         TypeError
-            If config is not SubsetPermutationConfig.
+            If config is not SubsetPermutationConfig, or ratings is not
+            Ratings.
         ValueError
             If any k > n_raters, any k gives more than GUARD_MAX_SUBSETS
             subsets, or the run would compute the coefficient more than
-            config.max_evaluations times.
+            config.max_evaluations times; if
+            config_of_coefficient.balanced_data_only is true and a subset is
+            unbalanced; or if the parent refuses the data (Conger's kappa on
+            incomplete data, balanced_data_only on an unbalanced panel, or
+            weights on a coefficient without a weighted form).
         """
         from ..configs.subset_permutation_config import (
             SubsetPermutationConfig as _SPC,
@@ -182,22 +187,22 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         """
         Refuse unbalanced subsets when the coefficient asks for balance.
 
-        ``config_of_coefficient.balanced_data_only`` means what it means in
-        the coefficient's own analyzer -- for Fleiss' kappa, exact formula
-        only -- applied to each subset: the subjects at least two of its
-        raters rated must all have the same number of ratings among them.
-        A balanced panel can still give unbalanced subsets, when subjects
-        went to different raters.
+        ``config_of_coefficient.balanced_data_only`` has the same meaning in
+        the coefficient's own analyzer. It is applied to each subset: the
+        subjects at least two of its raters rated must all have the same
+        number of ratings among them. This is relevant as a balanced panel
+        can still give unbalanced subsets, when subjects went to different
+        raters.
 
         Raises
         ------
         ValueError
             Naming the first unbalanced subset and how many there are.
         """
-        if not getattr(self.config.config_of_coefficient, "balanced_data_only", False):
+        coc = self.config.config_of_coefficient
+        if not getattr(coc, "balanced_data_only", False):
             return
         from .rater_combinations import rater_subsets
-        from ...contracts import EMPTY
 
         present = self.ratings.category_index != EMPTY
         names = [str(r) for r in self.ratings.semantics.raters]
@@ -231,7 +236,8 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         ----------
         subset_k : int | list[int] | str
             Raw value from config. Config already validated structure
-            (types, >= 2, no dupes). I normalize and check k <= n_raters.
+            (types, >= 2, no dupes); this method normalizes it and checks
+            k <= n_raters.
         n_raters : int
             Number of raters in the data.
 
@@ -277,7 +283,7 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Returns
         -------
         SubsetPermutationResult
-            Observed values, optional per-subset bootstrap, optional mean
+            Observed values, per-subset bootstrap, and the optional mean
             bootstrap for this k.
         """
         from ...intermediates.results.permutation_results.subset_permutation_result import (
@@ -388,28 +394,13 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         Computation B: per-subset bootstrap.
 
         For each subset: select the k rater columns, find the subjects this
-        subset can be measured on, resample those with replacement, and
-        compute the coefficient on each resample. Produces a bootstrap
+        subset can be measured on, resample those subjects with replacement,
+        and compute the coefficient on each resample. Produces a bootstrap
         distribution and a confidence interval per subset.
 
-        **Which subjects a subset can be measured on.** A subject
-        contributes to agreement only if at least two of that subset's
-        raters rated it. Fewer than two ratings is not disagreement, it is
-        absence -- Fleiss makes this explicit, since the per-subject term
-        ``(sum_j n_ij^2 - n_i) / (n_i (n_i - 1))`` is 0/0 at ``n_i = 1``.
-
-        So the pool is "at least two of the k". At k=2 that means both
-        raters, which is what the pairwise analysis does; above k=2 it
-        admits unbalanced subsets rather than demanding a complete
-        rectangle. One rule, applied at every k.
-
-        That pool is also what Computation A measures: ``estimate_subsets``
-        hands the whole array to the estimator and lets it handle the gaps.
-        The bootstrap must resample that same pool, because an interval has
-        to be around the thing the point estimate measured. Draw from the
-        complete cases instead and you have quietly switched estimands; on
-        partially crossed data the mistake surfaces as an interval that
-        does not contain its own point estimate.
+        The subject pool is the subjects at least two of the subset's raters
+        rated, the same pool Computation A measures (see README.md, "Which
+        subjects a subset can be measured on").
 
         Seeding: ``np.random.SeedSequence`` spawns one child seed per
         subset from ``config_of_coefficient.random_state``, so each
@@ -469,16 +460,15 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 np.array(subset)
             )
 
-            # At least two of these k raters (using k for number of raters, why) rated it -- see the docstring
-            # for why two, and why not all k.
+            # Subjects at least two of the subset's raters rated (README.md,
+            # "Which subjects a subset can be measured on").
             present = subset_data.category_index != EMPTY
             measurable = np.flatnonzero(present.sum(axis=1) >= 2)
 
             if measurable.size < 2:
-                # Fewer than two measurable subjects leaves no coefficient
-                # to resample. Every draw fails, so no method runs -- which
-                # the result states rather than implying with a pair of
-                # NaNs.
+                # Fewer than two measurable subjects: no coefficient, so every
+                # draw fails and no method runs. The result says so instead
+                # of carrying bare NaNs.
                 if keep_draws:
                     distributions[subset] = np.full(n_resamples, np.nan)
                 cis[subset] = BootstrapCIResult(
@@ -532,21 +522,22 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         independent: IndependentMeanDraws | None,
         mean_over_subsets: float,
         defined_subsets: list,
-    ) -> tuple[np.ndarray, tuple[float, float]]:
+    ) -> tuple[np.ndarray, BootstrapCIResult]:
         """
         Computation C: mean bootstrap.
 
         Two paths based on ``bootstrap_mean_config.method``:
 
         **Correlated:** Resample subjects globally. For each draw,
-        recompute all C(n,k) subset coefficients on the same resampled
+        recompute all C(n_raters, k) subset coefficients on the same resampled
         subjects, then average. Preserves the correlation between subsets
-        sharing raters. Cost: n_resamples x C(n,k).
+        sharing raters. Cost: n_resamples x C(n_raters, k).
 
         **Independent:** Sample from B's per-subset distributions. For
         each draw, pick one value from each subset's bootstrap
-        distribution, average. Treats subsets as independent -- the CI
-        will be narrower than correlated and may underestimate variance.
+        distribution, average. Ignores the covariance between subsets
+        sharing raters, so when that covariance is positive the interval
+        is too narrow.
         Cost: 0 estimator calls; the picks were made while B ran (see
         IndependentMeanDraws), so here they are only read off.
 
@@ -566,10 +557,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
 
         Returns
         -------
-        tuple[np.ndarray, tuple[float, float]]
+        tuple[np.ndarray, BootstrapCIResult]
             (mean_distribution, mean_ci)
             distribution: shape (n_resamples,)
-            ci: (lower, upper)
+            ci: the interval of the mean
         """
         # The mean uses the coefficient's draw count, interval method, level
         # and seed. The per-combination draws use child streams spawned from
@@ -592,10 +583,10 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
                 f"'independent'."
             )
 
-        # Only the correlated mean has a jackknife. It resamples subjects, so
-        # leaving one subject out is meaningful. The independent mean
-        # resamples from the per-subset distributions and never touches a
-        # subject, so there is nothing to leave out.
+        # BCa needs a jackknife. The correlated mean resamples subjects, so
+        # leaving out one subject at a time matches it. The independent mean
+        # resamples per-subset draws, not subjects, so it has no jackknife and
+        # _compute_ci refuses BCa for it.
         jackknife_fn = (
             (lambda: self._mean_jackknife_correlated(k, defined_subsets))
             if bmc.method == "correlated" else None
@@ -615,13 +606,12 @@ class SubsetPermutationAnalysis(PermutationAnalysis):
         self, k: int, defined_subsets: list
     ) -> np.ndarray:
         """
-        Leave-one-subject-out means, for the correlated mean's acceleration.
+        Calculate leave-one-subject-out means, for the correlated mean's
+        acceleration.
 
-        The counterpart of ``_mean_bootstrap_correlated``: that one resamples
-        all subjects with replacement and averages every k-subset's
-        coefficient on each draw, so this one drops a single subject and does
-        the same. The unit left out matches the unit resampled, which is what
-        makes the acceleration describe the right quantity.
+        For each subject in turn: remove it from the whole panel, compute every
+        subset's coefficient, and average over defined_subsets. This matches
+        ``_mean_bootstrap_correlated``, which resamples the whole panel.
 
         Parameters
         ----------

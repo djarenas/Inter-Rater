@@ -47,7 +47,7 @@ class SubsetPermutationResult(PermutationResult):
     Two bootstrap procedures are supported, recorded in
     ``bootstrap_mean_method``:
 
-    - "correlated": resample subjects once per draw, compute all C(n,k)
+    - "correlated": resample subjects once per draw, compute all C(n_raters, k)
       subset coefficients on the same resampled subjects, then average.
       Preserves the correlation structure between subsets sharing raters.
     - "independent": bootstrap each subset separately. Per-subset CIs and

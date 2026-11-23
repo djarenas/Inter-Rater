@@ -4,21 +4,21 @@ Run a coefficient over subsets of the raters.
 Nothing here computes agreement. Each function picks subsets of the rater
 columns and calls an estimator on each, so swapping Cohen's kappa for
 Fleiss' changes what is measured, not how the subsets are picked. Pairs are
-subsets of size two; leaving one rater out is a subset of size n - 1.
+subsets of size two; leaving one rater out is a subset of size n_raters - 1.
 
 The estimator is any coefficient function, since every one takes an
 ``EstimatorInput``. Analyzers pass the function itself, not a lambda,
 because these run inside resampling loops.
 
 **Each subset may be computed on fewer subjects.** Within a subset, a subject
-left with fewer than two ratings in the subset drops out,
-and on sparse data how many varies by subset. In SR1 main (1,617 subjects, nearly all rated by two of
-the four reviewers), removing one rater leaves 650 to 861 subjects with a
-single rating, depending on which rater. A difference between two subsets
-can therefore reflect how much data each kept rather than how the raters
-agree. This is the purpose of ``subjects_per_subset``: it gives each subset's subject
-count, keyed like ``estimate_subsets``, so an analyzer can report the two
-side by side.
+left with fewer than two ratings in the subset drops out, and on sparse data
+how many varies by subset. In SR1 main (1,617 subjects, nearly all rated by
+two of the four reviewers), removing one rater leaves 650 to 861 subjects
+with a single rating, depending on which rater. A difference between two
+subsets can therefore reflect how much data each kept rather than how the
+raters agree. This is the purpose of ``subjects_per_subset``: it gives each
+subset's subject count, keyed like ``estimate_subsets``, so an analyzer can
+report the two side by side.
 """
 
 from __future__ import annotations
@@ -46,11 +46,10 @@ def rater_subsets(n_raters: int, size: int) -> list[tuple[int, ...]]:
 
     Indices are used instead of names. Code that renders the result objects
     can use semantics to get names.
-    
-    Combinations, not permutations. Reporting (0, 1) and (1, 0) separately would 
-    double every result for no information. They are sorted so that a subset has 
-    one spelling and can be used as a dictionary key.
 
+    Combinations, not permutations. Reporting (0, 1) and (1, 0) separately
+    would double every result for no information. They are sorted so that a
+    subset has one spelling and can be used as a dictionary key.
     """
     if size < MIN_RATERS:
         raise ValueError(
@@ -67,9 +66,9 @@ def rater_subsets(n_raters: int, size: int) -> list[tuple[int, ...]]:
     if count > GUARD_MAX_SUBSETS:
         raise ValueError(
             f"{_ERROR_PREFIX}: {n_raters} raters taken {size} at a time is "
-            f"{count:,} subsets, past the cap of {GUARD_MAX_SUBSETS:,}. That is "
-            f"almost certainly not what was intended -- a smaller size will "
-            f"usually answer the same question."
+            f"{count:,} subsets, past the cap of {GUARD_MAX_SUBSETS:,}. "
+            f"That is almost certainly not what was intended -- a smaller "
+            f"size will usually answer the same question."
         )
 
     return list(itertools.combinations(range(n_raters), size))
@@ -165,6 +164,7 @@ def estimate_subset(unit_data: EstimatorInput, estimator: Estimator) -> float:
 
 # Running an estimator ---------------------------------------------------  #
 
+
 def estimate_subsets(
     data: EstimatorInput, estimator: Estimator, size: int
 ) -> dict[tuple[int, ...], float]:
@@ -174,7 +174,8 @@ def estimate_subsets(
     Keyed by the subset, so ``(0, 2)`` holds what the estimator returned for
     raters 0 and 2 alone. A subset whose data cannot produce a coefficient --
     fewer than two usable subjects or an idle rater (``subset_problem``), or
-    every rating in one category -- comes back as NaN rather than being
+    the estimator itself returns NaN (for kappa-type coefficients, every
+    rating in one category) -- comes back as NaN rather than being
     omitted, because a missing key is easy to overlook and a subset that
     could not be computed is a fact about the design.
 
@@ -217,8 +218,8 @@ def mean_over_subsets(values: dict) -> float:
     computed.
 
     **The values are not independent.** Two subsets sharing a rater are
-    positively correlated, so a standard error that treats them as independent
-    is too small. Version 1 of this package did that.
+    usually positively correlated, so a standard error that treats them as
+    independent is too small. Version 1 of this package made that mistake.
 
     A bootstrap that resamples subjects and recomputes every subset within each
     draw preserves the correlation without having to model it. So this returns
@@ -247,7 +248,8 @@ def mean_over_same_subsets(values: dict, subsets: list) -> float:
     Parameters
     ----------
     values : dict
-        Coefficient per subset, as from ``estimate_subsets`` or ``estimate_pairs``.
+        Coefficient per subset, as from ``estimate_subsets`` or
+        ``estimate_pairs``.
     subsets : list
         The subsets to average: those defined at the point estimate.
 

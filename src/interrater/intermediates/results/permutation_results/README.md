@@ -8,7 +8,7 @@ one k, or across several k at once.
 ```
 PermutationResult               coefficient_name, ci_method, balance_profile,
                                 rater_profile, weights_type, weight_matrix
-├── PairwisePermutationResult   all C(n,2) pairs
+├── PairwisePermutationResult   all C(n_raters, 2) pairs
 ├── SubsetPermutationResult     leave-k-out at a single k
 └── MultiKSubsetResult          several k values at once
 ```
@@ -16,7 +16,7 @@ PermutationResult               coefficient_name, ci_method, balance_profile,
 | Class                       | What It Holds                                                                 | Why It Exists                                                        |
 |-----------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------|
 | `PermutationResult`         | coefficient_name, ci_method, balance_profile, rater_profile, weights_type, weight_matrix | Shared base. Deliberately carries no point estimate -- see below.    |
-| `PairwisePermutationResult` | pair_results (each pair's own result, or NotComputed), n_pairs, mean_over_pairs; optionally bootstrap_mean_method, bootstrap_ci_of_mean, bootstrap_distribution_of_mean | All C(n,2) pairwise coefficients, each a full result.                |
+| `PairwisePermutationResult` | pair_results (each pair's own result, or NotComputed), n_pairs, mean_over_pairs; optionally bootstrap_mean_method, bootstrap_ci_of_mean, bootstrap_distribution_of_mean | All C(n_raters, 2) pairwise coefficients, each a full result.                |
 | `SubsetPermutationResult`   | subset_results (each subset's own result, or NotComputed), n_subsets, subset_k, mean_over_subsets; the same three optional fields for the mean | Leave-one-out or leave-k-out at a single k.                          |
 | `MultiKSubsetResult`        | per_k_results (dict[int, SubsetPermutationResult]), ks                          | Stability curve: how the coefficient moves as more raters are removed. |
 

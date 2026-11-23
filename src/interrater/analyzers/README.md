@@ -193,7 +193,7 @@ coefficient on one data slice. An Orchestrator enumerates subsets (pairs,
 leave-one-out, arbitrary k) and calls an Analyzer or estimator on each,
 then assembles the results.
 
-Leave-one-rater-out is subset permutation at k = n - 1: `subset_k: 3` on a
+Leave-one-rater-out is subset permutation at k = n_raters - 1: `subset_k: 3` on a
 4-rater panel gives the coefficient without each rater in turn, with its
 interval and its subject count. The `rater_jackknife` config flag, which
 would report this on the analyzer's own result, is refused until 2.2.

@@ -344,9 +344,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         Two paths based on ``bootstrap_mean_config.method``:
 
         **Correlated:** Resample subjects globally. For each draw,
-        recompute all C(n,2) pair coefficients on the same resampled
+        recompute all C(n_raters, 2) pair coefficients on the same resampled
         subjects, then average. Preserves the correlation between pairs
-        sharing a rater. Cost: n_resamples x C(n,2).
+        sharing a rater. Cost: n_resamples x C(n_raters, 2).
 
         **Independent:** Sample from B's per-pair distributions. For
         each draw, pick one value from each pair's bootstrap
@@ -396,10 +396,10 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 f"'independent'."
             )
 
-        # Only the correlated mean has a jackknife. It resamples subjects, so
-        # leaving one subject out is meaningful. The independent mean
-        # resamples from the per-pair distributions and never touches a
-        # subject, so there is nothing to leave out.
+        # BCa needs a jackknife. The correlated mean resamples subjects, so
+        # leaving out one subject at a time matches it. The independent mean
+        # resamples per-pair draws, not subjects, so it has no jackknife and
+        # _compute_ci refuses BCa for it.
         jackknife_fn = (
             (lambda: self._mean_jackknife_correlated(defined_pairs))
             if bmc.method == "correlated" else None
@@ -417,13 +417,12 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
     def _mean_jackknife_correlated(self, defined_pairs: list) -> np.ndarray:
         """
-        Leave-one-subject-out means, for the correlated mean's acceleration.
+        Calculate leave-one-subject-out means, for the correlated mean's
+        acceleration.
 
-        The counterpart of ``_mean_bootstrap_correlated``: that one resamples
-        all subjects with replacement and averages every pair's coefficient
-        on each draw, so this one drops a single subject and does the same.
-        The unit left out matches the unit resampled, which is what makes the
-        acceleration describe the right quantity.
+        For each subject in turn: remove it from the whole panel, compute every
+        pair's coefficient, and average over defined_pairs. This matches
+        ``_mean_bootstrap_correlated``, which resamples the whole panel.
 
         Parameters
         ----------

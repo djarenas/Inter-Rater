@@ -37,7 +37,8 @@ KAPPA_MAX_NOT_COMPUTED = (
 @dataclass(frozen=True)
 class LightKappaResult(PointEstimateResult):
     """
-    I am Light's kappa -- the mean of all C(n, 2) pairwise Cohen's kappas.
+    I am Light's kappa -- the mean of all C(n_raters, 2) pairwise Cohen's
+    kappas.
 
     I inherit point, confidence_interval, bootstrap_distribution, and
     balance_profile from PointEstimateResult.

@@ -21,13 +21,13 @@ class LightKappaConfig(IndividualMarginalConfig):
     """
     I am the configuration for Light's kappa analysis.
 
-    Light's kappa (Light 1971) is the unweighted mean of all C(n, 2) pairwise
-    Cohen's kappas. It summarises how well raters agree on average across every
+    Light's kappa (Light 1971) is the unweighted mean of all C(n_raters, 2)
+    pairwise Cohen's kappas. It summarises how well raters agree on average across every
     possible pair, without pooling marginals as Fleiss' kappa does.
 
     Light's kappa keeps rater identity through Cohen's kappa: each pair uses
-    its own marginals. The mean then compresses the C(n, 2) values into a
-    single summary. For per-pair detail, spread, and per-rater diagnostics,
+    its own marginals. The mean then compresses the C(n_raters, 2) values
+    into a single summary. For per-pair detail, spread, and per-rater diagnostics,
     use the pairwise permutation analyzer -- Light's kappa is the headline
     number, not the diagnostic.
 
@@ -38,7 +38,7 @@ class LightKappaConfig(IndividualMarginalConfig):
     mean of unweighted pairwise kappas. The analyzer refuses ratings whose
     semantics declares ordered or weighted categories.
 
-    There is no closed-form null variance for Light's kappa. The C(n, 2)
+    There is no closed-form null variance for Light's kappa. The C(n_raters, 2)
     pairwise kappas are correlated (pairs sharing a rater are not independent),
     so the variance of the mean cannot be derived from the individual null
     variances. Use bootstrap ("percentile" or "bca") for confidence intervals.
@@ -107,7 +107,8 @@ class LightKappaConfig(IndividualMarginalConfig):
         if self.ci_method == "parametric_null":
             raise ValueError(
                 f"{_ERROR_PREFIX}: ci_method='parametric_null' is not available "
-                f"for Light's kappa. The C(n, 2) pairwise kappas are correlated "
+                f"for Light's kappa. The C(n_raters, 2) pairwise kappas are "
+                f"correlated "
                 f"(pairs sharing a rater are not independent), so no closed-form "
                 f"null variance exists. Use 'percentile' or 'bca' instead."
             )

@@ -39,7 +39,7 @@ PointEstimateResult
 | `KrippendorffAlphaResult`  | ci_method, weights_type, weight_matrix, is_exact (always True) | Krippendorff's alpha. Handles unbalanced data natively -- always exact.       |
 | `CohenKappaResult`         | ci_method, weights_type, weight_matrix            | Cohen's kappa for two identified raters. Weighted or unweighted.              |
 | `CongerKappaResult`        | ci_method                                         | Conger's kappa. No weights. Rejects `parametric_null` (not available).        |
-| `LightKappaResult`         | n_pairs, ci_method, pair_parts, pair_kappa_max    | Light's kappa -- mean of C(n,2) pairwise Cohen's kappas, each pair's Po, Pe and ceiling keyed by rater names. Always unweighted. |
+| `LightKappaResult`         | n_pairs, ci_method, pair_parts, pair_kappa_max    | Light's kappa -- mean of C(n_raters, 2) pairwise Cohen's kappas, each pair's Po, Pe and ceiling keyed by rater names. Always unweighted. |
 
 ## Why the fields differ by coefficient
 
