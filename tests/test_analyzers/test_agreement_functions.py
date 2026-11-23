@@ -583,6 +583,18 @@ class TestLightKappa:
         # Pairwise Cohens: (0,1)=1/2, (0,2)=1/2, (1,2)=0. Mean = 1/3.
         assert abs(light_kappa(THREE_RATER_INPUT) - 1 / 3) < TOL
 
+    def test_light_1971_figure_6(self):
+        """Light (1971), Figure 6 and Eq. 6, p. 369: 100 families, three
+        raters, two categories. Light reports A = 6.1e9 and B = 6.15e11,
+        so kappa_m = 1 - nA/B = 1 - 610/615 = 1/123 (printed as .01)."""
+        cells = {
+            (0, 0, 0): 5, (0, 0, 1): 5, (0, 1, 0): 40, (0, 1, 1): 40,
+            (1, 0, 0): 0, (1, 0, 1): 0, (1, 1, 0): 5, (1, 1, 1): 5,
+        }
+        rows = [cell for cell, count in cells.items() for _ in range(count)]
+        data = EstimatorInput(category_index=np.array(rows), n_categories=2)
+        assert abs(light_kappa(data) - 1 / 123) < TOL
+
     def test_every_pair_undefined_is_nan_without_a_warning(self):
         """All ratings in one category: every pair's kappa is undefined. The
         mean is NaN, returned quietly -- np.nanmean used to warn "Mean of

@@ -28,56 +28,59 @@ from ..intermediates.results.analyzer_results.conger_kappa_result import (
 _ERROR_PREFIX = "[CongerKappaAnalyzer] Error"
 
 
-
 class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     """
     I am the analyzer for Conger's kappa, the multi-rater agreement coefficient
     with individual marginals.
 
-    Conger's kappa (Conger 1980) generalises Cohen's kappa to any number of
-    raters (n >= 2) while preserving each rater's own category distribution in
-    the chance term. Where Fleiss' kappa pools marginal distributions across
-    raters, Conger's kappa subtracts the variance of those distributions from
-    the pooled chance term -- the same principle as Cohen's, extended beyond a
-    single pair.
+    Conger's kappa (Conger 1980) generalises Cohen's kappa to two or more
+    raters while preserving each rater's own category distribution in
+    the chance term.
 
     At exactly two raters, Conger's kappa reduces to Cohen's unweighted kappa.
 
     I validate that:
+    - Ratings and config pass my parent's checks, which refuse ordered or
+      weighted semantics
     - Config is CongerKappaConfig
+    - Every rater rated every subject, after any injection
 
     I compute:
     - Point estimate of Conger's kappa (always unweighted)
     - Bootstrap confidence interval (percentile or BCa -- no parametric null)
-    - Return CongerKappaResult with all metadata
+    - Return a CongerKappaResult
 
     Conger's kappa reads rater identity -- who said what -- and counts discard
     that. If you have only counts, you want Fleiss'
     kappa, not Conger's.
 
-    There is no weighted form. Conger (1980) defined the coefficient for nominal
-    data only. I refuse ordered or weighted semantics
-    (``_refuse_weights_if_unsupported``), and ``conger_kappa`` raises
-    NotImplementedError on non-identity weights.
+    The package implements no weighted form for Conger's kappa. Conger
+    (1980) defined the coefficient for nominal data only. I refuse ordered
+    or weighted semantics (``_refuse_weights_if_unsupported``), and
+    ``conger_kappa`` raises NotImplementedError on non-identity weights.
 
-    There is no parametric null variance. Confidence intervals and hypothesis
-    tests use bootstrap and permutation methods respectively.
+    The package implements no parametric null for Conger's kappa, so
+    confidence intervals use bootstrap (percentile or BCa) and hypothesis
+    tests use permutation only.
 
     Attributes
     ----------
     ratings : Ratings
-        The ratings data (from Analyzer, always required).
+        The validated ratings data (from Analyzer).
     balance_profile : BalanceProfile
-        Describes the data structure (from Analyzer).
+        Describes the balance structure of the data (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped. Always present here:
         this coefficient needs rater identity.
+    weights : None
+        Always None: Conger's kappa has no weighted form here (from
+        Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from: category_index and
+        n_categories, with weights=None (from Analyzer).
     config : CongerKappaConfig
         The analysis configuration for Conger's kappa.
-    estimator_input : EstimatorInput
-        Built from ratings, carrying category_index, n_categories, and
-        weights=None (from IndividualMarginalAnalyzer).
 
     References
     ----------
@@ -94,6 +97,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights: None
     estimator_input: EstimatorInput
     # Checked at this level
     config: CongerKappaConfig
@@ -102,7 +106,8 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def __init__(self, ratings: Ratings, config: CongerKappaConfig) -> None:
         """
-        Initialize Conger's kappa analyzer: validate config and data.
+        Run the parent's checks, then check the config type and that the
+        data are complete.
 
         Parameters
         ----------
@@ -115,9 +120,11 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         Raises
         ------
         TypeError
-            If config is not CongerKappaConfig.
+            If ratings is not a Ratings object, or config is not
+            CongerKappaConfig.
         ValueError
-            If any rating is missing (after injection).
+            If the semantics are ordered or weighted, or any rating is
+            missing (after injection).
         """
         # Call parent __init__ (validates ratings and checks that config is
         # IndividualMarginalConfig, computes BalanceProfile, builds
@@ -142,7 +149,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         Test H_0: kappa = 0 by permutation (``_permutation_test``).
 
-        There is no closed-form null variance for Conger's kappa.
+        The package implements no parametric null for Conger's kappa.
         """
         return self._permutation_test()
 
@@ -169,7 +176,9 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         result can check that they rebuild the point estimate.
         """
         po, pe = conger_parts(self.estimator_input)
-        return AgreementParts(observed=po, chance=pe, kind="agreement", weighted=False)
+        return AgreementParts(
+            observed=po, chance=pe, kind="agreement", weighted=False
+        )
 
     def _kappa_max(self) -> float | NotComputed:
         """
@@ -199,8 +208,8 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         My result: the point, interval and draws ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
 
-        Only percentile and bca intervals: there is no closed-form null
-        variance for Conger's kappa.
+        Only percentile and bca intervals: the package implements no
+        parametric null for Conger's kappa.
         """
         return CongerKappaResult(
             point=point,

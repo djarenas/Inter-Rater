@@ -34,52 +34,60 @@ _ERROR_PREFIX = "[LightKappaAnalyzer] Error"
 
 class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     """
-    I am the analyzer for Light's kappa, the mean of all C(n, 2) pairwise
-    Cohen's kappas.
+    I am the analyzer for Light's kappa, the mean of the Cohen's kappas of
+    every pair of raters.
 
-    Light's kappa (Light 1971) keeps rater identity through Cohen's kappa:
-    each pair uses its own marginals. The mean then compresses the C(n, 2)
-    values into a single summary. For per-pair detail, spread, and per-rater
-    diagnostics, use the pairwise permutation analyzer -- Light's kappa is
-    the headline number, not the diagnostic.
+    Light's kappa (Light 1971) keeps rater identity through Cohen's kappa;
+    each pair uses its own marginals. The mean then compresses the C(m, 2)
+    values, for m raters, into a single summary. A pair whose kappa is
+    undefined is left out of the mean (a package choice; Light's formula is
+    then undefined). For per-pair detail, spread, and per-rater
+    diagnostics, use ``PairwisePermutationAnalysis``.
 
     At exactly two raters (n_pairs=1), Light's kappa reduces to Cohen's
     unweighted kappa (there is only one pair).
 
     I validate that:
+    - Ratings and config pass my parent's checks, which refuse ordered or
+      weighted semantics
     - Config is LightKappaConfig
+    - Every rater rated every subject, after any injection
 
     I compute:
     - Point estimate of Light's kappa (always unweighted)
     - Bootstrap confidence interval (percentile or BCa -- no parametric null)
-    - Return LightKappaResult with all metadata including n_pairs
+    - Return a LightKappaResult, including n_pairs
 
     Light's kappa reads rater identity -- who said what -- and counts discard
     that.
 
-    There is no weighted form in this package. Light (1971) defined the coefficient as the
-    mean of unweighted pairwise kappas.
+    The package implements no weighted form for Light's kappa. Light
+    (1971, Eq. 6) built the coefficient from unweighted pairwise
+    disagreements; it equals the mean of the pairwise Cohen's kappas.
 
-    There is no parametric null variance. The C(n, 2) pairwise kappas are
-    correlated (pairs sharing a rater are not independent), so confidence
-    intervals and hypothesis tests use bootstrap and permutation methods
-    respectively.
+    The package implements no parametric null for Light's kappa, so
+    confidence intervals use bootstrap (percentile or BCa) and hypothesis
+    tests use permutation only. Light (1971, Eq. 8) gives a large-sample
+    null variance; the package does not implement it.
 
     Attributes
     ----------
     ratings : Ratings
-        The ratings data (from Analyzer, always required).
+        The validated ratings data (from Analyzer).
     balance_profile : BalanceProfile
-        Describes the data structure (from Analyzer).
+        Describes the balance structure of the data (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped. Always present here:
         this coefficient needs rater identity.
+    weights : None
+        Always None: Light's kappa has no weighted form here (from
+        Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from: category_index and
+        n_categories, with weights=None (from Analyzer).
     config : LightKappaConfig
         The analysis configuration for Light's kappa.
-    estimator_input : EstimatorInput
-        Built from ratings, carrying category_index, n_categories, and
-        weights=None (from IndividualMarginalAnalyzer).
 
     References
     ----------
@@ -97,6 +105,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
+    weights: None
     estimator_input: EstimatorInput
     # Checked at this level
     config: LightKappaConfig
@@ -105,7 +114,8 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def __init__(self, ratings: Ratings, config: LightKappaConfig) -> None:
         """
-        Initialize Light's kappa analyzer: validate config.
+        Run the parent's checks, then check the config type and that the
+        data are complete.
 
         Parameters
         ----------
@@ -117,10 +127,12 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         Raises
         ------
         TypeError
-            If config is not LightKappaConfig.
+            If ratings is not a Ratings object, or config is not
+            LightKappaConfig.
         ValueError
-            If any rating is missing (after injection):
-            Light (1971) defines the coefficient for complete data.
+            If the semantics are ordered or weighted, or any rating is
+            missing (after injection): Light (1971) defines the coefficient
+            for complete data.
         """
         # Call parent __init__ (validates ratings and checks that config is
         # IndividualMarginalConfig, computes BalanceProfile, builds
@@ -145,7 +157,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         Test H_0: kappa = 0 by permutation (``_permutation_test``).
 
-        There is no closed-form null variance for Light's kappa.
+        The package implements no parametric null for Light's kappa.
         """
         return self._permutation_test()
 
@@ -194,7 +206,7 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
 
         The only coefficient-specific step in my resampling. Everything that
         draws samples is written once on Analyzer in terms of this. Light's
-        kappa is the mean of the C(m,2) pairwise Cohen's kappas, so every
+        kappa is the mean of the C(m, 2) pairwise Cohen's kappas, so every
         rater pair is re-formed from the column positions of data.
         """
         return light_kappa(data)
@@ -206,8 +218,8 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         My result: the point, interval and draws ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
 
-        Only percentile and bca intervals: there is no closed-form null
-        variance for Light's kappa.
+        Only percentile and bca intervals: the package implements no
+        parametric null for Light's kappa.
         """
         n_pairs = comb(self.rater_profile.n_raters, 2)
 

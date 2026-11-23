@@ -38,39 +38,41 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
     data.
 
     I validate that:
+    - Ratings and config pass my parent's checks
     - Config is CohenKappaConfig
-    - Data contains exactly two raters (n_raters == 2)
+    - Data contains exactly two raters (n_raters == 2), after any injection
 
     I compute:
     - Point estimate of Cohen's (weighted) kappa
     - Confidence interval (bootstrap or parametric null)
-    - Return CohenKappaResult with all metadata
+    - Return a CohenKappaResult
 
     Cohen's kappa reads rater identity -- who said what -- and counts discard
     that. If you have only counts, you want Fleiss'
     kappa or Scott's pi, not Cohen's.
 
-    There is no balance_profile or is_exact distinction. Cohen operates on the
-    subjects both raters rated (shared_rows), so the formula is always exact
-    on the pair it was given.
+    Unlike Scott's pi, there is no is_exact distinction. Cohen operates on
+    the subjects both raters rated (shared_rows), so the formula is always
+    exact on the pair it was given.
 
     Attributes
     ----------
     ratings : Ratings
-        The ratings data (from Analyzer, always required).
+        The validated ratings data (from Analyzer).
     balance_profile : BalanceProfile
-        Describes the data structure (from Analyzer).
+        Describes the balance structure of the data (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped. Always present here:
         this coefficient needs rater identity.
-    config : CohenKappaConfig
-        The analysis configuration for Cohen's kappa.
-    estimator_input : EstimatorInput
-        Built from ratings, carrying category_index, n_categories, and weights.
     weights : Weights | None
         The weights declared by the semantics (from Analyzer).
         None for unordered categories (unweighted).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from: category_index, n_categories
+        and weights (from Analyzer).
+    config : CohenKappaConfig
+        The analysis configuration for Cohen's kappa.
 
     References
     ----------
@@ -96,8 +98,8 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
     ratings: Ratings
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
-    estimator_input: EstimatorInput
     weights: Weights | None
+    estimator_input: EstimatorInput
     # Checked at this level
     config: CohenKappaConfig
 
@@ -105,7 +107,8 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def __init__(self, ratings: Ratings, config: CohenKappaConfig) -> None:
         """
-        Initialize Cohen's kappa analyzer: validate config and rater count.
+        Run the parent's checks, then check the config type and the two
+        raters.
 
         Parameters
         ----------
@@ -117,9 +120,10 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
         Raises
         ------
         TypeError
-            If config is not CohenKappaConfig.
+            If ratings is not a Ratings object, or config is not
+            CohenKappaConfig.
         ValueError
-            If data does not contain exactly two raters.
+            If the ratings, after any injection, do not have exactly 2 raters.
         """
         # Call parent __init__ (validates ratings, config, computes BalanceProfile,
         # builds EstimatorInput, resolves weights)
@@ -136,7 +140,7 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def hypothesis_test(self) -> HypothesisTestResult:
         """
-        Test H_0: kappa_w = 0 by the method in config.hypothesis_test_config:
+        Test H_0: kappa = 0 by the method in config.hypothesis_test_config:
         "parametric_null" (``_parametric_null_test``) or "permutation"
         (``_permutation_test``).
         """
@@ -146,13 +150,12 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def _parametric_null_test(self) -> HypothesisTestResult:
         """
-        Test H_0: kappa_w = 0 with the Fleiss, Cohen & Everitt (1969) null
+        Test H_0: kappa = 0 with the Fleiss, Cohen & Everitt (1969) null
         variance.
 
         No bias correction: the Fleiss (1979) correction +1/(N(n-1)) was
-        derived for the multi-rater case and does not apply here.
+        derived for Fleiss' kappa, not for Cohen's.
         """
-        from ..intermediates.results import HypothesisTestResult
         from .variance_functions import cohen_null_variance
 
         ht_config = self._hypothesis_test_config()
@@ -169,9 +172,9 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
         )
         se_null = np.sqrt(var_null)
 
-        # No bias correction for two-rater case.
+        # No bias correction.
         # The +1/(N(n-1)) correction in Fleiss (1979) Eq. 17 was derived
-        # for multi-rater kappa and does not apply to Cohen's kappa.
+        # for Fleiss' kappa and does not apply to Cohen's kappa.
         z = point / se_null
 
         p_value = self._parametric_p_value(z, ht_config.alternative)
@@ -181,7 +184,7 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
             alpha=ht_config.alpha,
             reject_null=self._reject_null(p_value, ht_config.alpha),
             method="parametric_null",
-            coefficient="cohen_kappa",
+            coefficient=self._COEFFICIENT_KEY,
             point=point,
             z_statistic=z,
             null_variance=var_null,
@@ -275,7 +278,8 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
 
     def _kappa_max(self) -> float:
         """
-        The largest kappa the two raters' marginals allow (Cohen 1960).
+        The largest kappa the two raters' marginals allow (Cohen 1960 for
+        the unweighted case; weighted, see ``max_observed_agreement``).
 
         NaN when fewer than two subjects are shared, where kappa itself is
         NaN: there is no coefficient for it to bound.
@@ -295,41 +299,22 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         return cohen_kappa(data)
 
-    def _parametric_null_ci(
-        self,
-        point: float,
-        p_a: np.ndarray,
-        p_b: np.ndarray,
-        n_subjects: int,
-    ) -> ParametricCIResult:
+    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
         """
-        Compute confidence interval using Fleiss-Cohen-Everitt (1969) null
-        variance.
-
-        Parameters
-        ----------
-        point : float
-            The point estimate of kappa.
-        p_a : np.ndarray
-            Rater A's marginal proportions.
-        p_b : np.ndarray
-            Rater B's marginal proportions.
-        n_subjects : int
-            Number of subjects both raters rated.
-
-        Returns
-        -------
-        ParametricCIResult
-            Bounds, the level, and the variance they were built from.
+        The interval from the Fleiss, Cohen & Everitt (1969) null variance,
+        for ``ci_method="parametric_null"``: no bootstrap, so no draws.
         """
         from scipy import stats
         from .variance_functions import cohen_null_variance
 
+        p_a, p_b = self._compute_marginals()
         weight_matrix = (
             self.weights.matrix if self.weights is not None else None
         )
 
-        var_null = cohen_null_variance(p_a, p_b, n_subjects, weight_matrix)
+        var_null = cohen_null_variance(
+            p_a, p_b, self._get_n_subjects(), weight_matrix
+        )
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
@@ -353,14 +338,6 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
             COHEN_NULL_VARIANCE_SOURCE if weighted
             else COHEN_UNWEIGHTED_NULL_VARIANCE_SOURCE
         )
-
-    def _parametric_null_interval(self, point: float) -> ParametricCIResult:
-        """
-        The interval from Fleiss, Cohen & Everitt (1969) null variance, for
-        ``ci_method="parametric_null"``: no bootstrap, so no draws.
-        """
-        p_a, p_b = self._compute_marginals()
-        return self._parametric_null_ci(point, p_a, p_b, self._get_n_subjects())
 
     def _result(
         self, point: float, ci, bootstrap_distribution: np.ndarray | None

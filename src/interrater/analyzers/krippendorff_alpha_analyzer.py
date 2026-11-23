@@ -38,48 +38,48 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
 
     where Do is the observed disagreement pooled across all pairable rating
     pairs, and De is the expected disagreement under random permutation of
-    the same ratings. This is not the same expression as the kappa family's
-    ``(Po - Pe) / (1 - Pe)``; the two use different units
-    (pairs pooled vs. subjects averaged) and different chance models
-    (finite-sample permutation vs. population rates).
+    the same ratings. Written with Po = 1 - Do and Pe = 1 - De, this is the
+    kappa family's ``(Po - Pe) / (1 - Pe)``, but the two compute Po and Pe
+    differently: different units (pairs pooled vs. subjects averaged) and
+    different chance models (drawing without vs. with replacement).
 
     Alpha handles missing data natively. There is no assumption that every
     subject was rated the same number of times or by the same raters. A
     subject rated once contributes no pairs and therefore contributes
-    nothing. Therefore, the alpha coefficient is frequently utilized for
-    unbalanced data.
+    nothing.
 
     The weighted form uses a cost function d_ab = 1 - w_ab entering both
     the observed and expected disagreement terms identically. Identity
     weights give the nominal (unweighted) case.
 
-    This package does not use parametric... for Krippendorff's alpha,
-    The confidence intervals for Kripp use bootstrap (percentile or BCa) and hypothesis
-    tests use permutation only (Hayes & Krippendorff 2007).
+    The package implements no parametric null for Krippendorff's alpha, so
+    confidence intervals use bootstrap (percentile or BCa) and hypothesis
+    tests use permutation only.
 
     I validate that:
+    - Ratings and config pass my parent's checks
     - Config is KrippendorffAlphaConfig
-    - Data structure is appropriate for Krippendorff's alpha
 
     I compute:
     - Point estimate of Krippendorff's alpha
     - Bootstrap confidence interval (percentile or BCa)
-    - Balance profile
-    - Return KrippendorffAlphaResult with all metadata
+    - Return a KrippendorffAlphaResult
 
     Attributes
     ----------
     ratings : Ratings
-        The validated ratings data (inherited from Analyzer).
-    config : KrippendorffAlphaConfig
-        The analysis configuration for Krippendorff's alpha.
+        The validated ratings data (from Analyzer).
     balance_profile : BalanceProfile
-        Describes the balance structure of the data (inherited from Analyzer).
+        Describes the balance structure of the data (from Analyzer).
     rater_profile : RaterProfile
         Computed from ratings: who the raters are, how much each
         rated, how much each pair overlapped.
     weights : Weights | None
         The weights object (from Analyzer).
+    estimator_input : EstimatorInput
+        What my coefficient is computed from (from Analyzer).
+    config : KrippendorffAlphaConfig
+        The analysis configuration for Krippendorff's alpha.
     """
 
     # Has a weighted form: Analyzer reads the weights from the semantics
@@ -95,6 +95,7 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
     weights: Weights | None
+    estimator_input: EstimatorInput
     # Checked at this level
     config: KrippendorffAlphaConfig
 
@@ -102,7 +103,7 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
 
     def __init__(self, ratings: Ratings, config: KrippendorffAlphaConfig) -> None:
         """
-        Initialize Krippendorff's alpha analyzer: validate config and ratings.
+        Run the parent's checks, then check the config type.
 
         Parameters
         ----------
@@ -114,21 +115,13 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
         Raises
         ------
         TypeError
-            If config is not KrippendorffAlphaConfig.
-            If ratings is not a Ratings object.
+            If ratings is not a Ratings object, or config is not
+            KrippendorffAlphaConfig.
         ValueError
             If config.balanced_data_only=True but data is unbalanced.
         """
-        from ..data_objects.ratings import Ratings as RatingsBase
-
-        # Validate ratings is at least a Ratings object
-        if not isinstance(ratings, RatingsBase):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ratings must be a Ratings object, "
-                f"got {type(ratings).__name__}"
-            )
-
-        # Call parent __init__ (validates group config; Analyzer builds the Weights)
+        # Call parent __init__ (validates ratings and config, computes
+        # BalanceProfile, validates group config and balance constraint)
         try:
             super().__init__(ratings, config)
         except (TypeError, ValueError) as e:
@@ -143,7 +136,7 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
         """
         Test H_0: alpha = 0 by permutation (``_permutation_test``).
 
-        This package ...There is no closed-form null variance for Krippendorff's alpha.
+        The package implements no parametric null for Krippendorff's alpha.
         """
         return self._permutation_test()
 
