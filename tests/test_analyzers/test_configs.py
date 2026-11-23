@@ -435,6 +435,10 @@ class TestIndividualMarginalConfig:
         cfg = IndividualMarginalConfig()
         assert cfg.rater_jackknife is False
 
+    def test_rater_jackknife_non_bool_rejected(self):
+        with pytest.raises(TypeError, match="rater_jackknife must be bool"):
+            IndividualMarginalConfig(rater_jackknife="")
+
     def test_rater_jackknife_true_rejected(self):
         """Individual marginals don't support jackknife yet."""
         with pytest.raises(ValueError, match="rater_jackknife.*not supported in this version"):

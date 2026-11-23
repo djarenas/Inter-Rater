@@ -1,4 +1,4 @@
-"""Configuration for individual marginal coefficients (Cohen, Conger)."""
+"""Configuration for individual marginal coefficients (Cohen, Conger, Light)."""
 
 from __future__ import annotations
 
@@ -20,10 +20,9 @@ class IndividualMarginalConfig(AnalyzerConfig):
     """
     I am the base configuration for coefficients that keep rater identity.
 
-    Individual marginal coefficients (Cohen's kappa, Conger's kappa) maintain
-    which rater said what, enabling per-rater marginal probabilities. They are
-    different from group coefficients (Fleiss, AC1, etc.) which discard rater
-    identity and read a counts matrix.
+    Individual marginal coefficients (Cohen's kappa, Conger's kappa, Light's
+    kappa) maintain which rater said what, enabling per-rater marginal
+    probabilities.
 
     I do not allow rater_jackknife (leave-one-rater-out diagnostics): it is
     not supported in this version yet, for any coefficient.
@@ -34,7 +33,8 @@ class IndividualMarginalConfig(AnalyzerConfig):
     ----------
     rater_jackknife : bool, default False
         Must be False: leave-one-rater-out diagnostics are not supported in
-        this version yet.
+        this version yet. SubsetPermutationAnalysis with subset_k:
+        n_raters - 1 gives the same numbers meanwhile.
     (all other fields inherited from AnalyzerConfig)
     """
 
@@ -43,7 +43,7 @@ class IndividualMarginalConfig(AnalyzerConfig):
     # Inherited from parent class AnalyzerConfig
     n_resamples: int
     alpha: float
-    random_state: int | None
+    random_state: int
     ci_method: str
     convergence_test: ConvergenceTest | None
     hypothesis_test_config: HypothesisTestConfig | None
@@ -61,6 +61,13 @@ class IndividualMarginalConfig(AnalyzerConfig):
             super().__post_init__()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
+        # Validate rater_jackknife
+        if not isinstance(self.rater_jackknife, bool):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: rater_jackknife must be bool, "
+                f"got {type(self.rater_jackknife).__name__}"
+            )
 
         # Rater jackknife not currently supported for individual marginals
         if self.rater_jackknife:
