@@ -23,15 +23,19 @@ class SubsetPermutationConfig(PermutationConfig):
     """
     I am the configuration for subset permutation analysis.
 
-    I compute a coefficient for all C(n_raters, k) combinations of k raters.
+    I configure a coefficient computed for all C(n_raters, k) combinations of
+    k raters.
     This is useful for understanding how agreement scales with panel size or
     for analyzing specific subgroups of raters.
 
     subset_k controls which subset sizes to evaluate:
-    - A single int (e.g. 3) runs one subset size.
-    - A list of ints (e.g. [2, 3]) runs multiple subset sizes.
-    - The string "all" runs every k from 2 through n_raters (expanded
-      at analysis time when the data is available).
+    - Providing a single integer (e.g. 3) tells the analyzer to run every
+      subset of that size.
+    - Providing a list of integers (e.g. [2, 3]) signals to run multiple
+      subset sizes.
+    - Providing the string "all" tells the analyzer to run every k from 2
+      through n_raters (which exact subsets are run is decided by the
+      analyzer at run time, when it has the data in front of it).
 
     I enforce that:
     - coefficient_to_compute is in SUBSET_PERMUTATION_COEFFICIENTS
@@ -39,7 +43,8 @@ class SubsetPermutationConfig(PermutationConfig):
     - subset_k is provided and structurally valid (>= 2 for every k)
 
     The analysis class is responsible for:
-    - Normalizing int to [int]
+    - Normalizing k: checking whether it is an int or [int], with [int] as
+      the final form
     - Expanding "all" to list(range(2, n_raters + 1))
     - Validating each k <= n_raters
 
@@ -62,10 +67,11 @@ class SubsetPermutationConfig(PermutationConfig):
     def __post_init__(self) -> None:
         """Validate subset permutation configuration."""
 
-        # Call parent validation first
+        # Scott's pi is refused by name, before the parent's generic message
         if self.coefficient_to_compute == "scotts_pi":
             raise ValueError(f"{_ERROR_PREFIX}: {_SCOTTS_PI_NOT_FOR_SUBSETS}")
 
+        # Parent validation
         try:
             super().__post_init__()
         except (TypeError, ValueError) as e:
@@ -76,9 +82,9 @@ class SubsetPermutationConfig(PermutationConfig):
         # Require subset_k for subset permutation
         if self.subset_k is None:
             raise ValueError(
-                f"{_ERROR_PREFIX}: subset_k is required for subset permutation. "
-                f"Specify the number of raters per subset (e.g., subset_k=3, "
-                f"subset_k=[2, 3], or subset_k='all')"
+                f"{_ERROR_PREFIX}: subset_k is required for subset "
+                f"permutation. Specify the number of raters per subset "
+                f"(e.g., subset_k=3, subset_k=[2, 3], or subset_k='all')"
             )
 
         # Validate subset_k by type
@@ -87,19 +93,13 @@ class SubsetPermutationConfig(PermutationConfig):
         # Validate that coefficient is subset-capable
         if self.coefficient_to_compute not in SUBSET_PERMUTATION_COEFFICIENTS:
             raise ValueError(
-                f"{_ERROR_PREFIX}: '{self.coefficient_to_compute}' does not support "
-                f"subset permutation. Allowed coefficients: "
+                f"{_ERROR_PREFIX}: '{self.coefficient_to_compute}' does not "
+                f"support subset permutation. Allowed coefficients: "
                 f"{sorted(SUBSET_PERMUTATION_COEFFICIENTS)}"
             )
 
         # Validate that config_of_coefficient matches the coefficient
         expected = self._resolve_config_class(self.coefficient_to_compute)
-        if expected is None:
-            # This shouldn't happen if contracts are correct, but guard it
-            raise ValueError(
-                f"{_ERROR_PREFIX}: Unknown coefficient '{self.coefficient_to_compute}'"
-            )
-
         if not isinstance(self.config_of_coefficient, expected):
             raise TypeError(
                 f"{_ERROR_PREFIX}: coefficient_to_compute="
@@ -115,14 +115,13 @@ class SubsetPermutationConfig(PermutationConfig):
         """
         Build a subset permutation config from a plain dictionary.
 
-        I do everything the parent's ``_prepare_dict`` does (validate
+        Does everything the parent's ``_prepare_dict`` does (validate
         inputs, normalize YAML aliases, hydrate bootstrap_mean_config),
-        then I hydrate ``config_of_coefficient`` into the correct
+        then hydrates ``config_of_coefficient`` into the correct
         AnalyzerConfig subclass based on ``coefficient_to_compute``.
 
-        If ``coefficient_to_compute`` is not in the subset map, I skip
-        hydration and let ``__post_init__`` reject it with its own clear
-        error message.
+        If ``coefficient_to_compute`` is unknown, hydration is skipped and
+        ``__post_init__`` rejects it with its own clear error message.
 
         Parameters
         ----------
@@ -146,8 +145,6 @@ class SubsetPermutationConfig(PermutationConfig):
 
         # Hydrate config_of_coefficient if it is still a raw dict
         coefficient = data_dict.get("coefficient_to_compute")
-        if coefficient == "scotts_pi":
-            raise ValueError(f"{_ERROR_PREFIX}: {_SCOTTS_PI_NOT_FOR_SUBSETS}")
         config_class = cls._resolve_config_class(coefficient)
 
         if config_class is not None:
@@ -191,12 +188,7 @@ class SubsetPermutationConfig(PermutationConfig):
                     f"{_ERROR_PREFIX}: subset_k list must not be empty"
                 )
             for i, val in enumerate(k):
-                if isinstance(val, bool):
-                    raise TypeError(
-                        f"{_ERROR_PREFIX}: subset_k list elements must be "
-                        f"int, got {type(val).__name__} at index {i}"
-                    )
-                if not isinstance(val, int):
+                if isinstance(val, bool) or not isinstance(val, int):
                     raise TypeError(
                         f"{_ERROR_PREFIX}: subset_k list elements must be "
                         f"int, got {type(val).__name__} at index {i}"

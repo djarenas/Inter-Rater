@@ -25,11 +25,11 @@ class PermutationBootstrapMeanConfig:
 
     I am bundled as one object so that ``None`` on the parent
     PermutationConfig means "no mean-level bootstrap." When I am present,
-    the permutation analyzer bootstraps the mean and builds its interval.
+    the permutation analysis bootstraps the mean and builds its interval.
 
     I hold only the method. The draw count, interval method, level and
-    seed come from the parent's ``config_of_coefficient``, the same ones
-    the per-combination intervals use.
+    seed come from the parent's ``config_of_coefficient`` attribute. This is
+    the same information the per-combination intervals use.
 
     Two bootstrap procedures are supported:
 
@@ -37,9 +37,9 @@ class PermutationBootstrapMeanConfig:
       combinations on the same resampled data, then average. Preserves
       the correlation structure between combinations that share a rater.
     - "independent": draw one value from each combination's own
-      bootstrap draws, then average. It ignores the correlation between
-      combinations that share raters, so its interval tends to be too
-      narrow. It needs at least 2 draws per combination and
+      bootstrap draws, then average. Ignores the covariance between
+      combinations sharing raters, so when that covariance is positive the
+      interval is too narrow. It needs at least 2 draws per combination and
       ci_method='percentile'; the parent config checks both.
 
     Attributes
@@ -75,7 +75,9 @@ class PermutationBootstrapMeanConfig:
                 f"'independent', got '{self.method}'"
             )
 
-        removed = [name for name in _REMOVED if getattr(self, name) is not None]
+        removed = [
+            name for name in _REMOVED if getattr(self, name) is not None
+        ]
         if removed:
             moved = ", ".join(f"{name} -> {_REMOVED[name]}" for name in removed)
             raise TypeError(
