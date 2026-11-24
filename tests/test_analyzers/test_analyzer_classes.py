@@ -590,7 +590,7 @@ class TestResultsRecordWeightMatrix:
     def test_matrix_on_an_unweighted_result_refused(self, name, n_raters):
         result = _weighted_result(name, n_raters, UnorderedCategories(("A", "B", "C")))
         identity = np.eye(3).tolist()
-        with pytest.raises(ValueError, match="weight_matrix must be None when weights_type is 'identity'"):
+        with pytest.raises(ValueError, match="weight_matrix must be None exactly when weights_type is 'identity'"):
             dataclasses.replace(result, weight_matrix=identity)
 
     @pytest.mark.parametrize("name, n_raters", _WEIGHTED)
