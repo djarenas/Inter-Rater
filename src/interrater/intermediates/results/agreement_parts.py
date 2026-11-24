@@ -1,4 +1,4 @@
-"""The two numbers a chance-corrected coefficient is built from."""
+"""Holds the observed and chance terms of a chance-corrected coefficient."""
 
 from __future__ import annotations
 
@@ -18,9 +18,10 @@ class AgreementParts:
     I hold the observed and chance terms a coefficient is built from, and
     rebuild the coefficient from them.
 
-    One number hides how it was reached: kappa = 0.40 can be Po = 0.95 with
-    Pe = 0.92 (raters agree on nearly everything, but one category dominates)
-    or Po = 0.70 with Pe = 0.50. I keep both terms, so a reader can tell.
+    One coefficient by itself hides how it was reached: kappa = 0.40 can be
+    Po = 0.94 with Pe = 0.90 (raters agree on nearly everything, but one
+    category dominates) or Po = 0.70 with Pe = 0.50. I keep both terms, so
+    that downstream objects can show it to package users.
 
     Two kinds:
 
@@ -29,22 +30,24 @@ class AgreementParts:
     - "disagreement" (Krippendorff's alpha): observed disagreement Do and
       expected disagreement De; the coefficient is 1 - Do / De.
 
-    The result holding me checks that its point estimate equals
-    ``coefficient()``, so the terms cannot disagree with the number they
-    explain.
+    Any class object that holds me can check that its point estimate equals
+    ``compute_coefficient()``; a check that the terms cannot disagree with
+    the number they explain.
 
     Attributes
     ----------
     observed : float
-        Po or Do. NaN when it cannot be computed (no subject rated twice).
+        Po or Do. NaN when it cannot be computed.
     chance : float
-        Pe or De. NaN under the same condition.
+        Pe or De. NaN when it cannot be computed.
     kind : str
         "agreement" or "disagreement".
     weighted : bool
         Whether a weight matrix gave partial credit to near misses. Weighted
         terms are a different quantity from unweighted ones, so the label
-        travels with them.
+        travels with them. It does not affect compute_coefficient()
+        since weights are used to calculate the agreement/disagreement
+        values, not after.
     """
 
     observed: float
@@ -85,27 +88,31 @@ class AgreementParts:
 
     # Public API ------------------------------------------------------------- #
 
-    def coefficient(self) -> float:
+    def compute_coefficient(self) -> float:
         """
-        The coefficient these terms make.
+        Calculate the coefficient from the two terms (observed and chance).
 
-        NaN when they make none: Pe = 1 (every agreement expected by chance)
-        or De = 0 (no disagreement expected), or either term NaN. "= 1" and
-        "= 0" use ``np.isclose``, the test the coefficient functions use, so
-        a Pe a hair below 1 is NaN here exactly when it is NaN there.
+        Returns the coefficient, or NaN when it is undefined: Pe = 1 (every
+        agreement expected by chance), De = 0 (no disagreement expected), or
+        either term NaN. Pe = 1 and De = 0 are tested with ``np.isclose``, as
+        in the coefficient functions, so a Pe that is 1 up to rounding gives
+        NaN here exactly when it gives NaN there.
         """
         o, c = float(self.observed), float(self.chance)
         if math.isnan(o) or math.isnan(c):
             return float("nan")
+        # Most coefficients (e.g. Cohen, Fleiss, ...): (Po - Pe) / (1 - Pe)
         if self.kind == "agreement":
             return float("nan") if np.isclose(c, 1.0) else (o - c) / (1.0 - c)
+        # Krippendorff's alpha: 1 - Do / De
         return float("nan") if np.isclose(c, 0.0) else 1.0 - o / c
 
     def reproduces(self, point: float, tol: float = 1e-9) -> bool:
         """
-        Whether ``point`` is the coefficient these terms make (NaN with NaN).
+        Return boolean on whether ``point`` equals the
+        coefficient corresponding to my attributes (NaN matches NaN).
         """
-        rebuilt = self.coefficient()
+        rebuilt = self.compute_coefficient()
         if math.isnan(rebuilt) or math.isnan(point):
             return math.isnan(rebuilt) and math.isnan(point)
         return abs(rebuilt - point) <= tol * max(1.0, abs(point))

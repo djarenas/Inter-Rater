@@ -23,32 +23,32 @@ def _disagreement(do=0.2, de=0.5):
 class TestCoefficient:
 
     def test_agreement(self):
-        assert _agreement(0.8, 0.5).coefficient() == pytest.approx(0.6)
+        assert _agreement(0.8, 0.5).compute_coefficient() == pytest.approx(0.6)
 
     def test_disagreement(self):
         """Krippendorff: 1 - Do / De."""
-        assert _disagreement(0.2, 0.5).coefficient() == pytest.approx(0.6)
+        assert _disagreement(0.2, 0.5).compute_coefficient() == pytest.approx(0.6)
 
     def test_same_kappa_from_different_parts(self):
         """The reason to keep both terms: 0.40 can mean very different data."""
         skewed = _agreement(0.952, 0.92)
         spread = _agreement(0.70, 0.50)
-        assert skewed.coefficient() == pytest.approx(0.40)
-        assert spread.coefficient() == pytest.approx(0.40)
+        assert skewed.compute_coefficient() == pytest.approx(0.40)
+        assert spread.compute_coefficient() == pytest.approx(0.40)
 
     def test_pe_of_one_makes_no_coefficient(self):
-        assert math.isnan(_agreement(1.0, 1.0).coefficient())
+        assert math.isnan(_agreement(1.0, 1.0).compute_coefficient())
 
     def test_de_of_zero_makes_no_coefficient(self):
-        assert math.isnan(_disagreement(0.0, 0.0).coefficient())
+        assert math.isnan(_disagreement(0.0, 0.0).compute_coefficient())
 
     def test_pe_a_hair_below_one_makes_no_coefficient(self):
         """Same np.isclose test as agreement_corrected_by_chance."""
-        assert math.isnan(_agreement(1.0, 1.0 - 1e-9).coefficient())
+        assert math.isnan(_agreement(1.0, 1.0 - 1e-9).compute_coefficient())
         assert math.isnan(agreement_corrected_by_chance(1.0, 1.0 - 1e-9))
 
     def test_nan_terms_make_no_coefficient(self):
-        assert math.isnan(_agreement(float("nan"), float("nan")).coefficient())
+        assert math.isnan(_agreement(float("nan"), float("nan")).compute_coefficient())
 
 
 class TestReproduces:

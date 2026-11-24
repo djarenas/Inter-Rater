@@ -115,6 +115,9 @@ versioning follows [semver](https://semver.org/).
 
 ### Changed
 
+- `AgreementParts.coefficient()` is renamed `compute_coefficient()`, a verb
+  for a method that computes. It behaves the same.
+
 - `ConvergenceTest` is renamed `ConvergenceTestConfig` and moved to
   `analyzers/configs/convergence_test_config.py`. The field on every
   analyzer config is renamed `convergence_test_config`, matching

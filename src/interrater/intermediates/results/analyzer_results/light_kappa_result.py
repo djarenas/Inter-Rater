@@ -212,7 +212,7 @@ class LightKappaResult(PointEstimateResult):
                     f"{_ERROR_PREFIX}: pair_kappa_max[{pair}] must be a "
                     f"number, got {type(ceiling).__name__}"
                 )
-            kappa = parts.coefficient()
+            kappa = parts.compute_coefficient()
             if math.isnan(kappa):
                 continue
             if not math.isnan(ceiling) and kappa > ceiling + _TOL:
@@ -241,7 +241,9 @@ class LightKappaResult(PointEstimateResult):
         """The pair kappas the mean is made of, and where each pair's terms are."""
         kappas = [
             kappa
-            for kappa in (p.coefficient() for p in self.pair_parts.values())
+            for kappa in (
+                p.compute_coefficient() for p in self.pair_parts.values()
+            )
             if not math.isnan(kappa)
         ]
         where = "each pair's Po and Pe in pair_parts, κ_max in pair_kappa_max"

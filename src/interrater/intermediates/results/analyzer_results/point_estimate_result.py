@@ -246,8 +246,8 @@ class PointEstimateResult(AnalysisResult):
         if not self.parts.reproduces(float(self.point)):
             raise ValueError(
                 f"{_ERROR_PREFIX}: parts ({self.parts}) make "
-                f"{self.parts.coefficient():.6f}, but the point estimate is "
-                f"{self.point:.6f}"
+                f"{self.parts.compute_coefficient():.6f}, but the point "
+                f"estimate is {self.point:.6f}"
             )
 
     def _check_kappa_max(self) -> None:

@@ -1437,9 +1437,9 @@ class TestResultsCarryTheirParts:
         for n, (pair, parts) in enumerate(result.pair_parts.items()):
             i, j = [(0, 1), (0, 2), (1, 2)][n]
             pair_data = analyzer.estimator_input.select_raters(np.array([i, j]))
-            assert parts.coefficient() == pytest.approx(cohen_kappa(pair_data))
-            assert parts.coefficient() <= result.pair_kappa_max[pair] + 1e-12
-            kappas.append(parts.coefficient())
+            assert parts.compute_coefficient() == pytest.approx(cohen_kappa(pair_data))
+            assert parts.compute_coefficient() <= result.pair_kappa_max[pair] + 1e-12
+            kappas.append(parts.compute_coefficient())
         assert result.point == pytest.approx(np.mean(kappas))
 
 
