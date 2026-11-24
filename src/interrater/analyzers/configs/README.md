@@ -65,7 +65,7 @@ Fields every analyzer shares:
 - `alpha` (float, default 0.05): 0.05 gives a 95% interval
 - `random_state` (int, default 42): seed; None is refused, so every run can be reproduced
 - `ci_method` (str, default "percentile"): "percentile", "bca", or "parametric_null"
-- `convergence_test` (ConvergenceTest | None, default None): not supported yet, so anything but `null` is refused
+- `convergence_test_config` (ConvergenceTestConfig | None, default None; `convergence_test` in YAML also works): not supported yet, so anything but `null` is refused. `ConvergenceTestConfig` (in `convergence_test_config.py`) is a stub with no fields
 - `hypothesis_test_config` (HypothesisTestConfig | None, default None): test against H₀: coefficient = 0
 - `injection` (tuple[InjectorConfig, ...] | None, default None): injection steps applied to the ratings before analysis; a single config or a list is normalised to a tuple
 

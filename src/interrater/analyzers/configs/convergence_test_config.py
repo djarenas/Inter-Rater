@@ -2,8 +2,9 @@
 
 This file exists so that TYPE_CHECKING imports and isinstance checks in
 AnalyzerConfig resolve. The convergence testing feature is not yet
-implemented -- every config refuses a convergence_test that is not None,
-when it is built. Fields and logic will be added when the feature is built.
+implemented -- every config refuses a convergence_test_config that is not
+None, when it is built. Fields and logic will be added when the feature is
+built.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ConvergenceTest:
+class ConvergenceTestConfig:
     """
     I am the configuration for bootstrap convergence diagnostics.
 

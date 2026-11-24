@@ -9,7 +9,7 @@ from .analyzer_config import AnalyzerConfig
 
 if TYPE_CHECKING:
     from ...injectors.configs import InjectorConfig
-    from ..convergence_test import ConvergenceTest
+    from .convergence_test_config import ConvergenceTestConfig
     from .hypothesis_test_config import HypothesisTestConfig
 
 _ERROR_PREFIX = "[GroupCoefficientConfig] Error"
@@ -53,7 +53,7 @@ class GroupCoefficientConfig(AnalyzerConfig):
     alpha: float
     random_state: int
     ci_method: str
-    convergence_test: ConvergenceTest | None
+    convergence_test_config: ConvergenceTestConfig | None
     hypothesis_test_config: HypothesisTestConfig | None
     injection: tuple[InjectorConfig, ...] | None
     # Populated at this level

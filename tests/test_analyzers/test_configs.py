@@ -46,7 +46,7 @@ class TestAnalyzerConfig:
         assert cfg.alpha == 0.05
         assert cfg.random_state == 42
         assert cfg.ci_method == "percentile"
-        assert cfg.convergence_test is None
+        assert cfg.convergence_test_config is None
         assert cfg.hypothesis_test_config is None
         assert cfg.injection is None
 
@@ -1042,18 +1042,28 @@ class TestConvergenceTestRefused:
         KrippendorffAlphaConfig, CohenKappaConfig, CongerKappaConfig, LightKappaConfig,
     ])
     def test_refused_by_every_coefficient_config(self, config_cls):
-        from interrater.analyzers.convergence_test import ConvergenceTest
-        with pytest.raises(ValueError, match="convergence_test is not supported in this version yet"):
-            config_cls(convergence_test=ConvergenceTest())
+        from interrater.analyzers.configs.convergence_test_config import (
+            ConvergenceTestConfig,
+        )
+        with pytest.raises(ValueError, match="convergence_test_config is not supported in this version yet"):
+            config_cls(convergence_test_config=ConvergenceTestConfig())
 
     def test_wrong_type_is_a_type_error(self):
-        with pytest.raises(TypeError, match="convergence_test must be ConvergenceTest or None"):
-            FleissKappaConfig(convergence_test="yes")
+        with pytest.raises(TypeError, match="convergence_test_config must be ConvergenceTestConfig or None"):
+            FleissKappaConfig(convergence_test_config="yes")
 
     def test_null_still_loads(self, tmp_path):
+        """``convergence_test`` is accepted in YAML as an alias."""
         path = tmp_path / "fleiss.yaml"
         path.write_text("convergence_test: null\n")
-        assert FleissKappaConfig.build_from_yaml(path).convergence_test is None
+        cfg = FleissKappaConfig.build_from_yaml(path)
+        assert cfg.convergence_test_config is None
+
+    def test_canonical_key_loads(self, tmp_path):
+        path = tmp_path / "fleiss.yaml"
+        path.write_text("convergence_test_config: null\n")
+        cfg = FleissKappaConfig.build_from_yaml(path)
+        assert cfg.convergence_test_config is None
 
 
 class TestUnknownKeysRefused:

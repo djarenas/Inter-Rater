@@ -225,12 +225,6 @@ Closed-form variance formulas from the statistical literature. Used for
 parametric null CIs and hypothesis tests. Not needed for bootstrap
 approaches.
 
-### `convergence_test.py`
-
-Stub for bootstrap convergence diagnostics (not yet implemented). The type
-exists so that `ConvergenceTest | None` fields resolve in configs; a config
-given one is refused when it is built.
-
 
 ## Design principles
 

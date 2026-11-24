@@ -115,6 +115,12 @@ versioning follows [semver](https://semver.org/).
 
 ### Changed
 
+- `ConvergenceTest` is renamed `ConvergenceTestConfig` and moved to
+  `analyzers/configs/convergence_test_config.py`. The field on every
+  analyzer config is renamed `convergence_test_config`, matching
+  `hypothesis_test_config`; `convergence_test` still works in YAML as an
+  alias. It is still a stub, and anything but null is refused.
+
 - `PermutationConfig` is now abstract, as its docstrings always described
   it: build `PairwisePermutationConfig` or `SubsetPermutationConfig`.
   Building the base directly now raises `TypeError`. Its

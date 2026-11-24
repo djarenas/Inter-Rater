@@ -19,6 +19,7 @@ from difflib import get_close_matches
 YAML_KEY_ALIASES: dict[str, list[str]] = {
     "hypothesis_test_config": ["hypothesis_test"],
     "bootstrap_mean_config": ["bootstrap_mean"],
+    "convergence_test_config": ["convergence_test"],
 }
 """Map canonical field name to accepted alternate spellings.
 

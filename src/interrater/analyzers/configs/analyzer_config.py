@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ...injectors.configs import InjectorConfig
-    from ..convergence_test import ConvergenceTest
+    from .convergence_test_config import ConvergenceTestConfig
     from .hypothesis_test_config import HypothesisTestConfig
 
 _ERROR_PREFIX = "[AnalyzerConfig] Error"
@@ -43,10 +43,11 @@ class AnalyzerConfig:
         Method for computing confidence interval: "percentile", "bca"
         (bias-corrected and accelerated), or "parametric_null" (Fleiss,
         Cohen and Scott only; the other configs refuse it).
-    convergence_test : ConvergenceTest | None, default None
+    convergence_test_config : ConvergenceTestConfig | None, default None
         Convergence diagnostics are not supported in this version yet, so
         anything but None is refused when the config is built. The field
-        stays so that configs carrying ``convergence_test: null`` load.
+        stays so that configs carrying ``convergence_test: null`` load
+        (``convergence_test`` is accepted in YAML as an alias).
     hypothesis_test_config : HypothesisTestConfig | None, default None
         Optional configuration for hypothesis testing against
         H₀: coefficient = 0. When set, defines the method (permutation or
@@ -66,7 +67,7 @@ class AnalyzerConfig:
     alpha: float = 0.05
     random_state: int = 42
     ci_method: str = "percentile"
-    convergence_test: ConvergenceTest | None = None
+    convergence_test_config: ConvergenceTestConfig | None = None
     hypothesis_test_config: HypothesisTestConfig | None = None
     injection: tuple[InjectorConfig, ...] | None = None
 
@@ -129,22 +130,25 @@ class AnalyzerConfig:
                 f"'parametric_null', got '{self.ci_method}'"
             )
 
-        # Validate convergence_test type
-        if self.convergence_test is not None:
-            from ..convergence_test import ConvergenceTest
+        # Validate convergence_test_config type
+        if self.convergence_test_config is not None:
+            from .convergence_test_config import ConvergenceTestConfig
 
-            if not isinstance(self.convergence_test, ConvergenceTest):
+            if not isinstance(
+                self.convergence_test_config, ConvergenceTestConfig
+            ):
                 raise TypeError(
-                    f"{_ERROR_PREFIX}: convergence_test must be "
-                    f"ConvergenceTest or None, "
-                    f"got {type(self.convergence_test).__name__}"
+                    f"{_ERROR_PREFIX}: convergence_test_config must be "
+                    f"ConvergenceTestConfig or None, "
+                    f"got {type(self.convergence_test_config).__name__}"
                 )
             # Refused here, not in estimate(): a permutation analysis and
             # hypothesis_test() never reach that check, so they ran and
             # ignored the setting.
             raise ValueError(
-                f"{_ERROR_PREFIX}: convergence_test is not supported in this "
-                f"version yet. Set convergence_test: null."
+                f"{_ERROR_PREFIX}: convergence_test_config is not supported "
+                f"in this version yet. Set convergence_test: null in YAML, "
+                f"or leave convergence_test_config as None."
             )
 
         # Validate hypothesis_test_config type
@@ -295,6 +299,7 @@ class AnalyzerConfig:
 
         # Normalize alias → canonical key
         normalize_yaml_key(data_dict, "hypothesis_test_config")
+        normalize_yaml_key(data_dict, "convergence_test_config")
 
         # After the aliases, so 'hypothesis_test' is accepted; checked here,
         # not only in build_from_yaml, so a config nested in a pairwise or
@@ -384,8 +389,8 @@ class AnalyzerConfig:
             "ci_method": self.ci_method,
         }
 
-        if self.convergence_test is not None:
-            result["convergence_test"] = self.convergence_test.summary()
+        if self.convergence_test_config is not None:
+            result["convergence_test"] = self.convergence_test_config.summary()
 
         if self.hypothesis_test_config is not None:
             result["hypothesis_test"] = self.hypothesis_test_config.summary()

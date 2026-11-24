@@ -9,7 +9,7 @@ from .group_coefficient_config import GroupCoefficientConfig
 
 if TYPE_CHECKING:
     from .hypothesis_test_config import HypothesisTestConfig
-    from ..convergence_test import ConvergenceTest
+    from .convergence_test_config import ConvergenceTestConfig
     from ...injectors import InjectorConfig
 
 _ERROR_PREFIX = "[GwetAC1Config] Error"
@@ -60,7 +60,7 @@ class GwetAC1Config(GroupCoefficientConfig):
     alpha: float
     random_state: int
     ci_method: str
-    convergence_test: ConvergenceTest | None
+    convergence_test_config: ConvergenceTestConfig | None
     hypothesis_test_config: HypothesisTestConfig | None
     injection: tuple[InjectorConfig, ...] | None
     # Inherited from parent class GroupCoefficientConfig
