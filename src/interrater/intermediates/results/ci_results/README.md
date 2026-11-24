@@ -18,9 +18,9 @@ CIResult (ABC)             lower, upper, alpha
 | `BootstrapCIResult`  | n_resamples, n_failed, method_intended, method_used, acceleration, bias_correction; `n_usable`, `degraded`, `recommended_resamples`, `below_recommended_resamples` | A resampled interval, with what failed, what actually ran, and how many draws it ran on. |
 | `ParametricCIResult` | variance_source, variance_reference                                           | A closed-form interval. Nothing to fall back to.                          |
 
-## Not analysis results
+## Not panel results
 
-`CIResult` does not descend from `AnalysisResult`. The interval holds no point
+`CIResult` does not descend from `PanelResult`. The interval holds no point
 estimate and no coefficient name; a `PointEstimateResult` holds the interval.
 So an interval never checks itself against a point estimate: a strongly
 bias-corrected BCa interval can sit entirely to one side of the estimate,

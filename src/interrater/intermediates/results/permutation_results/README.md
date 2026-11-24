@@ -150,7 +150,7 @@ each unit's draws are checked against its interval by its own result.
 
 ## Dependencies
 
-- `..analysis_result` (AnalysisResult)
+- `..panel_result` (PanelResult)
 - `..analyzer_results` (each coefficient's result class, for the units)
 - `..ci_results` (BootstrapCIResult)
 - `...not_computed` (NotComputed)

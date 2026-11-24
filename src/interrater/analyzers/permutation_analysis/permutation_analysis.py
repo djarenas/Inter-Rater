@@ -341,7 +341,7 @@ class PermutationAnalysis:
 
         Returns
         -------
-        AnalysisResult | NotComputed
+        PanelResult | NotComputed
             The analyzer's result, or NotComputed with the reason when the unit
             has no coefficient: fewer than 2 usable subjects, or a subset rater
             who rated none of them.

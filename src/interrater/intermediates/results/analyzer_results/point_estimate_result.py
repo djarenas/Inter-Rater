@@ -3,27 +3,27 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
 from ...data_profiles.agreement_profile import AgreementProfile
-from ...data_profiles.rater_profile import RaterProfile
 from ...not_computed import NotComputed
 from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..agreement_parts import AgreementParts
-from ..analysis_result import AnalysisResult
+from ..panel_result import PanelResult
 from ..ci_results.ci_result import CIResult
 
 if TYPE_CHECKING:
     from ...data_profiles.balance_profile import BalanceProfile
+    from ...data_profiles.rater_profile import RaterProfile
 
 _ERROR_PREFIX = "[PointEstimateResult] Error"
 _TOL = 1e-9
 
 @dataclass(frozen=True)
-class PointEstimateResult(AnalysisResult):
+class PointEstimateResult(PanelResult):
     """
     I hold a point estimate, optionally a confidence interval, and optionally
     a bootstrap distribution.
@@ -56,10 +56,10 @@ class PointEstimateResult(AnalysisResult):
     BootstrapCIResult, one per resample it counted, with as many non-finite
     draws as it counted failed.
 
-    I carry a balance_profile so every result is self-describing: the number
-    of subjects and whether the data was balanced are available without
-    needing to go back to the input data. Who the raters were and how much
-    each rated is my rater_profile.
+    My parent, PanelResult, holds and checks what I share with a
+    permutation result: the balance and rater profiles (so every result is
+    self-describing without going back to the input data), the interval
+    method and the weighting.
 
     I also carry what the coefficient is made of, so a reader can tell two
     equal coefficients apart: the observed and chance terms (``parts``), the
@@ -87,12 +87,6 @@ class PointEstimateResult(AnalysisResult):
         otherwise (no interval, or a parametric one). NotComputed when the
         bootstrap ran but its draws were not kept (a permutation analysis
         with keep_draws false), saying so.
-    balance_profile : BalanceProfile
-        Structural metadata about the subjects: n_subjects and how many
-        ratings each got.
-    rater_profile : RaterProfile
-        The raters: names, how much each rated, and how much each pair
-        overlapped.
     parts : AgreementParts | NotComputed
         The observed and chance terms (Po and Pe, or Do and De) the point
         estimate is built from. NotComputed when the coefficient is not one
@@ -104,6 +98,8 @@ class PointEstimateResult(AnalysisResult):
     agreement_profile : AgreementProfile
         Category prevalence, per-rater marginals, specific agreement, and the
         prevalence and bias indices where they apply.
+    (balance_profile, rater_profile, ci_method, weights_type and
+    weight_matrix are inherited from PanelResult.)
     """
 
     # What a coefficient is called: its config name, printed name and
@@ -113,11 +109,21 @@ class PointEstimateResult(AnalysisResult):
     NAME:        ClassVar[str] = ""
     SYMBOL:      ClassVar[str] = ""
 
+    # Whether the coefficient has a weighted form. Each coefficient's result
+    # with one sets True; PanelResult refuses weights otherwise.
+    _ACCEPTS_WEIGHTS: ClassVar[bool] = False
+
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+
+    # Populated at this level
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile
@@ -126,6 +132,12 @@ class PointEstimateResult(AnalysisResult):
 
     def __post_init__(self) -> None:
         """Validate my attributes after construction, before I freeze."""
+
+        # The profiles, interval method and weighting, checked by my parent
+        try:
+            super().__post_init__()
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
         # point must be a float
         if not isinstance(self.point, (int, float)):
@@ -184,31 +196,6 @@ class PointEstimateResult(AnalysisResult):
         except ValueError as exc:
             raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
-        # Every result carries the balance profile of its data
-        if self.balance_profile is None:
-            raise ValueError(f"{_ERROR_PREFIX}: balance_profile must not be None")
-
-        from ...data_profiles.balance_profile import BalanceProfile
-
-        if not isinstance(self.balance_profile, BalanceProfile):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: balance_profile must be BalanceProfile, "
-                f"got {type(self.balance_profile).__name__}"
-            )
-
-        if not isinstance(self.rater_profile, RaterProfile):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: rater_profile must be RaterProfile, got "
-                f"{type(self.rater_profile).__name__}"
-            )
-        # Both profiles describe the same data
-        if self.rater_profile.n_subjects != self.balance_profile.n_subjects:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: rater_profile has "
-                f"{self.rater_profile.n_subjects} subjects but "
-                f"balance_profile has {self.balance_profile.n_subjects}"
-            )
-
         self._check_parts()
         self._check_kappa_max()
 
@@ -219,6 +206,10 @@ class PointEstimateResult(AnalysisResult):
             )
 
         self._check_subjects()
+
+    def _accepts_weights(self) -> bool:
+        """Whether my coefficient has a weighted form: my _ACCEPTS_WEIGHTS."""
+        return self._ACCEPTS_WEIGHTS
 
     def _check_subjects(self) -> None:
         """Every subject in my data is one the coefficient used."""
@@ -358,14 +349,9 @@ class PointEstimateResult(AnalysisResult):
         return None
 
     # Shared phrases for the data line -------------------------------------- #
-
-    def _subjects_phrase(self) -> str:
-        """'1,617 subjects'. All of them are used: _check_subjects sees to it."""
-        return f"{self.balance_profile.n_subjects:,} subjects"
-
-    def _raters_phrase(self) -> str:
-        """'4 raters'."""
-        return f"{self.rater_profile.n_raters} raters"
+    #
+    # _subjects_phrase and _raters_phrase come from PanelResult. All my
+    # subjects are used: _check_subjects sees to it.
 
     @staticmethod
     def _weights_phrase(weights_type: str) -> str:
@@ -404,8 +390,7 @@ class PointEstimateResult(AnalysisResult):
             mean, se = draw_moments(self.bootstrap_distribution)
             result["bootstrap_draws_mean"] = mean
             result["bootstrap_se"] = se
-        result["balance"] = self.balance_profile.summary()
-        result["raters"] = self.rater_profile.summary()
+        result.update(self._panel_summary())
         result["parts"] = self.parts.summary()
         result["kappa_max"] = (
             self.kappa_max.summary() if isinstance(self.kappa_max, NotComputed)

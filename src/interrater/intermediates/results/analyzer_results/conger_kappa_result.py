@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -17,9 +17,9 @@ from .individual_marginal_result import (
 )
 
 if TYPE_CHECKING:
-    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
     from ...data_profiles.rater_profile import RaterProfile
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[CongerKappaResult] Error"
@@ -43,7 +43,7 @@ class CongerKappaResult(IndividualMarginalResult):
     Conger's kappa generalises Cohen's kappa to many raters while keeping
     individual marginals. At exactly two raters I reduce to Cohen's unweighted
     kappa. I am always unweighted -- Conger (1980) defined the coefficient for
-    nominal data only -- so I carry no weights_type field.
+    nominal data only -- so my weights_type is always "identity".
 
     I exist only for complete data, where every rater rated every subject
     (Conger 1980), so my rater profile must have a fill rate of 1.
@@ -92,41 +92,29 @@ class CongerKappaResult(IndividualMarginalResult):
     NAME:        ClassVar[str] = "Conger's κ"
     SYMBOL:      ClassVar[str] = "κ"
 
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+
     # Inherited from IndividualMarginalResult (which validates
     # balance_profile is not None and rater_profile is a RaterProfile)
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile
-
-    # Populated at this level
-    ci_method: str
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Conger's kappa result attributes."""
 
-        # Validate ci_method (no parametric_null for Conger)
-        if not isinstance(self.ci_method, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ci_method must be str, "
-                f"got {type(self.ci_method).__name__}"
-            )
-        if self.ci_method not in {"percentile", "bca"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile' or 'bca', "
-                f"got '{self.ci_method}'. Conger's kappa has no closed-form "
-                f"null variance, so 'parametric_null' is not available."
-            )
-
-        # Call parent validation (IndividualMarginalResult validates
-        # balance_profile and rater_profile; PointEstimateResult validates
-        # point, confidence_interval, bootstrap_distribution)
+        # Call parent validation (profiles, interval method, weighting,
+        # point, interval and draws)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:
@@ -208,10 +196,10 @@ class CongerKappaResult(IndividualMarginalResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'ci_method'.
+            Keys from parent (including balance, ci_method, weights_type,
+            weight_matrix).
         """
         result = super().summary()
         result.update({
-            "ci_method": self.ci_method,
         })
         return result

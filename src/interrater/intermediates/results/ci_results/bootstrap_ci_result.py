@@ -37,7 +37,7 @@ class BootstrapCIResult(CIResult):
     I am an interval from a bootstrap, and a clear account of what it was
     computed from.
 
-    I am what a CI method returns and not an analysis result, since I
+    I am what a CI method returns and not a panel result, since I
     hold no point estimate, no coefficient name, and no
     opinion about the data.
 

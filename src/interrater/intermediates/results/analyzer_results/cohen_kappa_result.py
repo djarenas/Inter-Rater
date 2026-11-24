@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -17,9 +17,9 @@ from .individual_marginal_result import (
 )
 
 if TYPE_CHECKING:
-    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
     from ...data_profiles.rater_profile import RaterProfile
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[CohenKappaResult] Error"
@@ -31,8 +31,8 @@ class CohenKappaResult(IndividualMarginalResult):
     I am Cohen's kappa, weighted or unweighted, for a single pair of raters.
 
     I inherit point, confidence_interval, bootstrap_distribution, and
-    balance_profile from PointEstimateResult. I add CI method and weights_type
-    so anyone reading me knows what statistic I am.
+    balance_profile from PointEstimateResult. My CI method and weights_type,
+    held by PanelResult, tell anyone reading me what statistic I am.
 
     weights_type is on me (not just on the config) because weighted Cohen's
     kappa and unweighted Cohen's kappa are different statistics with different
@@ -102,69 +102,34 @@ class CohenKappaResult(IndividualMarginalResult):
     COEFFICIENT: ClassVar[str] = "cohen_kappa"
     NAME:        ClassVar[str] = "Cohen's κ"
     SYMBOL:      ClassVar[str] = "κ"
+    _CI_METHODS: ClassVar[frozenset[str]] = frozenset(
+        {"percentile", "bca", "parametric_null"}
+    )
+    _ACCEPTS_WEIGHTS: ClassVar[bool] = True
+
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
 
     # Inherited from IndividualMarginalResult (which validates
     # balance_profile is not None and rater_profile is a RaterProfile)
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: float
     agreement_profile: AgreementProfile
-
-    # Populated at this level
-    ci_method: str
-    weights_type: str
-    weight_matrix: list[list[float]] | None = None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Cohen's kappa result attributes."""
 
-        # Validate ci_method
-        if not isinstance(self.ci_method, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ci_method must be str, "
-                f"got {type(self.ci_method).__name__}"
-            )
-        if self.ci_method not in {"percentile", "bca", "parametric_null"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile', 'bca', "
-                f"or 'parametric_null', got '{self.ci_method}'"
-            )
-
-        # Validate weights_type
-        if not isinstance(self.weights_type, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: weights_type must be str, "
-                f"got {type(self.weights_type).__name__}"
-            )
-        if self.weights_type not in {"identity", "linear", "quadratic", "custom"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: weights_type must be 'identity', 'linear', "
-                f"'quadratic', or 'custom', got '{self.weights_type}'"
-            )
-
-        # Validate weight_matrix: none when unweighted, square when given
-        if self.weight_matrix is not None:
-            if self.weights_type == "identity":
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: weight_matrix must be None when "
-                    f"weights_type is 'identity' (unweighted)"
-                )
-            matrix = np.asarray(self.weight_matrix, dtype=float)
-            if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: weight_matrix must be square, "
-                    f"got shape {matrix.shape}"
-                )
-
-        # Call parent validation (IndividualMarginalResult validates
-        # balance_profile and rater_profile; PointEstimateResult validates
-        # point, confidence_interval, bootstrap_distribution)
+        # Call parent validation (profiles, interval method, weighting,
+        # point, interval and draws)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:
@@ -240,12 +205,10 @@ class CohenKappaResult(IndividualMarginalResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'ci_method', 'weights_type', 'weight_matrix'.
+            Keys from parent (including balance, ci_method, weights_type,
+            weight_matrix).
         """
         result = super().summary()
         result.update({
-            "ci_method": self.ci_method,
-            "weights_type": self.weights_type,
-            "weight_matrix": self.weight_matrix,
         })
         return result

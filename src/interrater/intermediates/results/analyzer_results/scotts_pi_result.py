@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -13,9 +13,9 @@ from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
-    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
     from ...data_profiles.rater_profile import RaterProfile
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[ScottsPiResult] Error"
@@ -83,39 +83,32 @@ class ScottsPiResult(PointEstimateResult):
     COEFFICIENT: ClassVar[str] = "scotts_pi"
     NAME:        ClassVar[str] = "Scott's π"
     SYMBOL:      ClassVar[str] = "π"
+    _CI_METHODS: ClassVar[frozenset[str]] = frozenset(
+        {"percentile", "bca", "parametric_null"}
+    )
+
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
 
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile
-
-    # Populated at this level
-    ci_method: str
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Scott's pi result attributes."""
 
-        # Validate ci_method
-        if not isinstance(self.ci_method, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ci_method must be str, "
-                f"got {type(self.ci_method).__name__}"
-            )
-        if self.ci_method not in {"percentile", "bca", "parametric_null"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile', 'bca', "
-                f"or 'parametric_null', got '{self.ci_method}'"
-            )
-
-        # Call parent validation (validates point, confidence_interval,
-        # bootstrap_distribution, balance_profile type)
+        # Call parent validation (profiles, interval method, weighting,
+        # point, interval and draws)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:
@@ -168,12 +161,12 @@ class ScottsPiResult(PointEstimateResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'is_exact', 'ci_method'.
+            Keys from parent (including balance, ci_method, weights_type,
+            weight_matrix) plus 'is_exact'.
         """
         result = super().summary()
         result.update({
             "is_exact": self.is_exact,
-            "ci_method": self.ci_method,
         })
         return result
 

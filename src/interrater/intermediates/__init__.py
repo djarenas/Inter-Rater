@@ -1,13 +1,13 @@
 """Intermediate data structures for inter-rater agreement analysis."""
 
-from .results import AnalysisResult
+from .results import PanelResult
 from .results.analyzer_results import PointEstimateResult, FleissKappaResult
 from .data_profiles import BalanceProfile
 from .estimator_parts import NijMatrix, Weights, EstimatorInput
 from .not_computed import NotComputed
 
 __all__ = [
-    "AnalysisResult",
+    "PanelResult",
     "PointEstimateResult",
     "FleissKappaResult",
     "BalanceProfile",

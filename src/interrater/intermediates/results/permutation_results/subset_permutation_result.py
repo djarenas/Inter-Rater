@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -124,13 +124,15 @@ class SubsetPermutationResult(PermutationResult):
 
     # Attribute declaration
 
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+
     # Inherited from parent class PermutationResult
     coefficient_name: str
-    ci_method: str
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
-    weights_type: str
-    weight_matrix: list[list[float]] | None
 
     # Each subset (rater heterogeneity)
     subset_results: dict   # values are a coefficient's result, or NotComputed

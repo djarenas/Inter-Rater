@@ -24,10 +24,6 @@ class CIResult(ABC):
     because the thing holding me should not have to consult a config to
     print me.
 
-    I am a frozen dataclass rather than a bare ABC like ``AnalysisResult``,
-    because unlike that one I have state of my own to share: my subclasses
-    differ in what they add, not in what they all are.
-
     **I may have no bounds.** When whatever was meant to compute them could
     not run, both are NaN and :attr:`is_defined` is False. That is an outcome
     rather than an error: the point estimate an interval accompanies is

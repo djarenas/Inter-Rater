@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import numpy as np
-
-from ..analysis_result import AnalysisResult
+from ..panel_result import PanelResult
 from ..analyzer_results import result_class_for
 
 if TYPE_CHECKING:
-    import pandas as pd
-
     from ...data_profiles.balance_profile import BalanceProfile
     from ...data_profiles.rater_profile import RaterProfile
+    import pandas as pd
+
     from ..ci_results.bootstrap_ci_result import BootstrapCIResult
 
 _ERROR_PREFIX = "[PermutationResult] Error"
@@ -30,18 +28,9 @@ INDEPENDENT_MEAN_CAVEAT = (
 # A coefficient's printed name, symbol and result class all come from its
 # result class (analyzer_results.result_class_for), so nothing here spells them.
 
-# The weightings a result can record; "identity" is unweighted
-_WEIGHTS_TYPES = ("identity", "linear", "quadratic", "custom")
-
-
 def has_weighted_form(coefficient: str) -> bool:
     """Whether the coefficient's own result records a weighting."""
-    return "weights_type" in result_class_for(coefficient).__dataclass_fields__
-
-
-def raters_phrase(rater_profile: RaterProfile) -> str:
-    """'4 raters'. A permutation result always knows its raters exactly."""
-    return f"{rater_profile.n_raters} raters"
+    return result_class_for(coefficient)._ACCEPTS_WEIGHTS
 
 
 def interval_notes(ci: BootstrapCIResult) -> list[str]:
@@ -66,7 +55,7 @@ def interval_notes(ci: BootstrapCIResult) -> list[str]:
 
 
 @dataclass(frozen=True)
-class PermutationResult(AnalysisResult):
+class PermutationResult(PanelResult):
     """
     I am the base result for permutation analysis across rater subsets.
 
@@ -74,12 +63,12 @@ class PermutationResult(AnalysisResult):
     PointEstimateResult holds one number for one coefficient, my children
     hold C(n_raters, k) numbers -- one per subset or pair -- plus summary
     statistics and bootstrap intervals. The two branches share
-    AnalysisResult as their root but are otherwise independent.
+    PanelResult as their root but are otherwise independent.
 
-    I hold only what both children genuinely share:
-    - Which coefficient was computed
-    - How confidence intervals were computed
-    - The structural metadata of the dataset
+    I hold only what both children genuinely share: which coefficient was
+    computed. The panel's profiles, the interval method and the weighting
+    are held and checked by my parent, PanelResult, as for a
+    PointEstimateResult.
 
     All statistical substance -- observed values, means, bootstrap
     distributions, per-pair or per-subset CIs -- lives on the children,
@@ -99,40 +88,25 @@ class PermutationResult(AnalysisResult):
     coefficient_name : str
         Which coefficient was computed: "cohen_kappa", "scotts_pi",
         "conger_kappa", etc.
-    ci_method : str
-        How confidence intervals were computed: "percentile" or "bca".
-        Permutation results have no closed-form null variance (subsets
-        sharing a rater are correlated), so "parametric_null" is not
-        available.
-    balance_profile : BalanceProfile
-        Structural metadata about the full dataset (before subsetting):
-        n_subjects and how many ratings each got.
-    rater_profile : RaterProfile
-        The panel's raters: names in position order as the semantics name
-        them (injected raters included), how much each rated, and how much
-        each pair overlapped. Always present: permutation needs rater
-        identity. Pairs and subsets are keyed by position, e.g. (0, 2);
-        everything shown to people -- the printed table, to_frame,
-        summary, plots -- names them through rater_names.
-    weights_type : str
-        The weighting every pair or subset was computed with: "identity"
-        (unweighted), "linear", "quadratic" or "custom". The mean is over
-        those coefficients, so it is weighted the same way. Always
-        "identity" for a coefficient with no weighted form.
-    weight_matrix : list[list[float]] | None
-        The weight matrix that was used, as nested lists; None when
-        unweighted. Every pair or subset that records weights must have
-        this same matrix.
+    (Inherited from PanelResult: balance_profile, the full panel before
+    subsetting; rater_profile, the panel's raters in position order,
+    injected ones included, through which every pair and subset is named;
+    ci_method, "percentile" or "bca"; and weights_type and weight_matrix,
+    the weighting every pair or subset was computed with, always
+    "identity" for a coefficient with no weighted form.)
     """
 
     # Attribute declaration
 
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+
+    # Populated at this level
     coefficient_name: str
-    ci_method: str
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
-    weights_type: str
-    weight_matrix: list[list[float]] | None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -150,82 +124,15 @@ class PermutationResult(AnalysisResult):
                 f"{_ERROR_PREFIX}: coefficient_name must be non-empty"
             )
 
-        # Validate ci_method
-        if not isinstance(self.ci_method, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ci_method must be str, "
-                f"got {type(self.ci_method).__name__}"
-            )
-        if self.ci_method not in {"percentile", "bca"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile' or 'bca', "
-                f"got '{self.ci_method}'. Permutation results have no "
-                f"closed-form null variance (subsets are correlated), so "
-                f"'parametric_null' is not available."
-            )
-
-        # Validate balance_profile
-        if self.balance_profile is None:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: balance_profile must not be None"
-            )
-
-        from ...data_profiles.balance_profile import BalanceProfile
-
-        if not isinstance(self.balance_profile, BalanceProfile):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: balance_profile must be BalanceProfile, "
-                f"got {type(self.balance_profile).__name__}"
-            )
-
+        # The profiles, interval method and weighting, checked by my parent
         try:
-            self._check_rater_profile()
-            self._check_weights()
+            super().__post_init__()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-    def _check_weights(self) -> None:
-        """The weighting is stated, and a coefficient with no weighted form has none."""
-        if self.weights_type not in _WEIGHTS_TYPES:
-            raise ValueError(
-                f"weights_type must be one of {list(_WEIGHTS_TYPES)}, "
-                f"got {self.weights_type!r}"
-            )
-        if (self.weights_type == "identity") != (self.weight_matrix is None):
-            raise ValueError(
-                f"weight_matrix must be None exactly when weights_type is "
-                f"'identity' (unweighted); got weights_type "
-                f"{self.weights_type!r} with "
-                f"{'no matrix' if self.weight_matrix is None else 'a matrix'}"
-            )
-        if self.weight_matrix is not None:
-            matrix = np.asarray(self.weight_matrix, dtype=float)
-            if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-                raise ValueError(
-                    f"weight_matrix must be square, got shape {matrix.shape}"
-                )
-        if self.weights_type != "identity" and not has_weighted_form(self.coefficient_name):
-            raise ValueError(
-                f"{self.coefficient_name} has no weighted form, so "
-                f"weights_type must be 'identity', got {self.weights_type!r}"
-            )
-
-    def _check_rater_profile(self) -> None:
-        """A RaterProfile, which checks its own names and counts."""
-        from ...data_profiles.rater_profile import RaterProfile
-
-        if not isinstance(self.rater_profile, RaterProfile):
-            raise TypeError(
-                f"rater_profile must be RaterProfile, got "
-                f"{type(self.rater_profile).__name__}"
-            )
-        # Both profiles describe the same panel
-        n_subjects = getattr(self.balance_profile, "n_subjects", None)
-        if n_subjects is not None and self.rater_profile.n_subjects != n_subjects:
-            raise ValueError(
-                f"rater_profile has {self.rater_profile.n_subjects} subjects "
-                f"but balance_profile has {n_subjects}"
-            )
+    def _accepts_weights(self) -> bool:
+        """Whether my coefficient's own result records a weighting."""
+        return has_weighted_form(self.coefficient_name)
 
     @property
     def rater_names(self) -> tuple[str, ...]:
@@ -316,11 +223,7 @@ class PermutationResult(AnalysisResult):
         """
         return {
             "coefficient_name": self.coefficient_name,
-            "ci_method": self.ci_method,
-            "weights_type": self.weights_type,
-            "weight_matrix": self.weight_matrix,
-            "balance": self.balance_profile.summary(),
-            "raters": self.rater_profile.summary(),
+            **self._panel_summary(),
         }
 
     # Printed form, shared by pairs and subsets ------------------------------ #
@@ -377,7 +280,7 @@ class PermutationResult(AnalysisResult):
                 f"{n_units} {word}s"
             )
         # Keys are positions into rater_names, so those must be sound first
-        self._check_rater_profile()
+        self._check_profiles()
         expected = result_class_for(self.coefficient_name)
         points = []
         kept = set()  # whether each computed unit kept its draws
@@ -492,7 +395,7 @@ class PermutationResult(AnalysisResult):
 
             weights = f"{PointEstimateResult._weights_phrase(self.weights_type)}; "
         lines.append(
-            f"  {bp.n_subjects:,} subjects; {raters_phrase(self.rater_profile)}; "
+            f"  {bp.n_subjects:,} subjects; {self._raters_phrase()}; "
             f"{weights}each {unit} on {pool}"
         )
 

@@ -5,12 +5,12 @@ Four kinds of thing live here, and the folder layout says which is which.
 ``analyzer_results/`` holds the single-coefficient results, all descending from
 ``PointEstimateResult``. ``permutation_results/`` holds the results of
 recomputing a coefficient over subsets of the raters, all descending from
-``PermutationResult``. Both of those trees share one root, ``AnalysisResult``,
+``PermutationResult``. Both of those trees share one root, ``PanelResult``,
 which sits here rather than in either subfolder because it belongs to neither
 alone.
 
 ``ci_results/`` holds the intervals themselves, descending from ``CIResult``.
-They are not analysis results and are not on that tree: an interval has no
+They are not panel results and are not on that tree: an interval has no
 point estimate and no opinion about the data. They are held *by* results,
 which is why they live beside them rather than under them.
 
@@ -20,7 +20,7 @@ distinguishable from zero -- and carries no point estimate of its own to
 inherit a contract for.
 """
 
-from .analysis_result import AnalysisResult
+from .panel_result import PanelResult
 from .agreement_parts import AgreementParts
 from .hypothesis_test_result import HypothesisTestResult
 
@@ -50,7 +50,7 @@ from .permutation_results import (
 )
 
 __all__ = [
-    "AnalysisResult",
+    "PanelResult",
     "AgreementParts",
     "CIResult",
     "BootstrapCIResult",

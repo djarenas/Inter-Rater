@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -13,9 +13,9 @@ from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
-    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
     from ...data_profiles.rater_profile import RaterProfile
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[GwetsAC1Result] Error"
@@ -93,72 +93,30 @@ class GwetsAC1Result(PointEstimateResult):
     COEFFICIENT: ClassVar[str] = "gwet_ac1"
     NAME:        ClassVar[str] = "Gwet's AC1"
     SYMBOL:      ClassVar[str] = "AC1"
+    _ACCEPTS_WEIGHTS: ClassVar[bool] = True
+
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
 
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile
-
-    # Populated at this level
-    ci_method: str
-    weights_type: str
-    weight_matrix: list[list[float]] | None = None
 
     # Constructor ------------------------------------------------------------ #
 
     def __post_init__(self) -> None:
         """Validate Gwet's AC1 result attributes."""
 
-        # Validate ci_method
-        if not isinstance(self.ci_method, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ci_method must be str, "
-                f"got {type(self.ci_method).__name__}"
-            )
-        if self.ci_method == "parametric_null":
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method 'parametric_null' is not implemented "
-                f"for Gwet's AC1"
-            )
-        if self.ci_method not in {"percentile", "bca"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile' or 'bca', "
-                f"got '{self.ci_method}'"
-            )
-
-        # Validate weights_type
-        if not isinstance(self.weights_type, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: weights_type must be str, "
-                f"got {type(self.weights_type).__name__}"
-            )
-        if self.weights_type not in {"identity", "linear", "quadratic", "custom"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: weights_type must be 'identity', 'linear', "
-                f"'quadratic', or 'custom', got '{self.weights_type}'"
-            )
-
-        # Validate weight_matrix: none when unweighted, square when given
-        if self.weight_matrix is not None:
-            if self.weights_type == "identity":
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: weight_matrix must be None when "
-                    f"weights_type is 'identity' (unweighted)"
-                )
-            matrix = np.asarray(self.weight_matrix, dtype=float)
-            if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: weight_matrix must be square, "
-                    f"got shape {matrix.shape}"
-                )
-
-        # Call parent validation (validates point, confidence_interval,
-        # bootstrap_distribution, balance_profile type)
+        # Call parent validation (profiles, interval method, weighting,
+        # point, interval and draws)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:
@@ -231,15 +189,12 @@ class GwetsAC1Result(PointEstimateResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'is_exact', 'ci_method',
-            'weights_type', 'weight_matrix'.
+            Keys from parent (including balance, ci_method, weights_type,
+            weight_matrix) plus 'is_exact'.
         """
         result = super().summary()
         result.update({
             "is_exact": self.is_exact,
-            "ci_method": self.ci_method,
-            "weights_type": self.weights_type,
-            "weight_matrix": self.weight_matrix,
         })
         return result
 

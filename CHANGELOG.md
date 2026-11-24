@@ -115,6 +115,14 @@ versioning follows [semver](https://semver.org/).
 
 ### Changed
 
+- `AnalysisResult` is renamed `PanelResult` (`panel_result.py`): it is
+  the root of the results that describe a coefficient on a panel of
+  raters, and `HypothesisTestResult`, also produced by an analysis, is not
+  one. It now holds and validates the panel's profiles, `ci_method`,
+  `weights_type` and `weight_matrix` for every result. Scott,
+  Conger and Light results record `weights_type="identity"` and
+  `weight_matrix=None`. A weighted result must record its matrix.
+
 - `AgreementParts.coefficient()` is renamed `compute_coefficient()`, a verb
   for a method that computes. It behaves the same.
 
@@ -179,7 +187,7 @@ version does not warn you, so this section does.
 - `percentile_ci()` and `bca_ci()` return a `BootstrapCIResult`, not a tuple.
 - `scipy_bca_ci()` is removed; `bca_ci()` is the one implementation, checked
   against Efron & Tibshirani (1986) in `tests/test_analyzers/test_ci_methods.py`.
-- `interrater.intermediates.analysis_results` is now
+- `interrater.intermediates.panel_results` is now
   `interrater.intermediates.results`. Top-level imports are unchanged.
 - `intermediates/ci_methods.py` is removed; the module is
   `analyzers/ci_methods.py`.

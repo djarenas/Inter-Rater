@@ -10,7 +10,7 @@ import numpy as np
 if TYPE_CHECKING:
     from ..data_objects.ratings import Ratings
     from ..intermediates.estimator_parts import EstimatorInput, Weights
-    from ..intermediates import AnalysisResult
+    from ..intermediates import PanelResult
     from ..intermediates.results import HypothesisTestResult
     from ..intermediates.data_profiles import BalanceProfile, RaterProfile
     from .configs.analyzer_config import AnalyzerConfig
@@ -24,7 +24,7 @@ class Analyzer(ABC):
 
     Every analyzer takes Ratings and a Config, validates both, computes a
     BalanceProfile that describes the data structure, and provides an
-    estimate() method that returns an AnalysisResult.
+    estimate() method that returns a PanelResult.
 
     I am responsible for:
     - Storing valid Ratings and Config objects
@@ -143,7 +143,7 @@ class Analyzer(ABC):
 
     # Public API ------------------------------------------------------------- #
 
-    def estimate(self) -> AnalysisResult:
+    def estimate(self) -> PanelResult:
         """
         Compute the agreement coefficient and return the result.
 
@@ -156,7 +156,7 @@ class Analyzer(ABC):
 
         Returns
         -------
-        AnalysisResult
+        PanelResult
             Subclass-specific result (FleissKappaResult, CohenKappaResult, etc.)
             holding point estimate, confidence interval, and relevant metadata.
         """

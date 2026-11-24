@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar
 
@@ -14,9 +14,9 @@ from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
-    from ...data_profiles.agreement_profile import AgreementProfile
     from ...data_profiles.balance_profile import BalanceProfile
     from ...data_profiles.rater_profile import RaterProfile
+    from ...data_profiles.agreement_profile import AgreementProfile
     from ..ci_results.ci_result import CIResult
 
 _ERROR_PREFIX = "[LightKappaResult] Error"
@@ -62,7 +62,7 @@ class LightKappaResult(PointEstimateResult):
     At exactly two raters (n_pairs=1) I reduce to Cohen's unweighted kappa.
 
     I am always unweighted. Light (1971) defined the coefficient as the mean
-    of unweighted pairwise kappas. I carry no weights_type field.
+    of unweighted pairwise kappas. My weights_type is always "identity".
 
     References
     ----------
@@ -110,19 +110,23 @@ class LightKappaResult(PointEstimateResult):
     NAME:        ClassVar[str] = "Light's κ"
     SYMBOL:      ClassVar[str] = "κ"
 
+    # Inherited from parent class PanelResult (keyword-only)
+    balance_profile: BalanceProfile = field(kw_only=True)
+    rater_profile: RaterProfile = field(kw_only=True)
+    ci_method: str = field(kw_only=True)
+    weights_type: str = field(default="identity", kw_only=True)
+    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult | None
     bootstrap_distribution: np.ndarray | NotComputed | None
-    balance_profile: BalanceProfile
-    rater_profile: RaterProfile
     parts: NotComputed
     kappa_max: NotComputed
     agreement_profile: AgreementProfile
 
     # Populated at this level
     n_pairs: int
-    ci_method: str
     pair_parts: dict
     pair_kappa_max: dict
 
@@ -137,22 +141,8 @@ class LightKappaResult(PointEstimateResult):
                 f"{_ERROR_PREFIX}: n_pairs must be int, "
                 f"got {type(self.n_pairs).__name__}"
             )
-        # Validate ci_method (no parametric_null for Light)
-        if not isinstance(self.ci_method, str):
-            raise TypeError(
-                f"{_ERROR_PREFIX}: ci_method must be str, "
-                f"got {type(self.ci_method).__name__}"
-            )
-        if self.ci_method not in {"percentile", "bca"}:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: ci_method must be 'percentile' or 'bca', "
-                f"got '{self.ci_method}'. The package does not implement a "
-                f"parametric null for Light's kappa (Light 1971, Eq. 8 gives "
-                f"one), so 'parametric_null' is not available."
-            )
-
-        # Call parent validation (validates point, confidence_interval,
-        # bootstrap_distribution, balance_profile type)
+        # Call parent validation (profiles, interval method, weighting,
+        # point, interval and draws)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:
@@ -270,14 +260,13 @@ class LightKappaResult(PointEstimateResult):
         Returns
         -------
         dict
-            Keys from parent (including balance) plus 'n_pairs',
-            'ci_method', and 'pairs': one dict per pair with 'rater_a',
-            'rater_b', its parts and its 'kappa_max'.
+            Keys from parent (including balance, ci_method, weights_type,
+            weight_matrix) plus 'n_pairs' and 'pairs': one dict per pair
+            with 'rater_a', 'rater_b', its parts and its 'kappa_max'.
         """
         result = super().summary()
         result.update({
             "n_pairs": self.n_pairs,
-            "ci_method": self.ci_method,
             "pairs": [
                 {
                     "rater_a": a,

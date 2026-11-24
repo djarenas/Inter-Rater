@@ -8,7 +8,7 @@ to the raw data.
 
 | Path                    | What It Holds                                                      | README                                                       |
 |-------------------------|--------------------------------------------------------------------|--------------------------------------------------------------|
-| `analysis_result.py`    | `AnalysisResult`, the root ABC both result trees descend from       | below                                                        |
+| `panel_result.py`       | `PanelResult`, the root ABC both result trees descend from          | below                                                        |
 | `analyzer_results/`     | One coefficient, one estimate: the `PointEstimateResult` family     | [analyzer_results/README.md](analyzer_results/README.md)     |
 | `permutation_results/`  | One coefficient recomputed over rater subsets: the `PermutationResult` family | [permutation_results/README.md](permutation_results/README.md) |
 | `ci_results/`           | The intervals: the `CIResult` family                                | [ci_results/README.md](ci_results/README.md)                 |
@@ -16,7 +16,7 @@ to the raw data.
 | `hypothesis_test_result.py` | `HypothesisTestResult`, on no tree                              | below                                                        |
 
 ```
-AnalysisResult (ABC)            analysis_result.py
+PanelResult (ABC)               panel_result.py
 ├── PointEstimateResult         analyzer_results/
 └── PermutationResult           permutation_results/
 
@@ -27,7 +27,7 @@ CIResult (ABC)                  ci_results/
 HypothesisTestResult            hypothesis_test_result.py, on neither tree
 ```
 
-`AnalysisResult` is at this level because it belongs to neither subfolder
+`PanelResult` is at this level because it belongs to neither subfolder
 alone. Each subfolder owns its own base (`PointEstimateResult`,
 `PermutationResult`, `CIResult`) and documents its own children.
 
@@ -44,12 +44,12 @@ counted, with as many non-finite draws as it counted failed. The check is in
 
 | Class                  | What It Holds                                                    | Why It Exists                                                      |
 |------------------------|------------------------------------------------------------------|---------------------------------------------------------------------|
-| `AnalysisResult`       | ABC with `summary() -> dict`                                      | Every result can describe itself in plain types.                    |
+| `PanelResult`       | ABC with `summary() -> dict`; the profiles, ci_method and weighting, checked once | Every result can describe itself in plain types.                    |
 | `AgreementParts`       | observed, chance, kind ('agreement' for Po/Pe, 'disagreement' for Do/De), weighted | Rebuilds the coefficient, so a result can check its point against them. |
-| `HypothesisTestResult` | p_value, alpha, reject_null, method, point, alternative; z (parametric) or null distribution and counts (permutation) | Test against H0: coefficient = 0.                                   |
+| `HypothesisTestResult` | p_value, alpha, reject_null, method, point, alternative; z and null variance source (parametric) or null distribution, counts, scheme and seed (permutation) | Test against H0: coefficient = 0.                                   |
 
 **`HypothesisTestResult` is standalone.** It has no point estimate or
-interval of its own, so it does not descend from `AnalysisResult`.
+interval of its own, so it does not descend from `PanelResult`.
 
 **Its p-value can be recomputed.** A permutation test records `n_usable`,
 `n_at_or_above` and `n_at_or_below`, and is refused if its p-value does not
