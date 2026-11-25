@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..panel_result import PanelResult
@@ -54,7 +54,7 @@ def interval_notes(ci: BootstrapCIResult) -> list[str]:
     return notes
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PermutationResult(PanelResult):
     """
     I am the base result for permutation analysis across rater subsets.
@@ -98,12 +98,12 @@ class PermutationResult(PanelResult):
 
     # Attribute declaration
 
-    # Inherited from parent class PanelResult (keyword-only)
-    balance_profile: BalanceProfile = field(kw_only=True)
-    rater_profile: RaterProfile = field(kw_only=True)
-    ci_method: str = field(kw_only=True)
-    weights_type: str = field(default="identity", kw_only=True)
-    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+    # Inherited from parent class PanelResult
+    balance_profile: BalanceProfile
+    rater_profile: RaterProfile
+    ci_method: str
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Populated at this level
     coefficient_name: str

@@ -21,24 +21,31 @@ _WEIGHTS_TYPES = ("identity", "linear", "quadratic", "custom")
 @dataclass(frozen=True, kw_only=True)
 class PanelResult(ABC):
     """
-    I am the base for the results an analysis returns: a coefficient's
-    result (PointEstimateResult) and a permutation analysis's result
-    (PermutationResult). Both describe a coefficient computed on a panel of
-    raters, so I hold what they share: the panel's profiles, the interval
-    method, and the weighting, and I validate them once.
+    I am the base for the results that carry a panel. I am extended by (1) a
+    coefficient's result (PointEstimateResult) and (2) a permutation
+    analysis's result (PermutationResult). Both describe a coefficient
+    computed on a panel of raters, so I hold what they share: the panel's
+    profiles, the interval method, and the weighting, and I validate them
+    once.
+
+    In this package, a panel is a set of raters and the ratings they gave a
+    set of subjects. A pair or subset of raters, with their ratings, is a
+    smaller panel drawn from it.
 
     Every result must answer "what happened?" through summary(), which is the
-    interface for printing, serializing, and feeding to visualizers. I am
-    immutable: a result is a fact about a dataset at a moment in time and
-    should not change.
+    interface for printing, serializing, and feeding to visualizers. I am an
+    immutable object because a result is a fact about a dataset at a moment
+    in time and should not change.
 
     I do not know how to visualize myself. That is the visualizer's job. I just
     hold the data. This separation means a new visualizer can be written
     without touching result classes, and a new result type can be added without
-    requiring new visualizers -- as long as it holds the right data.
+    requiring new visualizers (as long as it holds the right data).
 
-    My fields are keyword-only, so subclasses can keep their own fields
-    positional.
+    My attributes, and my subclasses', are passed by name (keyword-only):
+    ``FleissKappaResult(point=..., confidence_interval=..., ...,
+    balance_profile=..., rater_profile=..., ci_method="bca",
+    weights_type="identity", weight_matrix=None)``.
 
     Attributes
     ----------
@@ -49,10 +56,10 @@ class PanelResult(ABC):
         overlapped. Describes the same subjects as balance_profile.
     ci_method : str
         The interval method: one of my class's ``_CI_METHODS``.
-    weights_type : str, default "identity"
+    weights_type : str
         The weighting: "identity" (unweighted), "linear", "quadratic" or
         "custom". Not "identity" only where ``_accepts_weights()`` is True.
-    weight_matrix : list[list[float]] | None, default None
+    weight_matrix : list[list[float]] | None
         The weight matrix that was used, as nested lists; None exactly when
         weights_type is "identity".
     """
@@ -64,8 +71,8 @@ class PanelResult(ABC):
     balance_profile: BalanceProfile
     rater_profile: RaterProfile
     ci_method: str
-    weights_type: str = "identity"
-    weight_matrix: list[list[float]] | None = None
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Constructor ------------------------------------------------------------ #
 

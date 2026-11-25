@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -30,7 +30,7 @@ KAPPA_MAX_NOT_COMPUTED = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FleissKappaResult(PointEstimateResult):
     """
     I am Fleiss' kappa, exact or approximate, weighted or unweighted,
@@ -81,7 +81,7 @@ class FleissKappaResult(PointEstimateResult):
     weights_type : str
         Weighting scheme: "identity" (unweighted), "linear", "quadratic",
         or "custom". Determines what statistic this result represents.
-    weight_matrix : list[list[float]] | None, default None
+    weight_matrix : list[list[float]] | None
         The weight matrix that was used, as nested lists (row i, column j is
         the credit for categories i and j). None when unweighted. Recorded so
         a report shows the numbers, not only the name of the scheme.
@@ -99,12 +99,12 @@ class FleissKappaResult(PointEstimateResult):
     )
     _ACCEPTS_WEIGHTS: ClassVar[bool] = True
 
-    # Inherited from parent class PanelResult (keyword-only)
-    balance_profile: BalanceProfile = field(kw_only=True)
-    rater_profile: RaterProfile = field(kw_only=True)
-    ci_method: str = field(kw_only=True)
-    weights_type: str = field(default="identity", kw_only=True)
-    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+    # Inherited from parent class PanelResult
+    balance_profile: BalanceProfile
+    rater_profile: RaterProfile
+    ci_method: str
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Inherited from parent class PointEstimateResult
     point: float

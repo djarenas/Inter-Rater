@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[PointEstimateResult] Error"
 _TOL = 1e-9
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PointEstimateResult(PanelResult):
     """
     I hold a point estimate, optionally a confidence interval, and optionally
@@ -113,12 +113,12 @@ class PointEstimateResult(PanelResult):
     # with one sets True; PanelResult refuses weights otherwise.
     _ACCEPTS_WEIGHTS: ClassVar[bool] = False
 
-    # Inherited from parent class PanelResult (keyword-only)
-    balance_profile: BalanceProfile = field(kw_only=True)
-    rater_profile: RaterProfile = field(kw_only=True)
-    ci_method: str = field(kw_only=True)
-    weights_type: str = field(default="identity", kw_only=True)
-    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+    # Inherited from parent class PanelResult
+    balance_profile: BalanceProfile
+    rater_profile: RaterProfile
+    ci_method: str
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Populated at this level
     point: float

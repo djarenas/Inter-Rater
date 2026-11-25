@@ -235,6 +235,9 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
             agreement_profile=self._agreement_profile(),
             n_pairs=n_pairs,
             ci_method=self.config.ci_method,
+            # No weighted form, so always unweighted
+            weights_type="identity",
+            weight_matrix=None,
             pair_parts=pair_parts,
             pair_kappa_max=pair_kappa_max,
         )

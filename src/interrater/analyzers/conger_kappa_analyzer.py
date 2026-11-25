@@ -221,4 +221,7 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
             kappa_max=self._kappa_max(),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,
+            # No weighted form, so always unweighted
+            weights_type="identity",
+            weight_matrix=None,
         )

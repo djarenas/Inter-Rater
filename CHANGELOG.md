@@ -121,7 +121,13 @@ versioning follows [semver](https://semver.org/).
   one. It now holds and validates the panel's profiles, `ci_method`,
   `weights_type` and `weight_matrix` for every result. Scott,
   Conger and Light results record `weights_type="identity"` and
-  `weight_matrix=None`. A weighted result must record its matrix.
+  `weight_matrix=None`. A weighted result must record its matrix, and
+  every result must state `weights_type` and `weight_matrix`: they have no
+  defaults.
+
+- Results are built by keyword only: every attribute of a `PanelResult`
+  and its subclasses is passed by name, e.g. `FleissKappaResult(point=...,
+  confidence_interval=..., ...)`.
 
 - `AgreementParts.coefficient()` is renamed `compute_coefficient()`, a verb
   for a method that computes. It behaves the same.

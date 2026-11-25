@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -30,7 +30,7 @@ KAPPA_MAX_NOT_COMPUTED = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class GwetsAC1Result(PointEstimateResult):
     """
     I am Gwet's AC1, with data context. With weights I am AC2, the weighted
@@ -82,7 +82,7 @@ class GwetsAC1Result(PointEstimateResult):
         Method used: "percentile" or "bca".
     weights_type : str
         "identity" (AC1), or "linear", "quadratic" or "custom" (AC2).
-    weight_matrix : list[list[float]] | None, default None
+    weight_matrix : list[list[float]] | None
         The weight matrix, None when unweighted.
     """
 
@@ -95,12 +95,12 @@ class GwetsAC1Result(PointEstimateResult):
     SYMBOL:      ClassVar[str] = "AC1"
     _ACCEPTS_WEIGHTS: ClassVar[bool] = True
 
-    # Inherited from parent class PanelResult (keyword-only)
-    balance_profile: BalanceProfile = field(kw_only=True)
-    rater_profile: RaterProfile = field(kw_only=True)
-    ci_method: str = field(kw_only=True)
-    weights_type: str = field(default="identity", kw_only=True)
-    weight_matrix: list[list[float]] | None = field(default=None, kw_only=True)
+    # Inherited from parent class PanelResult
+    balance_profile: BalanceProfile
+    rater_profile: RaterProfile
+    ci_method: str
+    weights_type: str
+    weight_matrix: list[list[float]] | None
 
     # Inherited from parent class PointEstimateResult
     point: float

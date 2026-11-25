@@ -282,4 +282,7 @@ class ScottsAnalyzer(GroupAnalyzer):
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),
             ci_method=self.config.ci_method,
+            # No weighted form, so always unweighted
+            weights_type="identity",
+            weight_matrix=None,
         )
