@@ -1,7 +1,7 @@
 """
 Figures for the seed-stability analysis.
 
-Reads results.csv and writes three figures, each with two panels -- percentile
+Reads results.csv and writes three figures, each with two subplots -- percentile
 on the left, BCa on the right, so every figure reads the same way:
 
   fig1_sd_lower   SD of the lower bound against B, with tolerance lines
@@ -109,7 +109,7 @@ def width_labels(data: pd.DataFrame, xs: list[int]) -> dict[str, str]:
 
     The width is what orders the lines in the un-normalised figures, so
     printing it lets a reader see that before the normalised figure proves
-    it. One number serves both panels: percentile and BCa widths differ by
+    it. One number serves both subplots: percentile and BCa widths differ by
     at most 0.3% on these datasets, and the drift from B=250 to B=4000 is
     1-2%, so the value quoted is the most converged one -- percentile at
     the largest B.
@@ -121,7 +121,7 @@ def width_labels(data: pd.DataFrame, xs: list[int]) -> dict[str, str]:
 
 def bound_figure(data: pd.DataFrame, bound: str, order: list[str],
                  xs: list[int], outstem: str, n_seeds: int) -> None:
-    """SD of one bound against B, one panel per method."""
+    """SD of one bound against B, one subplot per method."""
     sub = data[data.bound == bound]
     labels = width_labels(data, xs)
     fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.0), sharey=True)
@@ -198,7 +198,7 @@ def collapse_figure(data: pd.DataFrame, order: list[str], xs: list[int],
         ax.set_xlabel("resamples $B$", fontsize=9)
         # Only the fitted line goes in this legend. Left to itself, matplotlib
         # collects every labelled artist and repeats all six datasets here,
-        # on top of the data, duplicating the panel legend on the right.
+        # on top of the data, duplicating the subplot legend on the right.
         line_legends.append(
             ax.legend(handles=[fit_line], fontsize=8.5, frameon=False,
                       loc="upper right")

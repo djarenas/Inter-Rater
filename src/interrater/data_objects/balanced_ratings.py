@@ -18,7 +18,7 @@ class BalancedRatings(Ratings):
     Not necessarily the same raters. Subject 1 may have gone to Ann and Bob
     while subject 2 went to Cara and Dev; what matters is that both were seen
     twice. This is the ordinary shape of a rating task where each subject is
-    assigned to a fixed-size subset of the rater pool.
+    assigned to a fixed-size subset of the panel's raters.
 
     What I buy you is exact Fleiss' kappa. The formula needs a constant number
     of raters per subject and never needs the same raters, so this guarantee --

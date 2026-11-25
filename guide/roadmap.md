@@ -38,8 +38,8 @@
   weight matrix if any, and the package version.
 
 - **Support for unbalanced designs.** Where each subject is rated by a subset
-  of the rater pool rather than all of them, which is the usual case outside a
-  designed reliability study.
+  of the panel's raters rather than all of them, which is the usual case
+  outside a designed reliability study.
 
 - **Pairwise and subset permutation, with visualization.** Compute a
   coefficient for every pair of raters, or every subset of a given size,

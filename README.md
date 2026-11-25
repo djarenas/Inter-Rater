@@ -217,6 +217,10 @@ is a complete rewrite in object-oriented Python, undertaken to fix maintenance
 issues and limitations that emerged from real-world use. Version 1 remains
 available at git tag `v1.5`.
 
+In this package a **panel** is a set of raters and the ratings they gave a set
+of subjects. A pair or subset of raters, with their ratings, is a smaller panel
+drawn from it.
+
 Further reading:
 - [Statistical background](https://djarenas.github.io/packages/interrater/statistical_background/): chance terms, rare conditions, more than two raters, incomplete data, with every number reproducible.
 - [Why objects?](https://djarenas.github.io/packages/interrater/why_objects/): the design choices behind the objects.

@@ -11,7 +11,7 @@ balance, nij counts -- can be verified by counting on fingers.
 
 The GAPPY dataset adds empties: 4 subjects, 3 raters, K=2, with two cells
 missing. It is unbalanced and not crossed, which is the ordinary shape of a
-systematic review where each subject goes to a subset of the rater pool.
+systematic review where each subject goes to a subset of the panel's raters.
 
 Both are frozen as module-level constants so that no test can mutate what
 another test sees. Fixtures return fresh objects built from those constants.

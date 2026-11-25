@@ -2,7 +2,7 @@
 
 One coefficient, recomputed over subsets of the raters. Where the analyzer
 results answer *what is the coefficient*, these also answer *how much does it move
-when the rater set changes*; across all pairs, across leave-k-out subsets at
+when the panel changes*; across all pairs, across leave-k-out subsets at
 one k, or across several k at once.
 
 ```
