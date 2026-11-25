@@ -22,68 +22,6 @@ TESTED_COEFFICIENTS: frozenset[str] = frozenset([
 ])
 
 
-def compute_permutation_p_value(
-    n_at_or_above: int, n_at_or_below: int, n_usable: int, alternative: str
-) -> float:
-    """
-    Compute a permutation p-value.
-
-    Parameters
-    ----------
-    n_at_or_above : int
-        Permutations whose coefficient was at or above the observed one.
-    n_at_or_below : int
-        Permutations whose coefficient was at or below the observed one.
-    n_usable : int
-        Permutations whose coefficient was defined (not NaN).
-    alternative : str
-        "greater", "less" or "two-sided".
-
-    Returns
-    -------
-    float
-        "greater": (n_at_or_above + 1) / (n_usable + 1)
-        "less": (n_at_or_below + 1) / (n_usable + 1)
-        "two-sided": twice the smaller of the two, capped at 1
-
-    The +1 counts the observed data as one of the arrangements, so the
-    p-value is never zero. For permutations drawn at random, as here, it is
-    valid but conservative (Phipson & Smyth 2010, Section 6), and it is
-    what scipy.stats.permutation_test computes.
-
-    Two-sided is twice the smaller one-sided p-value, capped at 1: Fisher's
-    rule, which gives equal weight to departures in either direction
-    (Kulinskaya 2008, Section 1), and scipy.stats.permutation_test's
-    default. It reads each tail directly, so it does not assume the null
-    distribution is centred on 0. When the null distribution is
-    asymmetric, ``alternative="greater"`` or ``"less"`` gives the one-sided
-    p-value instead (Gibbons & Pratt 1975).
-
-    References
-    ----------
-    Gibbons, J. D., & Pratt, J. W. (1975). P-values: interpretation and
-        methodology. The American Statistician, 29(1), 20-25.
-    Kulinskaya, E. (2008). On two-sided p-values for non-symmetric
-        distributions. arXiv:0810.2124.
-    Phipson, B., & Smyth, G. K. (2010). Permutation P-values should never
-        be zero: calculating exact P-values when permutations are randomly
-        drawn. Statistical Applications in Genetics and Molecular Biology,
-        9(1), Article 39.
-    """
-    greater = (n_at_or_above + 1) / (n_usable + 1)
-    less = (n_at_or_below + 1) / (n_usable + 1)
-    if alternative == "greater":
-        return greater
-    if alternative == "less":
-        return less
-    if alternative == "two-sided":
-        return min(1.0, 2.0 * min(greater, less))
-    raise ValueError(
-        f"{_ERROR_PREFIX}: alternative must be 'two-sided', 'greater' or "
-        f"'less', got {alternative!r}"
-    )
-
-
 @dataclass(frozen=True)
 class HypothesisTestResult:
     """
@@ -417,7 +355,7 @@ class HypothesisTestResult:
                 f"must be too: the p-value depends on it"
             )
 
-        expected = compute_permutation_p_value(
+        expected = self.compute_permutation_p_value(
             self.n_at_or_above, self.n_at_or_below, self.n_usable,
             self.alternative,
         )
@@ -430,6 +368,66 @@ class HypothesisTestResult:
 
     # Public API ------------------------------------------------------------- #
 
+    @staticmethod
+    def compute_permutation_p_value(
+        n_at_or_above: int, n_at_or_below: int, n_usable: int, alternative: str
+    ) -> float:
+        """
+        Compute a permutation p-value.
+
+        Parameters
+        ----------
+        n_at_or_above : int
+            Permutations whose coefficient was at or above the observed one.
+        n_at_or_below : int
+            Permutations whose coefficient was at or below the observed one.
+        n_usable : int
+            Permutations whose coefficient was defined (not NaN).
+        alternative : str
+            "greater", "less" or "two-sided".
+
+        Returns
+        -------
+        float
+            "greater": (n_at_or_above + 1) / (n_usable + 1)
+            "less": (n_at_or_below + 1) / (n_usable + 1)
+            "two-sided": twice the smaller of the two, capped at 1
+
+        The +1 counts the observed data as one of the arrangements, so the
+        p-value is never zero. For permutations drawn at random, as here, it is
+        valid but conservative (Phipson & Smyth 2010, Section 6), and it is
+        what scipy.stats.permutation_test computes.
+
+        Two-sided is twice the smaller one-sided p-value, capped at 1: Fisher's
+        rule, which gives equal weight to departures in either direction
+        (Kulinskaya 2008, Section 1), and scipy.stats.permutation_test's
+        default. It reads each tail directly, so it does not assume the null
+        distribution is centred on 0. When the null distribution is
+        asymmetric, ``alternative="greater"`` or ``"less"`` gives the one-sided
+        p-value instead.
+
+        References
+        ----------
+        Kulinskaya, E. (2008). On two-sided p-values for non-symmetric
+            distributions. arXiv:0810.2124.
+        Phipson, B., & Smyth, G. K. (2010). Permutation P-values should never
+            be zero: calculating exact P-values when permutations are randomly
+            drawn. Statistical Applications in Genetics and Molecular Biology,
+            9(1), Article 39.
+        """
+        greater = (n_at_or_above + 1) / (n_usable + 1)
+        less = (n_at_or_below + 1) / (n_usable + 1)
+        if alternative == "greater":
+            return greater
+        if alternative == "less":
+            return less
+        if alternative == "two-sided":
+            return min(1.0, 2.0 * min(greater, less))
+        raise ValueError(
+            f"{_ERROR_PREFIX}: alternative must be 'two-sided', 'greater' or "
+            f"'less', got {alternative!r}"
+        )
+
     def __str__(self) -> str:
         """
         Human-readable summary of the hypothesis test result.
@@ -438,9 +436,9 @@ class HypothesisTestResult:
         --------
         Parametric:
             H₀: Fleiss' κ = 0, z = 3.42 (null variance: Fleiss, Nee & Landis
-            (1979), Eq. 12), two-sided p = 0.0006, reject at α = 0.05
+            (1979), Eq. 12), two-sided p = 0.000600, reject at α = 0.05
         Permutation:
-            H₀: Fleiss' κ = 0, two-sided p = 0.0030 (5000 permutations,
+            H₀: Fleiss' κ = 0, two-sided p = 0.003000 (5000 permutations,
             within_rater_shuffle, seed 42), reject at α = 0.05. Two-sided p
             is twice the smaller one-sided p (Fisher's rule; Kulinskaya 2008)
         """
@@ -449,7 +447,7 @@ class HypothesisTestResult:
         # The coefficient as every other result prints it, e.g. "Fleiss' κ"
         name = result_class_for(self.coefficient).NAME
 
-        # Format p-value: use scientific notation for very small values
+        # Format p-value: below 0.000001, print a bound instead
         if self.p_value < 0.000001:
             p_str = "p < 0.000001"
         else:
@@ -501,7 +499,7 @@ class HypothesisTestResult:
         Returns
         -------
         dict
-            Keys: p_value, alpha, reject_null, method, point,
+            Keys: p_value, alpha, reject_null, method, point, coefficient,
             and method-specific fields.
         """
         result = {

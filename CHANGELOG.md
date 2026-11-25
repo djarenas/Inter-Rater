@@ -89,7 +89,7 @@ versioning follows [semver](https://semver.org/).
 - A two-sided permutation result's printout says how its p-value was made:
   "Two-sided p is twice the smaller one-sided p (Fisher's rule; Kulinskaya
   2008)". `compute_permutation_p_value` documents the +1 (Phipson & Smyth
-  2010) and the doubling (Kulinskaya 2008; Gibbons & Pratt 1975).
+  2010) and the doubling (Kulinskaya 2008).
 
 - Gwet's AC2, the weighted AC1. `GwetAC1Analyzer` computes it when the
   semantics declares ordered or weighted categories, as Fleiss' kappa does;
@@ -150,7 +150,8 @@ versioning follows [semver](https://semver.org/).
   `category_proportions` instead of their own copies. Results are unchanged.
 
 - `permutation_p_value_from_counts` is renamed `compute_permutation_p_value`,
-  a verb like the package's other helpers that do something.
+  a verb like the package's other helpers that do something, and is now a
+  static method of `HypothesisTestResult`, whose validation uses it.
 
 - The permutation test is written once, as `Analyzer._permutation_test`,
   instead of once in each of the 8 analyzers. `hypothesis_test()` stays

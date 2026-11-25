@@ -40,9 +40,6 @@ from interrater.intermediates.results import (
     CohenKappaResult,
     CongerKappaResult,
 )
-from interrater.intermediates.results.hypothesis_test_result import (
-    compute_permutation_p_value,
-)
 from interrater.intermediates.results.analyzer_results.individual_marginal_result import (
     IndividualMarginalResult,
 )
@@ -1394,15 +1391,15 @@ class TestHypothesisTestResultCounts:
         ("greater", 0.3), ("less", 0.8), ("two-sided", 0.6),
     ])
     def test_formula(self, alternative, expected):
-        assert compute_permutation_p_value(2, 7, 9, alternative) == pytest.approx(expected)
+        assert HypothesisTestResult.compute_permutation_p_value(2, 7, 9, alternative) == pytest.approx(expected)
 
     def test_two_sided_capped_at_one(self):
         """Both tails at 0.6; twice the smaller would be 1.2."""
-        assert compute_permutation_p_value(5, 5, 9, "two-sided") == 1.0
+        assert HypothesisTestResult.compute_permutation_p_value(5, 5, 9, "two-sided") == 1.0
 
     def test_never_zero(self):
         """No permutation as extreme as the observed: 1/(B+1), not 0."""
-        assert compute_permutation_p_value(0, 9, 9, "greater") == pytest.approx(0.1)
+        assert HypothesisTestResult.compute_permutation_p_value(0, 9, 9, "greater") == pytest.approx(0.1)
 
     def _result(self, **overrides):
         kwargs = dict(

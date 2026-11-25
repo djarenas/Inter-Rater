@@ -573,11 +573,11 @@ class Analyzer(ABC):
 
         Returns the keyword arguments HypothesisTestResult records:
         p_value, n_usable, n_at_or_above, n_at_or_below and alternative.
-        The formula is ``compute_permutation_p_value``, which the
-        result uses to check them.
+        The formula is ``HypothesisTestResult.compute_permutation_p_value``,
+        which the result uses to check them.
         """
         from ..intermediates.results.hypothesis_test_result import (
-            compute_permutation_p_value,
+            HypothesisTestResult,
         )
 
         null = np.asarray(null_distribution, dtype=float)
@@ -601,7 +601,7 @@ class Analyzer(ABC):
         n_usable = int(usable.size)
 
         return {
-            "p_value": compute_permutation_p_value(
+            "p_value": HypothesisTestResult.compute_permutation_p_value(
                 n_at_or_above, n_at_or_below, n_usable, alternative
             ),
             "alternative": alternative,
