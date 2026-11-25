@@ -59,7 +59,7 @@ class BrennanPredigerResult(PointEstimateResult):
     ----------
     point : float
         Brennan-Prediger coefficient (inherited from PointEstimateResult).
-    confidence_interval : CIResult | None
+    confidence_interval : CIResult
         The bootstrap interval (inherited).
     bootstrap_distribution : np.ndarray | NotComputed | None
         Bootstrap distribution (inherited); NotComputed when the draws were
@@ -105,7 +105,7 @@ class BrennanPredigerResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: CIResult | None
+    confidence_interval: CIResult
     bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: NotComputed

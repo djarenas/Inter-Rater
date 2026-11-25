@@ -242,6 +242,31 @@ def _ci(lower: float = 0.45, upper: float = 0.55, **overrides) -> BootstrapCIRes
     return BootstrapCIResult(**base)
 
 
+def _parametric_ci() -> ParametricCIResult:
+    """
+    A parametric interval, for tests that need an interval with no draws.
+    It warns when built (pinned in test_analyzer_classes.py); here it is
+    scaffolding, so the warning is suppressed for these lines only.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        return ParametricCIResult(
+            lower=0.35, upper=0.45, alpha=0.05, variance_source="null",
+            variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
+        )
+
+
+def _ci_around(point: float) -> BootstrapCIResult:
+    """A plain interval 0.05 either side of ``point`` (of 0.5 if it is NaN)."""
+    centre = point if math.isfinite(point) else 0.5
+    return _ci(centre - 0.05, centre + 0.05)
+
+
+def _draws_around(point: float) -> np.ndarray:
+    """Draws that agree with ``_ci_around(point)``."""
+    return _draws_for(_ci_around(point))
+
+
 def _undefined_ci(**overrides) -> BootstrapCIResult:
     """An interval that was attempted and produced nothing: every draw failed."""
     base = dict(
@@ -464,26 +489,24 @@ def _multi_k_kwargs(**overrides):
 class TestPointEstimateResultConstruction:
     """Valid construction with various combinations of optional fields."""
 
-    def test_point_only(self):
-        """Minimal: a point estimate and its balance profile; no interval, no draws."""
-        r = PointEstimateResult(
-            point=0.75,
-            confidence_interval=None,
-            bootstrap_distribution=None,
-            balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile",
-            **_NOT_UNDER_TEST,
-        )
-        assert r.point == 0.75
-        assert r.confidence_interval is None
-        assert r.bootstrap_distribution is None
+    def test_interval_required(self):
+        """The analyzers always compute an interval, so None is refused."""
+        with pytest.raises(TypeError, match="confidence_interval must be a CIResult, got NoneType"):
+            PointEstimateResult(
+                point=0.75,
+                confidence_interval=None,
+                bootstrap_distribution=None,
+                balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile",
+                **_NOT_UNDER_TEST,
+            )
 
     def test_balance_profile_required(self):
         """Every result carries the balance profile of its data."""
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             PointEstimateResult(
                 point=0.75,
-                confidence_interval=None,
-                bootstrap_distribution=None,
+                confidence_interval=_ci_around(0.75),
+                bootstrap_distribution=_draws_around(0.75),
                 balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="percentile",
                 **_NOT_UNDER_TEST,
             )
@@ -518,8 +541,8 @@ class TestPointEstimateResultConstruction:
         bp = _bp()
         r = PointEstimateResult(
             point=0.5,
-            confidence_interval=None,
-            bootstrap_distribution=None,
+            confidence_interval=_ci_around(0.5),
+            bootstrap_distribution=_draws_around(0.5),
             balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile",
             **_NOT_UNDER_TEST,
         )
@@ -563,18 +586,18 @@ class TestPointEstimateResultConstruction:
 
     def test_is_panel_result(self):
         """PointEstimateResult is a subclass of PanelResult."""
-        r = PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+        r = PointEstimateResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
         assert isinstance(r, PanelResult)
 
     def test_is_frozen(self):
         """Frozen dataclass: cannot reassign attributes."""
-        r = PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+        r = PointEstimateResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
         with pytest.raises(AttributeError):
             r.point = 0.9
 
     def test_int_point_accepted(self):
         """Integer point values are accepted (int is numeric)."""
-        r = PointEstimateResult(point=1, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+        r = PointEstimateResult(point=1, confidence_interval=_ci_around(1), bootstrap_distribution=_draws_around(1), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
         assert r.point == 1
 
 
@@ -584,7 +607,7 @@ class TestPointEstimateResultValidationRejects:
     def test_point_not_numeric(self):
         """Point must be int or float, not str."""
         with pytest.raises(TypeError, match="point must be float"):
-            PointEstimateResult(point="0.5", confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point="0.5", confidence_interval=_ci(), bootstrap_distribution=_draws_for(_ci()), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
     def test_ci_tuple_rejected(self):
         """A bare pair of floats is no longer an interval."""
@@ -603,27 +626,27 @@ class TestPointEstimateResultValidationRejects:
     def test_bootstrap_not_ndarray(self):
         """Bootstrap distribution must be np.ndarray."""
         with pytest.raises(TypeError, match="bootstrap_distribution must be"):
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=[0.4, 0.5, 0.6], balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point=0.5, confidence_interval=_ci(), bootstrap_distribution=[0.4, 0.5, 0.6], balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
     def test_bootstrap_wrong_ndim(self):
         """Bootstrap distribution must be 1-dimensional."""
         with pytest.raises(ValueError, match="must be 1-dimensional"):
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=np.array([[0.4, 0.5]]), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point=0.5, confidence_interval=_ci(), bootstrap_distribution=np.array([[0.4, 0.5]]), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
     def test_bootstrap_empty(self):
         """Bootstrap distribution must not be empty."""
         with pytest.raises(ValueError, match="must have at least 1 value"):
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=np.array([]), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point=0.5, confidence_interval=_ci(), bootstrap_distribution=np.array([]), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
     def test_balance_profile_wrong_type(self):
         """Balance profile must be BalanceProfile, not dict."""
         with pytest.raises(TypeError, match="balance_profile must be"):
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile={"n_raters": 3}, weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile={"n_raters": 3}, weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
     def test_error_prefix(self):
         """Error messages start with [PointEstimateResult] Error."""
         with pytest.raises(TypeError, match=r"\[PointEstimateResult\] Error"):
-            PointEstimateResult(point="bad", confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point="bad", confidence_interval=_ci(), bootstrap_distribution=_draws_for(_ci()), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
 
 class TestPointEstimateResultPointOutsideInterval:
@@ -667,7 +690,7 @@ class TestPointEstimateResultPointOutsideInterval:
 
     def test_no_interval_is_not_outside(self):
         assert (
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).point_outside_interval
+            PointEstimateResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).point_outside_interval
             is False
         )
 
@@ -683,10 +706,10 @@ class TestPointEstimateResultPointOutsideInterval:
 class TestPointEstimateResultStr:
     """The compact display string under different field combinations."""
 
-    def test_point_only(self):
-        """Just the point value, no CI or bootstrap."""
-        s = str(PointEstimateResult(point=0.523, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST))
-        assert s == "= 0.523"
+    def test_point_and_interval(self):
+        """The point and its interval; the base class has no name to print."""
+        s = str(PointEstimateResult(point=0.523, confidence_interval=_ci_around(0.523), bootstrap_distribution=_draws_around(0.523), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST))
+        assert s == "= 0.523 [0.473, 0.573] (95% CI, percentile, n=1000)"
 
     def test_with_ci(self):
         """Point + CI. The interval renders itself."""
@@ -723,17 +746,17 @@ class TestPointEstimateResultRaterProfile:
         for missing in (None, NotComputed("no raters")):
             with pytest.raises(TypeError, match="rater_profile must be RaterProfile, got"):
                 PointEstimateResult(
-                    point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **dict(_NOT_UNDER_TEST, rater_profile=missing),
+                    point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **dict(_NOT_UNDER_TEST, rater_profile=missing),
                 )
 
     def test_both_profiles_describe_the_same_subjects(self):
         with pytest.raises(ValueError, match="rater_profile has 5 subjects but balance_profile has 4"):
             PointEstimateResult(
-                point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **dict(_NOT_UNDER_TEST, rater_profile=_raters(3, n_subjects=5)),
+                point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **dict(_NOT_UNDER_TEST, rater_profile=_raters(3, n_subjects=5)),
             )
 
     def test_summary_names_the_raters(self):
-        r = PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **dict(_NOT_UNDER_TEST, rater_profile=_raters(2)))
+        r = PointEstimateResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **dict(_NOT_UNDER_TEST, rater_profile=_raters(2)))
         assert r.summary()["raters"]["rater_names"] == ["rater0", "rater1"]
 
 
@@ -741,10 +764,12 @@ class TestPointEstimateResultSummary:
     """The plain-types dict under different field combinations."""
 
     def test_point_only(self):
-        """Minimal summary: the point and the required fields."""
-        d = PointEstimateResult(point=0.75, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).summary()
+        """Minimal summary: the point, its interval and the required fields."""
+        d = PointEstimateResult(point=0.75, confidence_interval=_ci_around(0.75), bootstrap_distribution=_draws_around(0.75), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).summary()
         assert set(d) == {
-            "point", "ci_method", "weights_type", "weight_matrix",
+            "point", "ci", "ci_lower", "ci_upper", "point_outside_interval",
+            "bootstrap_draws_mean", "bootstrap_se",
+            "ci_method", "weights_type", "weight_matrix",
             "balance", "raters", "parts", "kappa_max", "agreement_profile",
         }
         assert d["point"] == 0.75
@@ -774,7 +799,7 @@ class TestPointEstimateResultSummary:
     def test_with_balance_profile(self):
         """Balance profile adds nested 'balance' dict."""
         bp = _bp()
-        d = PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).summary()
+        d = PointEstimateResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).summary()
         assert "balance" in d
         assert isinstance(d["balance"], dict)
 
@@ -800,7 +825,7 @@ class TestPointEstimateResultParts:
 
     def _result(self, point, **overrides):
         kwargs = dict(_NOT_UNDER_TEST, **overrides)
-        return PointEstimateResult(point=point, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **kwargs)
+        return PointEstimateResult(point=point, confidence_interval=_ci_around(point), bootstrap_distribution=_draws_around(point), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **kwargs)
 
     def test_parts_that_rebuild_the_point_accepted(self):
         parts = AgreementParts(observed=0.8, chance=0.5, kind="agreement", weighted=False)
@@ -865,10 +890,6 @@ class TestPointEstimateResultParts:
 class TestPointEstimateResultDrawsMatchInterval:
     """Draws and interval are two views of one bootstrap; I refuse a mismatch."""
 
-    def test_draws_without_interval_refused(self):
-        with pytest.raises(ValueError, match="not a BootstrapCIResult"):
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=np.array([0.4, 0.5, 0.6]), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
-
     def test_draws_with_parametric_interval_refused(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -926,7 +947,7 @@ class TestPointEstimateResultDrawsNotKept:
 
     def test_not_kept_needs_a_bootstrap_interval(self):
         with pytest.raises(ValueError, match="only a bootstrap has draws to not keep"):
-            PointEstimateResult(point=0.5, confidence_interval=None, bootstrap_distribution=self.NOT_KEPT, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
+            PointEstimateResult(point=0.5, confidence_interval=_parametric_ci(), bootstrap_distribution=self.NOT_KEPT, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST)
 
     def test_summary_says_why(self):
         d = PointEstimateResult(point=0.5, confidence_interval=_ci(0.3, 0.7), bootstrap_distribution=self.NOT_KEPT, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_NOT_UNDER_TEST).summary()
@@ -1624,7 +1645,7 @@ class TestCoefficientNames:
 
     def test_printed_result_uses_the_name(self):
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca", weights_type="identity", weight_matrix=None, **_pooled(0.6),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), ci_method="bca", weights_type="identity", weight_matrix=None, **_pooled(0.6),
         )
         assert str(r).startswith("Fleiss' κ = 0.600")
 
@@ -1646,28 +1667,28 @@ class TestPanelResultChecksOnPointResults:
 
     @pytest.mark.parametrize("cls, fields", NO_WEIGHTED_FORM)
     def test_no_weighted_form_records_identity(self, cls, fields):
-        r = cls(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **fields())
+        r = cls(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **fields())
         assert (r.weights_type, r.weight_matrix) == ("identity", None)
 
     @pytest.mark.parametrize("cls, fields", NO_WEIGHTED_FORM)
     def test_no_weighted_form_must_be_unweighted(self, cls, fields):
         with pytest.raises(ValueError, match="this coefficient has no weighted form"):
             cls(
-                point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+                point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), ci_method="bca",
                 weights_type="linear", weight_matrix=_LINEAR, **fields(),
             )
 
     def test_weighting_without_a_matrix_refused(self):
         with pytest.raises(ValueError, match="got weights_type 'linear' with no matrix"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), ci_method="bca",
                 weights_type="linear", weight_matrix=None, **_pooled(0.6, weighted=True),
             )
 
     def test_parametric_null_refused_names_why(self):
         with pytest.raises(ValueError, match="does not implement a parametric null"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null",
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null",
                 **_alpha(0.65),
             )
 
@@ -1677,13 +1698,13 @@ class TestPanelResultChecksOnPointResults:
         (CohenKappaResult, lambda: _cohen(0.6)),
     ])
     def test_parametric_null_allowed_where_implemented(self, cls, fields):
-        r = cls(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null", **fields())
+        r = cls(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null", **fields())
         assert r.ci_method == "parametric_null"
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[PanelResult\] Error"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="invalid",
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="invalid",
                 **_alpha(0.65),
             )
 
@@ -1881,10 +1902,10 @@ class TestPairwisePermutationResultValidation:
 
     def test_pair_must_have_an_interval(self):
         """The per-pair bootstrap always runs: no config turns it off, so a
-        computed pair without an interval can only be a bug."""
+        computed pair without a bootstrap interval can only be a bug."""
         units = _units(PAIRS)
         units[(0, 2)] = CohenKappaResult(
-            point=0.4, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="percentile",
+            point=0.4, confidence_interval=_parametric_ci(), bootstrap_distribution=None, balance_profile=_bp(), ci_method="percentile",
             weights_type="identity", weight_matrix=None, **_cohen(0.4),
         )
         with pytest.raises(
@@ -2208,7 +2229,7 @@ class TestSubsetPermutationResultValidation:
     def test_subset_must_have_an_interval(self):
         units = _units(SUBSETS_K2, "fleiss_kappa")
         units[(0, 2)] = FleissKappaResult(
-            point=0.4, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="percentile",
+            point=0.4, confidence_interval=_parametric_ci(), bootstrap_distribution=None, balance_profile=_bp(), ci_method="percentile",
             weights_type="identity", weight_matrix=None, **_pooled(0.4),
         )
         with pytest.raises(
@@ -2821,7 +2842,7 @@ class TestFleissKappaResult:
 
     def test_valid_construction(self):
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_pooled(0.6),
         )
@@ -2832,7 +2853,7 @@ class TestFleissKappaResult:
     def test_is_point_estimate_result(self):
         """FleissKappaResult inherits from PointEstimateResult."""
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_pooled(0.6),
         )
@@ -2841,14 +2862,14 @@ class TestFleissKappaResult:
     def test_balance_profile_required(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_pooled(0.6),
             )
 
     def test_ci_method_parametric_null_allowed(self):
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
             ci_method="parametric_null", weights_type="identity", weight_matrix=None,
             **_pooled(0.6),
         )
@@ -2857,7 +2878,7 @@ class TestFleissKappaResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
                 ci_method=42, weights_type="identity", weight_matrix=None,
                 **_pooled(0.6),
             )
@@ -2865,7 +2886,7 @@ class TestFleissKappaResult:
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
                 ci_method="invalid", weights_type="identity", weight_matrix=None,
                 **_pooled(0.6),
             )
@@ -2873,7 +2894,7 @@ class TestFleissKappaResult:
     @pytest.mark.parametrize("wt", ["identity", "linear", "quadratic", "custom"])
     def test_valid_weights_types(self, wt):
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
             **_pooled(0.6, weighted=wt != "identity"),
         )
         assert r.weights_type == wt
@@ -2881,21 +2902,21 @@ class TestFleissKappaResult:
     def test_weights_type_not_str(self):
         with pytest.raises(TypeError, match="weights_type must be str"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(42), ci_method="bca", weights_type=42,
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weight_matrix=_matrix_for(42), ci_method="bca", weights_type=42,
                 **_pooled(0.6),
             )
 
     def test_weights_type_invalid(self):
         with pytest.raises(ValueError, match="weights_type must be"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
                 ci_method="bca", weights_type="ordinal",
                 **_pooled(0.6),
             )
 
     def test_is_exact_balanced(self):
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
             ci_method="percentile", weights_type="identity", weight_matrix=None,
             **_pooled(0.6),
         )
@@ -2903,7 +2924,7 @@ class TestFleissKappaResult:
 
     def test_is_exact_unbalanced(self):
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_unbalanced_bp(),
             ci_method="percentile", weights_type="identity", weight_matrix=None,
             **_pooled(0.6),
         )
@@ -2911,7 +2932,7 @@ class TestFleissKappaResult:
 
     def test_str_balanced_unweighted(self):
         s = str(FleissKappaResult(
-            point=0.523, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.523, confidence_interval=_ci_around(0.523), bootstrap_distribution=_draws_around(0.523), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_pooled(0.523),
         ))
@@ -2921,7 +2942,7 @@ class TestFleissKappaResult:
 
     def test_str_unbalanced_weighted(self):
         s = str(FleissKappaResult(
-            point=0.523, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(), weight_matrix=_matrix_for("linear"),
+            point=0.523, confidence_interval=_ci_around(0.523), bootstrap_distribution=_draws_around(0.523), balance_profile=_unbalanced_bp(), weight_matrix=_matrix_for("linear"),
             ci_method="bca", weights_type="linear",
             **_pooled(0.523, weighted=True),
         ))
@@ -2930,7 +2951,7 @@ class TestFleissKappaResult:
 
     def test_summary_keys(self):
         d = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_pooled(0.6),
         ).summary()
@@ -2942,7 +2963,7 @@ class TestFleissKappaResult:
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[FleissKappaResult\] Error"):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_pooled(0.6),
             )
@@ -2951,7 +2972,7 @@ class TestFleissKappaResult:
         """Parent TypeError wrapped with Fleiss prefix."""
         with pytest.raises(TypeError, match=r"\[FleissKappaResult\] Error"):
             FleissKappaResult(
-                point="bad", confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point="bad", confidence_interval=_ci(), bootstrap_distribution=_draws_for(_ci()), balance_profile=_bp(),
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_pooled(0.6),
             )
@@ -2963,7 +2984,7 @@ class TestFleissKappaResultParts:
     def _result(self, weights_type="identity", **fields):
         kwargs = dict(_pooled(0.6, weighted=weights_type != "identity"), **fields)
         return FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(weights_type), ci_method="bca", weights_type=weights_type,
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weight_matrix=_matrix_for(weights_type), ci_method="bca", weights_type=weights_type,
             **kwargs,
         )
 
@@ -3010,51 +3031,51 @@ class TestScottsPiResult:
     """Scott's pi: like Fleiss but no weights_type."""
 
     def test_valid_construction(self):
-        r = ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_pooled(0.5))
+        r = ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_pooled(0.5))
         assert r.point == 0.5
 
     def test_balance_profile_required(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5))
+            ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5))
 
     def test_ci_method_parametric_null_allowed(self):
-        r = ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null", **_pooled(0.5))
+        r = ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null", **_pooled(0.5))
         assert r.ci_method == "parametric_null"
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
-            ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method=42, **_pooled(0.5))
+            ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method=42, **_pooled(0.5))
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
-            ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="wrong", **_pooled(0.5))
+            ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="wrong", **_pooled(0.5))
 
     def test_is_exact_balanced(self):
         assert ScottsPiResult(
-            point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+            point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
             **_pooled(0.5),
         ).is_exact is True
 
     def test_is_exact_unbalanced(self):
         assert ScottsPiResult(
-            point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+            point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
             **_pooled(0.5),
         ).is_exact is False
 
     def test_str_balanced(self):
-        s = str(ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5)))
+        s = str(ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5)))
         assert "Scott's π" in s
         assert "exact formula" in s
 
     def test_str_unbalanced(self):
         s = str(ScottsPiResult(
-            point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+            point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
             **_pooled(0.5),
         ))
         assert "approximation (unbalanced data)" in s
 
     def test_summary_keys(self):
-        d = ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5)).summary()
+        d = ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5)).summary()
         assert d["is_exact"] is True
         assert d["ci_method"] == "bca"
         # No weighted form, so always recorded as unweighted
@@ -3063,7 +3084,7 @@ class TestScottsPiResult:
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[ScottsPiResult\] Error"):
-            ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5))
+            ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_pooled(0.5))
 
 
 class TestScottsPiResultParts:
@@ -3071,7 +3092,7 @@ class TestScottsPiResultParts:
 
     def _result(self, **fields):
         kwargs = dict(_pooled(0.5), **fields)
-        return ScottsPiResult(point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **kwargs)
+        return ScottsPiResult(point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **kwargs)
 
     def test_valid(self):
         assert self._result().parts.kind == "agreement"
@@ -3103,53 +3124,53 @@ class TestGwetsAC1Result:
     """Gwet's AC1: no parametric_null (explicit 'not implemented' rejection)."""
 
     def test_valid_construction(self):
-        r = GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7))
+        r = GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7))
         assert r.point == 0.7
 
     def test_balance_profile_required(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7))
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7))
 
     def test_parametric_null_rejected(self):
         """Gwet's AC1 rejects parametric_null, saying the package does not implement one."""
         with pytest.raises(ValueError, match="does not implement a parametric null"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null", **_gwet(0.7))
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="parametric_null", **_gwet(0.7))
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method=42, **_gwet(0.7))
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method=42, **_gwet(0.7))
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="invalid", **_gwet(0.7))
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="invalid", **_gwet(0.7))
 
     def test_is_exact_balanced(self):
         assert GwetsAC1Result(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
             **_gwet(0.7),
         ).is_exact is True
 
     def test_is_exact_unbalanced(self):
         assert GwetsAC1Result(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
             **_gwet(0.7),
         ).is_exact is False
 
     def test_str_balanced(self):
-        s = str(GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7)))
+        s = str(GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7)))
         assert "Gwet's AC1" in s
         assert "exact formula" in s
 
     def test_str_unbalanced_names_gwets_formula(self):
         """Unbalanced AC1 is Gwet's own formula for missing ratings, not an approximation."""
         s = str(GwetsAC1Result(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7),
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_unbalanced_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7),
         ))
         assert "unbalanced data: Gwet (2016) formula for missing ratings" in s
         assert "approximation" not in s
 
     def test_summary_keys(self):
-        d = GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7)).summary()
+        d = GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7)).summary()
         assert d["is_exact"] is True
         assert d["ci_method"] == "bca"
         assert d["weights_type"] == "identity"
@@ -3161,7 +3182,7 @@ class TestGwetsAC1Result:
         shares = list(_PROFILE.prevalence.values())
         pe = sum(p * (1 - p) for p in shares) / (len(shares) - 1) * 5 / 3   # T_w = 5
         s = str(GwetsAC1Result(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca", weights_type="linear",
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), ci_method="bca", weights_type="linear",
             weight_matrix=w, **_fields(0.7, pe, weighted=True),
         ))
         assert "Gwet's AC1" in s
@@ -3169,17 +3190,17 @@ class TestGwetsAC1Result:
 
     def test_weights_type_invalid(self):
         with pytest.raises(ValueError, match="weights_type must be one of"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="cubic", weight_matrix=None, ci_method="bca",
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="cubic", weight_matrix=None, ci_method="bca",
                            **_gwet(0.7))
 
     def test_weight_matrix_with_identity_refused(self):
         with pytest.raises(ValueError, match="weight_matrix must be None"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), ci_method="bca",
                            weights_type="identity", weight_matrix=[[1.0, 0.0], [0.0, 1.0]], **_gwet(0.7))
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[GwetsAC1Result\] Error"):
-            GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7))
+            GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_gwet(0.7))
 
 
 class TestGwetsAC1ResultParts:
@@ -3187,7 +3208,7 @@ class TestGwetsAC1ResultParts:
 
     def _result(self, **fields):
         kwargs = {**_gwet(0.7), "weights_type": "identity", "weight_matrix": None, **fields}
-        return GwetsAC1Result(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca", **kwargs)
+        return GwetsAC1Result(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), ci_method="bca", **kwargs)
 
     def test_valid(self):
         assert self._result().parts.reproduces(0.7)
@@ -3232,7 +3253,7 @@ class TestBrennanPredigerResult:
 
     def test_valid_construction(self):
         r = BrennanPredigerResult(
-            point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(),
             ci_method="percentile", weights_type="identity", weight_matrix=None,
             **_uniform(0.8),
         )
@@ -3242,7 +3263,7 @@ class TestBrennanPredigerResult:
     def test_balance_profile_required(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             BrennanPredigerResult(
-                point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_uniform(0.8),
             )
@@ -3250,7 +3271,7 @@ class TestBrennanPredigerResult:
     def test_parametric_null_not_allowed(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             BrennanPredigerResult(
-                point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(),
                 ci_method="parametric_null", weights_type="identity", weight_matrix=None,
                 **_uniform(0.8),
             )
@@ -3258,7 +3279,7 @@ class TestBrennanPredigerResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             BrennanPredigerResult(
-                point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(),
                 ci_method=42, weights_type="identity", weight_matrix=None,
                 **_uniform(0.8),
             )
@@ -3266,7 +3287,7 @@ class TestBrennanPredigerResult:
     @pytest.mark.parametrize("wt", ["identity", "linear", "quadratic", "custom"])
     def test_valid_weights_types(self, wt):
         r = BrennanPredigerResult(
-            point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
+            point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(), weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
             **_uniform(0.8, weighted=wt != "identity"),
         )
         assert r.weights_type == wt
@@ -3274,35 +3295,35 @@ class TestBrennanPredigerResult:
     def test_weights_type_not_str(self):
         with pytest.raises(TypeError, match="weights_type must be str"):
             BrennanPredigerResult(
-                point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(42), ci_method="bca", weights_type=42,
+                point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(), weight_matrix=_matrix_for(42), ci_method="bca", weights_type=42,
                 **_uniform(0.8),
             )
 
     def test_weights_type_invalid(self):
         with pytest.raises(ValueError, match="weights_type must be"):
             BrennanPredigerResult(
-                point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
+                point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
                 ci_method="bca", weights_type="ordinal",
                 **_uniform(0.8),
             )
 
     def test_is_exact_balanced(self):
         assert BrennanPredigerResult(
-            point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_uniform(0.8),
         ).is_exact is True
 
     def test_is_exact_unbalanced(self):
         assert BrennanPredigerResult(
-            point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(),
+            point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_unbalanced_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_uniform(0.8),
         ).is_exact is False
 
     def test_str_balanced_unweighted(self):
         s = str(BrennanPredigerResult(
-            point=0.835, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.835, confidence_interval=_ci_around(0.835), bootstrap_distribution=_draws_around(0.835), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_uniform(0.835),
         ))
@@ -3313,7 +3334,7 @@ class TestBrennanPredigerResult:
     def test_str_unbalanced_names_gwets_formula(self):
         """Unbalanced Brennan-Prediger is Gwet's formula for missing ratings."""
         s = str(BrennanPredigerResult(
-            point=0.835, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(),
+            point=0.835, confidence_interval=_ci_around(0.835), bootstrap_distribution=_draws_around(0.835), balance_profile=_unbalanced_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_uniform(0.835),
         ))
@@ -3322,7 +3343,7 @@ class TestBrennanPredigerResult:
 
     def test_summary_keys(self):
         d = BrennanPredigerResult(
-            point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for("linear"),
+            point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(), weight_matrix=_matrix_for("linear"),
             ci_method="bca", weights_type="linear",
             **_uniform(0.8, weighted=True),
         ).summary()
@@ -3335,7 +3356,7 @@ class TestBrennanPredigerResult:
             ValueError, match=r"\[BrennanPredigerResult\] Error"
         ):
             BrennanPredigerResult(
-                point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_uniform(0.8),
             )
@@ -3347,7 +3368,7 @@ class TestBrennanPredigerResultParts:
     def _result(self, weights_type="identity", weight_matrix=None, **fields):
         kwargs = dict(_uniform(0.8, weighted=weights_type != "identity"), **fields)
         return BrennanPredigerResult(
-            point=0.8, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+            point=0.8, confidence_interval=_ci_around(0.8), bootstrap_distribution=_draws_around(0.8), balance_profile=_bp(), ci_method="bca",
             weights_type=weights_type, weight_matrix=weight_matrix, **kwargs,
         )
 
@@ -3395,7 +3416,7 @@ class TestKrippendorffAlphaResult:
 
     def test_valid_construction(self):
         r = KrippendorffAlphaResult(
-            point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_alpha(0.65),
         )
@@ -3405,7 +3426,7 @@ class TestKrippendorffAlphaResult:
     def test_balance_profile_required(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_alpha(0.65),
             )
@@ -3413,7 +3434,7 @@ class TestKrippendorffAlphaResult:
     def test_parametric_null_not_allowed(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(),
                 ci_method="parametric_null", weights_type="identity", weight_matrix=None,
                 **_alpha(0.65),
             )
@@ -3421,7 +3442,7 @@ class TestKrippendorffAlphaResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(),
                 ci_method=42, weights_type="identity", weight_matrix=None,
                 **_alpha(0.65),
             )
@@ -3429,7 +3450,7 @@ class TestKrippendorffAlphaResult:
     @pytest.mark.parametrize("wt", ["identity", "linear", "quadratic", "custom"])
     def test_valid_weights_types(self, wt):
         r = KrippendorffAlphaResult(
-            point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
+            point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
             **_alpha(0.65, weighted=wt != "identity"),
         )
         assert r.weights_type == wt
@@ -3437,14 +3458,14 @@ class TestKrippendorffAlphaResult:
     def test_weights_type_not_str(self):
         with pytest.raises(TypeError, match="weights_type must be str"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(42), ci_method="bca", weights_type=42,
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weight_matrix=_matrix_for(42), ci_method="bca", weights_type=42,
                 **_alpha(0.65),
             )
 
     def test_weights_type_invalid(self):
         with pytest.raises(ValueError, match="weights_type must be"):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
                 ci_method="bca", weights_type="ordinal",
                 **_alpha(0.65),
             )
@@ -3452,7 +3473,7 @@ class TestKrippendorffAlphaResult:
     def test_is_exact_always_true_balanced(self):
         """Alpha is always exact, even when balanced."""
         assert KrippendorffAlphaResult(
-            point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_alpha(0.65),
         ).is_exact is True
@@ -3460,14 +3481,14 @@ class TestKrippendorffAlphaResult:
     def test_is_exact_always_true_unbalanced(self):
         """Alpha handles unbalanced data natively -- still exact."""
         assert KrippendorffAlphaResult(
-            point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(),
+            point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_unbalanced_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_alpha(0.65),
         ).is_exact is True
 
     def test_str_balanced(self):
         s = str(KrippendorffAlphaResult(
-            point=0.625, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+            point=0.625, confidence_interval=_ci_around(0.625), bootstrap_distribution=_draws_around(0.625), balance_profile=_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_alpha(0.625),
         ))
@@ -3479,7 +3500,7 @@ class TestKrippendorffAlphaResult:
     def test_str_unbalanced(self):
         """Unbalanced shows 'exact formula (unbalanced data)' -- NOT 'approximation'."""
         s = str(KrippendorffAlphaResult(
-            point=0.625, confidence_interval=None, bootstrap_distribution=None, balance_profile=_unbalanced_bp(),
+            point=0.625, confidence_interval=_ci_around(0.625), bootstrap_distribution=_draws_around(0.625), balance_profile=_unbalanced_bp(),
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_alpha(0.625),
         ))
@@ -3487,7 +3508,7 @@ class TestKrippendorffAlphaResult:
 
     def test_summary_keys(self):
         d = KrippendorffAlphaResult(
-            point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for("quadratic"),
+            point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weight_matrix=_matrix_for("quadratic"),
             ci_method="bca", weights_type="quadratic",
             **_alpha(0.65, weighted=True),
         ).summary()
@@ -3500,7 +3521,7 @@ class TestKrippendorffAlphaResult:
             ValueError, match=r"\[KrippendorffAlphaResult\] Error"
         ):
             KrippendorffAlphaResult(
-                point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_alpha(0.65),
             )
@@ -3512,7 +3533,7 @@ class TestKrippendorffAlphaResultParts:
     def _result(self, weights_type="identity", **fields):
         kwargs = dict(_alpha(0.65, weighted=weights_type != "identity"), **fields)
         return KrippendorffAlphaResult(
-            point=0.65, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(weights_type), ci_method="bca", weights_type=weights_type,
+            point=0.65, confidence_interval=_ci_around(0.65), bootstrap_distribution=_draws_around(0.65), balance_profile=_bp(), weight_matrix=_matrix_for(weights_type), ci_method="bca", weights_type=weights_type,
             **kwargs,
         )
 
@@ -3551,30 +3572,30 @@ class TestIndividualMarginalResult:
 
     def test_valid_construction(self):
         bp = _bp()
-        r = IndividualMarginalResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
+        r = IndividualMarginalResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
         assert r.point == 0.6
         assert r.balance_profile is bp
 
     def test_is_point_estimate_result(self):
-        r = IndividualMarginalResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
+        r = IndividualMarginalResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
         assert isinstance(r, PointEstimateResult)
 
     def test_balance_profile_none_rejected(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            IndividualMarginalResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
+            IndividualMarginalResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
 
     def test_error_prefix(self):
         with pytest.raises(
             ValueError, match=r"\[IndividualMarginalResult\] Error"
         ):
-            IndividualMarginalResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
+            IndividualMarginalResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
 
     def test_parent_validation_propagated(self):
         """Point type error wraps with IndividualMarginalResult prefix."""
         with pytest.raises(
             TypeError, match=r"\[IndividualMarginalResult\] Error"
         ):
-            IndividualMarginalResult(point="bad", confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
+            IndividualMarginalResult(point="bad", confidence_interval=_ci(), bootstrap_distribution=_draws_for(_ci()), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **_PANEL_NOT_UNDER_TEST)
 
 
 class TestIndividualMarginalResultProfile:
@@ -3583,7 +3604,7 @@ class TestIndividualMarginalResultProfile:
     def test_rater_count_must_match(self):
         fields = dict(_NOT_UNDER_TEST, agreement_profile=_PAIR, rater_profile=_raters(3))
         with pytest.raises(ValueError, match="marginals for 2 raters but rater_profile has 3"):
-            IndividualMarginalResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **fields)
+            IndividualMarginalResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile", **fields)
 
 
 # ============================================================================ #
@@ -3597,7 +3618,7 @@ class TestCohenKappaResult:
     def test_valid_construction(self):
         bp = _bp()
         r = CohenKappaResult(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp,
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=bp,
             ci_method="percentile", weights_type="identity", weight_matrix=None,
             **_cohen(0.7),
         )
@@ -3608,7 +3629,7 @@ class TestCohenKappaResult:
         """Cohen inherits from IndividualMarginalResult (not PointEstimateResult directly)."""
         bp = _bp()
         r = CohenKappaResult(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp,
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=bp,
             ci_method="bca", weights_type="identity", weight_matrix=None,
             **_cohen(0.7),
         )
@@ -3619,7 +3640,7 @@ class TestCohenKappaResult:
         """Inherited from IndividualMarginalResult."""
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_cohen(0.7),
             )
@@ -3627,7 +3648,7 @@ class TestCohenKappaResult:
     def test_parametric_null_allowed(self):
         bp = _bp()
         r = CohenKappaResult(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp,
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=bp,
             ci_method="parametric_null", weights_type="identity", weight_matrix=None,
             **_cohen(0.7),
         )
@@ -3636,7 +3657,7 @@ class TestCohenKappaResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(),
                 ci_method=42, weights_type="identity", weight_matrix=None,
                 **_cohen(0.7),
             )
@@ -3644,7 +3665,7 @@ class TestCohenKappaResult:
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(),
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(),
                 ci_method="invalid", weights_type="identity", weight_matrix=None,
                 **_cohen(0.7),
             )
@@ -3653,7 +3674,7 @@ class TestCohenKappaResult:
     def test_valid_weights_types(self, wt):
         bp = _bp()
         r = CohenKappaResult(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=bp, weight_matrix=_matrix_for(wt), ci_method="bca", weights_type=wt,
             **_cohen(0.7, weighted=wt != "identity"),
         )
         assert r.weights_type == wt
@@ -3661,7 +3682,7 @@ class TestCohenKappaResult:
     def test_weights_type_not_str(self):
         with pytest.raises(TypeError, match="weights_type must be str"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for(42),
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weight_matrix=_matrix_for(42),
                 ci_method="bca", weights_type=42,
                 **_cohen(0.7),
             )
@@ -3669,7 +3690,7 @@ class TestCohenKappaResult:
     def test_weights_type_invalid(self):
         with pytest.raises(ValueError, match="weights_type must be"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weight_matrix=_matrix_for("ordinal"),
                 ci_method="bca", weights_type="ordinal",
                 **_cohen(0.7),
             )
@@ -3677,7 +3698,7 @@ class TestCohenKappaResult:
     def test_str_unweighted(self):
         bp = _bp()
         s = str(CohenKappaResult(
-            point=0.723, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp,
+            point=0.723, confidence_interval=_ci_around(0.723), bootstrap_distribution=_draws_around(0.723), balance_profile=bp,
             ci_method="percentile", weights_type="identity", weight_matrix=None,
             **_cohen(0.723),
         ))
@@ -3687,7 +3708,7 @@ class TestCohenKappaResult:
     def test_str_weighted(self):
         bp = _bp()
         s = str(CohenKappaResult(
-            point=0.723, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weight_matrix=_matrix_for("quadratic"),
+            point=0.723, confidence_interval=_ci_around(0.723), bootstrap_distribution=_draws_around(0.723), balance_profile=bp, weight_matrix=_matrix_for("quadratic"),
             ci_method="bca", weights_type="quadratic",
             **_cohen(0.723, weighted=True),
         ))
@@ -3696,7 +3717,7 @@ class TestCohenKappaResult:
     def test_summary_keys(self):
         bp = _bp()
         d = CohenKappaResult(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weight_matrix=_matrix_for("linear"),
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=bp, weight_matrix=_matrix_for("linear"),
             ci_method="bca", weights_type="linear",
             **_cohen(0.7, weighted=True),
         ).summary()
@@ -3709,7 +3730,7 @@ class TestCohenKappaResult:
         """Cohen's own prefix wraps parent errors."""
         with pytest.raises(ValueError, match=r"\[CohenKappaResult\] Error"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=None,
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=None,
                 ci_method="bca", weights_type="identity", weight_matrix=None,
                 **_cohen(0.7),
             )
@@ -3721,7 +3742,7 @@ class TestCohenKappaResultParts:
     def _result(self, point=0.7, weights_type="identity", weight_matrix=None, **fields):
         kwargs = dict(_cohen(point, weighted=weights_type != "identity"), **fields)
         return CohenKappaResult(
-            point=point, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+            point=point, confidence_interval=_ci_around(point), bootstrap_distribution=_draws_around(point), balance_profile=_bp(), ci_method="bca",
             weights_type=weights_type, weight_matrix=weight_matrix, **kwargs,
         )
 
@@ -3733,7 +3754,7 @@ class TestCohenKappaResultParts:
     def test_three_raters_refused(self):
         with pytest.raises(ValueError, match="one pair of raters, got 3"):
             CohenKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), ci_method="bca",
                 weights_type="identity", weight_matrix=None,
                 **dict(_cohen(0.7), agreement_profile=_PANEL, rater_profile=_raters(3)),
             )
@@ -3789,47 +3810,47 @@ class TestCongerKappaResult:
 
     def test_valid_construction(self):
         bp = _bp()
-        r = CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_conger(0.6))
+        r = CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_conger(0.6))
         assert r.point == 0.6
 
     def test_is_individual_marginal_result(self):
         """Conger inherits from IndividualMarginalResult."""
         bp = _bp()
-        r = CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
+        r = CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
         assert isinstance(r, IndividualMarginalResult)
 
     def test_balance_profile_none_rejected(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
-            CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
+            CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
 
     def test_parametric_null_not_allowed(self):
         bp = _bp()
         with pytest.raises(ValueError, match="ci_method must be"):
-            CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="parametric_null", **_conger(0.6))
+            CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="parametric_null", **_conger(0.6))
 
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             CongerKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method=42,
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method=42,
                 **_conger(0.6),
             )
 
     def test_ci_method_invalid(self):
         with pytest.raises(ValueError, match="ci_method must be"):
             CongerKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="invalid",
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="invalid",
                 **_conger(0.6),
             )
 
     def test_str_shows_n_raters(self):
         bp = _bp()
-        s = str(CongerKappaResult(point=0.612, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_conger(0.612)))
+        s = str(CongerKappaResult(point=0.612, confidence_interval=_ci_around(0.612), bootstrap_distribution=_draws_around(0.612), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="percentile", **_conger(0.612)))
         assert "Conger's κ" in s
         assert "3 raters, every rater rated every subject" in s
 
     def test_summary_keys(self):
         bp = _bp()
-        d = CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6)).summary()
+        d = CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=bp, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6)).summary()
         assert d["ci_method"] == "bca"
         # No weighted form, so always recorded as unweighted; no is_exact
         assert d["weights_type"] == "identity"
@@ -3838,7 +3859,7 @@ class TestCongerKappaResult:
 
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[CongerKappaResult\] Error"):
-            CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
+            CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=None, weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
 
 
 class TestCongerKappaResultParts:
@@ -3849,30 +3870,30 @@ class TestCongerKappaResultParts:
         incomplete = _raters(3, n_per_rater=[4, 4, 3])
         with pytest.raises(ValueError, match="Conger's kappa is for complete data"):
             CongerKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
                 **dict(_conger(0.6), rater_profile=incomplete),
             )
 
     def test_valid_panel(self):
-        r = CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
+        r = CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
         assert isinstance(r.kappa_max, NotComputed)
 
     def test_panel_kappa_max_refused(self):
         with pytest.raises(TypeError, match="kappa_max must be NotComputed with 3 raters"):
             CongerKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
                 **dict(_conger(0.6), kappa_max=1.0),
             )
 
     def test_pair_gets_cohens_ceiling(self):
         """Two raters: Conger's Pe is Cohen's, and so is the ceiling."""
-        r = CongerKappaResult(point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_cohen(0.7))
+        r = CongerKappaResult(point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_cohen(0.7))
         assert r.kappa_max == 1.0
 
     def test_pair_without_kappa_max_refused(self):
         with pytest.raises(TypeError, match="kappa_max must be computed with 2 raters"):
             CongerKappaResult(
-                point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+                point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
                 **dict(_cohen(0.7), kappa_max=NotComputed("no reason")),
             )
 
@@ -3882,14 +3903,14 @@ class TestCongerKappaResultParts:
         pooled = float((m.mean(axis=0) ** 2).sum())
         with pytest.raises(ValueError, match="Conger's chance term"):
             CongerKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
                 **dict(_conger(0.6), parts=_fields(0.6, pooled)["parts"]),
             )
 
     def test_weighted_parts_refused(self):
         with pytest.raises(ValueError, match="weighted Conger's kappa is not implemented"):
             CongerKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca",
                 **dict(_conger(0.6), parts=_fields(0.6, 0.3, weighted=True)["parts"]),
             )
 
@@ -3906,7 +3927,7 @@ class TestLightKappaResult:
         bp = _bp()
         expected_pairs = 3 * (3 - 1) // 2  # three raters
         r = LightKappaResult(
-            point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None,
+            point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=bp, weights_type="identity", weight_matrix=None,
             n_pairs=expected_pairs, ci_method="percentile",
             **_light(0.55),
         )
@@ -3916,7 +3937,7 @@ class TestLightKappaResult:
     def test_balance_profile_required(self):
         with pytest.raises(ValueError, match="balance_profile must not be None"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=None, weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
                 **_light(0.55),
             )
 
@@ -3925,14 +3946,14 @@ class TestLightKappaResult:
         bp = _bp()
         with pytest.raises(ValueError, match="n_pairs must be"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, n_pairs=999, ci_method="bca",
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=bp, weights_type="identity", weight_matrix=None, n_pairs=999, ci_method="bca",
                 **_light(0.55),
             )
 
     def test_n_pairs_not_int(self):
         with pytest.raises(TypeError, match="n_pairs must be int"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None,
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=_bp(), weights_type="identity", weight_matrix=None,
                 n_pairs=3.0, ci_method="bca",
                 **_light(0.55),
             )
@@ -3940,7 +3961,7 @@ class TestLightKappaResult:
     def test_ci_method_not_str(self):
         with pytest.raises(TypeError, match="ci_method must be str"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None,
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=_bp(), weights_type="identity", weight_matrix=None,
                 n_pairs=3, ci_method=42,
                 **_light(0.55),
             )
@@ -3950,7 +3971,7 @@ class TestLightKappaResult:
         n = 3 * (3 - 1) // 2  # three raters
         with pytest.raises(ValueError, match="ci_method must be"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None,
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=bp, weights_type="identity", weight_matrix=None,
                 n_pairs=n, ci_method="parametric_null",
                 **_light(0.55),
             )
@@ -3959,7 +3980,7 @@ class TestLightKappaResult:
         bp = _bp()
         n = 3 * (3 - 1) // 2  # three raters
         s = str(LightKappaResult(
-            point=0.587, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, n_pairs=n, ci_method="percentile",
+            point=0.587, confidence_interval=_ci_around(0.587), bootstrap_distribution=_draws_around(0.587), balance_profile=bp, weights_type="identity", weight_matrix=None, n_pairs=n, ci_method="percentile",
             **_light(0.587),
         ))
         assert "Light's κ" in s
@@ -3970,7 +3991,7 @@ class TestLightKappaResult:
         bp = _bp()
         n = 3 * (3 - 1) // 2  # three raters
         d = LightKappaResult(
-            point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=bp, weights_type="identity", weight_matrix=None, n_pairs=n, ci_method="bca",
+            point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=bp, weights_type="identity", weight_matrix=None, n_pairs=n, ci_method="bca",
             **_light(0.55),
         ).summary()
         assert d["n_pairs"] == n
@@ -3979,7 +4000,7 @@ class TestLightKappaResult:
     def test_error_prefix(self):
         with pytest.raises(ValueError, match=r"\[LightKappaResult\] Error"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=None, weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=None, weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
                 **_light(0.55),
             )
 
@@ -3992,7 +4013,7 @@ class TestLightKappaResultPairs:
         incomplete = _raters(3, n_per_rater=[4, 4, 3])
         with pytest.raises(ValueError, match="Light's kappa is for complete data"):
             LightKappaResult(
-                point=0.55, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
+                point=0.55, confidence_interval=_ci_around(0.55), bootstrap_distribution=_draws_around(0.55), balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
                 **dict(_light(0.55), rater_profile=incomplete),
             )
 
@@ -4001,7 +4022,7 @@ class TestLightKappaResultPairs:
     def _result(self, point=0.55, **fields):
         kwargs = dict(_light(point), **fields)
         return LightKappaResult(
-            point=point, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca", **kwargs,
+            point=point, confidence_interval=_ci_around(point), bootstrap_distribution=_draws_around(point), balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca", **kwargs,
         )
 
     def _pairs_at(self, *kappas):
@@ -4082,7 +4103,7 @@ class TestPrintedForm:
 
     def test_cohen_ceiling_and_both_raters(self):
         r = CohenKappaResult(
-            point=0.7, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca",
+            point=0.7, confidence_interval=_ci_around(0.7), bootstrap_distribution=_draws_around(0.7), balance_profile=_bp(), ci_method="bca",
             weights_type="identity", weight_matrix=None, **_cohen(0.7),
         )
         assert "κ_max = 1.000 (these raters' marginals)" in str(r)
@@ -4095,12 +4116,12 @@ class TestPrintedForm:
             ValueError, match="the data has 4 subjects, but the agreement profile uses 3",
         ):
             FleissKappaResult(
-                point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca", weights_type="identity", weight_matrix=None,
+                point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), ci_method="bca", weights_type="identity", weight_matrix=None,
                 **dict(_pooled(0.6), agreement_profile=fewer),
             )
 
     def test_conger_panel_has_no_ceiling(self):
-        r = CongerKappaResult(point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
+        r = CongerKappaResult(point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="bca", **_conger(0.6))
         assert "κ_max not computed (3 or more raters)" in str(r)
 
     def test_light_spread_and_undefined_pairs(self):
@@ -4112,21 +4133,21 @@ class TestPrintedForm:
             pairs[2]: AgreementParts(nan, nan, "agreement", False),
         }
         r = LightKappaResult(
-            point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
+            point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca",
             **dict(_light(0.5), pair_parts=parts),
         )
         assert "mean of 2 of 3 pair kappas (the rest undefined), 0.40 to 0.60" in str(r)
 
     def test_light_equal_pairs_print_one_value(self):
         r = LightKappaResult(
-            point=0.5, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca", **_light(0.5),
+            point=0.5, confidence_interval=_ci_around(0.5), bootstrap_distribution=_draws_around(0.5), balance_profile=_bp(), weights_type="identity", weight_matrix=None, n_pairs=3, ci_method="bca", **_light(0.5),
         )
         assert "mean of 3 pair kappas, all 0.50" in str(r)
 
     def test_profile_not_printed_with_the_result(self):
         """The tables print on their own: print(result.agreement_profile)."""
         r = FleissKappaResult(
-            point=0.6, confidence_interval=None, bootstrap_distribution=None, balance_profile=_bp(), ci_method="bca", weights_type="identity", weight_matrix=None, **_pooled(0.6),
+            point=0.6, confidence_interval=_ci_around(0.6), bootstrap_distribution=_draws_around(0.6), balance_profile=_bp(), ci_method="bca", weights_type="identity", weight_matrix=None, **_pooled(0.6),
         )
         assert len(str(r).splitlines()) == 3
         assert "How often" not in str(r)

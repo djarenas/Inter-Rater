@@ -74,7 +74,7 @@ class LightKappaResult(PointEstimateResult):
     ----------
     point : float
         Light's kappa (inherited from PointEstimateResult).
-    confidence_interval : CIResult | None
+    confidence_interval : CIResult
         Bootstrap confidence interval (inherited).
     bootstrap_distribution : np.ndarray | NotComputed | None
         Bootstrap distribution (inherited); NotComputed when the draws were
@@ -119,7 +119,7 @@ class LightKappaResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: CIResult | None
+    confidence_interval: CIResult
     bootstrap_distribution: np.ndarray | NotComputed | None
     parts: NotComputed
     kappa_max: NotComputed

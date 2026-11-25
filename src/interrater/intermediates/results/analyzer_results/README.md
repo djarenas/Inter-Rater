@@ -5,8 +5,8 @@ Every class descends from `PointEstimateResult`, which is the shape an
 analyzer returns when it has estimated a single coefficient. It holds:
 
 - `point`: the estimate.
-- `confidence_interval`: optional, and `bootstrap_distribution`: the draws
-  behind it.
+- `confidence_interval`: required, and `bootstrap_distribution`: the draws
+  behind it (None for a parametric interval).
 - `parts`: the observed and chance terms the point was built from. They must
   rebuild it: `(Po - Pe) / (1 - Pe)` must equal `point`, and a result whose
   parts give a different number is refused at construction.

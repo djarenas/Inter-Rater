@@ -1,11 +1,11 @@
 # Tests
 
-2304 tests across nine packages and two top-level files, run with `pytest tests/`.
+2303 tests across nine packages and two top-level files, run with `pytest tests/`.
 
 Every count in this file is a **collected** count -- what `pytest` prints, not
 what you get by counting `def test_` in the source. The two differ because
 `@pytest.mark.parametrize` runs one function once per input and pytest counts
-each run separately; right now 1923 functions expand to 2304 collected tests.
+each run separately; right now 1922 functions expand to 2303 collected tests.
 Collected is the number used throughout because it is the number you can check
 in one command, so it cannot drift unnoticed:
 
@@ -68,7 +68,7 @@ RatingsCleaner pipeline.
 | conftest.py | Shared fixtures: UnorderedCategories (K=2), RatingsSemantics (ann, bob), CLEAN_DF (4x2 no problems), MESSY_DF (4x2 with null/missing/typo), default CleanerConfig | -- |
 
 
-## test_intermediates/ (718 tests)
+## test_intermediates/ (717 tests)
 
 Tests for the intermediates layer: estimator parts, data profiles, utility
 functions, and the full analysis-result hierarchy. One test file per
@@ -100,7 +100,7 @@ appear here only as inputs, built by the `_ci()` helper at the top of
 | test_agreement_profile.py | AgreementProfile: prevalence equals the p_j the chance terms use, per-category agreement, per-rater marginals | 18 |
 | test_prevalence_bias_index.py | PrevalenceBiasIndex (Byrt, Bishop and Carlin 1993): the four cells, prevalence and bias indices, positive category and rater order | 11 |
 | test_not_computed.py | NotComputed: carries a reason, no truth value, repr, equality | 8 |
-| test_analysis_results.py | PanelResult checks on point results (no weighted form, matrix rule, parametric null), PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary, scheme and seed, null variance source), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 496 |
+| test_analysis_results.py | PanelResult checks on point results (no weighted form, matrix rule, parametric null), PointEstimateResult (construction, validation, point_outside_interval, __str__, summary), HypothesisTestResult (construction, validation, __str__, summary, scheme and seed, null variance source), PermutationResult (construction, inheritance, validation, summary, error prefix), PairwisePermutationResult (construction, validation, accessor, __str__, summary), SubsetPermutationResult (construction, validation, accessor, __str__, summary), MultiKSubsetResult (construction, validation, container protocol, __str__, summary), FleissKappaResult, ScottsPiResult, GwetsAC1Result, BrennanPredigerResult, KrippendorffAlphaResult (balance required, ci_method sets, is_exact logic), CohenKappaResult (weights_type validation), CongerKappaResult (always unweighted), LightKappaResult (n_pairs = C(n,2)), IndividualMarginalResult, error prefixes for all | 495 |
 | conftest.py | Shared fixtures: BALANCED_NIJ (4x3x3, all rows sum to 3), UNBALANCED_NIJ (4x2, variable row sums), SIMPLE_INDEX (2x3, for index-based tests), SIMPLE_SHARED (3x3 symmetric, for shared-matrix tests) | -- |
 
 

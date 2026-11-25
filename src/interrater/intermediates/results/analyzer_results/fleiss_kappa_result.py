@@ -59,7 +59,7 @@ class FleissKappaResult(PointEstimateResult):
     ----------
     point : float
         Fleiss' kappa (inherited from PointEstimateResult).
-    confidence_interval : CIResult | None
+    confidence_interval : CIResult
         The interval, bootstrap or parametric (inherited).
     bootstrap_distribution : np.ndarray | NotComputed | None
         Bootstrap distribution (inherited); NotComputed when the draws were
@@ -108,7 +108,7 @@ class FleissKappaResult(PointEstimateResult):
 
     # Inherited from parent class PointEstimateResult
     point: float
-    confidence_interval: CIResult | None
+    confidence_interval: CIResult
     bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: NotComputed

@@ -125,6 +125,9 @@ versioning follows [semver](https://semver.org/).
   every result must state `weights_type` and `weight_matrix`: they have no
   defaults.
 
+- A `PointEstimateResult` must have a confidence interval:
+  `confidence_interval=None` is refused. The analyzers always compute one.
+
 - Results are built by keyword only: every attribute of a `PanelResult`
   and its subclasses is passed by name, e.g. `FleissKappaResult(point=...,
   confidence_interval=..., ...)`.

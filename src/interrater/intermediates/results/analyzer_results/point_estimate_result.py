@@ -22,47 +22,47 @@ if TYPE_CHECKING:
 _ERROR_PREFIX = "[PointEstimateResult] Error"
 _TOL = 1e-9
 
+
 @dataclass(frozen=True, kw_only=True)
 class PointEstimateResult(PanelResult):
     """
-    I hold a point estimate, optionally a confidence interval, and optionally
-    a bootstrap distribution.
+    I hold a point estimate, its confidence interval, and the bootstrap
+    distribution when the interval is a bootstrap one.
 
     I am the result for any coefficient that produces a single number: Fleiss'
     kappa, Cohen's kappa, Conger's kappa, Gwet's AC1, Brennan-Prediger,
-    Krippendorff's alpha, etc...    
-    
-    I am immutable (frozen dataclass) because a result is a snapshot of what the data 
-    said at one moment and should never change.
+    Krippendorff's alpha, etc...
 
-    I do not compute my own confidence interval. That is the analyzer's job.
-    If confidence_interval is None, no interval was computed (perhaps the user
-    asked only for a point estimate, or the data was too sparse to resample).
-    When one was computed it arrives as a BootstrapCIResult, which carries not
-    only the bounds but which method was asked for, which one ran, and how many
-    resamples failed.
+    I am immutable (frozen dataclass) because a result is a snapshot of what
+    the data said at one moment and should never change.
+
+    I do not compute my own confidence interval. That is the analyzer's job,
+    and it always computes one, so I require it. It is a CIResult (a
+    BootstrapCIResult or a ParametricCIResult), which carries what is needed
+    to understand the interval. When every resample failed it is still a
+    BootstrapCIResult, with no bounds.
 
     I do not require my point estimate to fall inside my interval. A strongly
     bias-corrected BCa interval can sit entirely to one side of it -- that is
     correct behaviour, not a contradiction, and refusing to exist would be the
-    wrong response to it. I warn instead, loudly and three ways, because it is
-    also the signature of a degenerate bootstrap and a reader should not have
-    to notice it for themselves.
+    wrong response to it. I say so instead, three ways
+    (point_outside_interval, summary()["point_outside_interval"], and POINT
+    OUTSIDE INTERVAL in my printed form), because it is also the signature of
+    a degenerate bootstrap.
 
     If bootstrap_distribution is provided, it contains all coefficient values
     computed during resampling. This is useful for visualization, diagnostics,
     and convergence checking. It and the interval are two views of one
-    bootstrap, so I refuse them if they disagree: draws come exactly with a
-    BootstrapCIResult, one per resample it counted, with as many non-finite
-    draws as it counted failed.
+    bootstrap, so I refuse them if they disagree: the draws are present
+    exactly when the interval is a BootstrapCIResult, one per resample it
+    ran, with as many non-finite as it counted failed.
 
     My parent, PanelResult, holds and checks what I share with a
     permutation result: the balance and rater profiles (so every result is
     self-describing without going back to the input data), the interval
     method and the weighting.
 
-    I also carry what the coefficient is made of, so a reader can tell two
-    equal coefficients apart: the observed and chance terms (``parts``), the
+    I also carry the observed and chance terms (``parts``), the
     largest value the coefficient could reach with these marginals
     (``kappa_max``), and the agreement profile of the data (prevalence,
     rater marginals, specific agreement). These three are required. Where one
@@ -76,15 +76,15 @@ class PointEstimateResult(PanelResult):
     ----------
     point : float
         The coefficient value.
-    confidence_interval : CIResult | None
-        The interval and an account of how it was produced: bounds, alpha,
-        the method asked for against the one that ran, and the number of
-        resamples that failed. None if no interval was computed.
+    confidence_interval : CIResult
+        The interval and an account of how it was produced: its bounds and
+        alpha, and, for a bootstrap interval, the method asked for against
+        the one that ran and the number of resamples that failed.
     bootstrap_distribution : np.ndarray | NotComputed | None
         Array of shape (n_resamples,) containing coefficient values from each
         bootstrap resample, NaN where a resample's coefficient was undefined.
         Present exactly when confidence_interval is a BootstrapCIResult; None
-        otherwise (no interval, or a parametric one). NotComputed when the
+        when the interval is parametric. NotComputed when the
         bootstrap ran but its draws were not kept (a permutation analysis
         with keep_draws false), saying so.
     parts : AgreementParts | NotComputed
@@ -122,7 +122,7 @@ class PointEstimateResult(PanelResult):
 
     # Populated at this level
     point: float
-    confidence_interval: CIResult | None
+    confidence_interval: CIResult
     bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
@@ -145,24 +145,23 @@ class PointEstimateResult(PanelResult):
                 f"{_ERROR_PREFIX}: point must be float, got {type(self.point).__name__}"
             )
 
-        # If confidence_interval is provided, it must be a BootstrapCIResult.
+        # confidence_interval must be a CIResult.
         # Its own bounds, counts and methods were validated when it was built,
         # so there is nothing here to re-check -- only the relationship between
         # it and my point estimate, which it cannot see.
-        if self.confidence_interval is not None:
-            if not isinstance(self.confidence_interval, CIResult):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: confidence_interval must be a CIResult "
-                    f"or None, got {type(self.confidence_interval).__name__}"
-                )
+        if not isinstance(self.confidence_interval, CIResult):
+            raise TypeError(
+                f"{_ERROR_PREFIX}: confidence_interval must be a CIResult, "
+                f"got {type(self.confidence_interval).__name__}"
+            )
 
-            # The point estimate falling outside the interval is permitted --
-            # strong bias correction does that legitimately -- but it is also
-            # what a degenerate bootstrap looks like, so it is never silent.
-            # I say so myself rather than warning: point_outside_interval,
-            # summary()["point_outside_interval"], and POINT OUTSIDE INTERVAL
-            # in my printed form (and in a permutation table's row). A
-            # warning per result would flood a run with many pairs.
+        # The point estimate falling outside the interval is permitted --
+        # strong bias correction does that legitimately -- but it is also
+        # what a degenerate bootstrap looks like, so it is never silent.
+        # I say so myself rather than warning: point_outside_interval,
+        # summary()["point_outside_interval"], and POINT OUTSIDE INTERVAL
+        # in my printed form (and in a permutation table's row). A
+        # warning per result would flood a run with many pairs.
 
         # If bootstrap_distribution is provided, validate it
         if self.bootstrap_distribution is not None and not isinstance(
@@ -275,12 +274,12 @@ class PointEstimateResult(PanelResult):
         """
         Whether my point estimate falls outside my own interval.
 
-        False when there is no interval, and when the interval exists but has
-        no bounds because nothing ran. Legitimate under strong bias
+        False when the interval has no bounds because nothing ran.
+        Legitimate under strong bias
         correction; also the signature of a degenerate bootstrap.
         """
         ci = self.confidence_interval
-        if ci is None or not ci.is_defined:
+        if not ci.is_defined:
             return False
         return not (ci.lower <= self.point <= ci.upper)
 
@@ -319,10 +318,9 @@ class PointEstimateResult(PanelResult):
         """= point [interval] (interval's own description), and where the point sits."""
         parts = [f"= {self.point:.3f}"]
 
-        if self.confidence_interval is not None:
-            parts.append(str(self.confidence_interval))
-            if self.point_outside_interval:
-                parts.append("POINT OUTSIDE INTERVAL")
+        parts.append(str(self.confidence_interval))
+        if self.point_outside_interval:
+            parts.append("POINT OUTSIDE INTERVAL")
 
         return " ".join(parts)
 
@@ -366,23 +364,22 @@ class PointEstimateResult(PanelResult):
         Returns
         -------
         dict
-            Keys: 'point' (float); if confidence_interval is not None, 'ci'
-            (the interval's own summary dict) plus 'ci_lower', 'ci_upper' and
+            Keys: 'point' (float); 'ci' (the interval's own summary dict) plus 'ci_lower', 'ci_upper' and
             'point_outside_interval' hoisted to the top level, since those are
             what a reader scans for; if bootstrap_distribution is not None,
             'bootstrap_draws_mean' and 'bootstrap_se' (the mean and standard
             error of the usable draws, None when too few are usable -- the
             draw counts are in 'ci'; ``{"not_computed": reason}`` when the
-            draws were not kept); 'balance'; and 'raters', 'parts', 'kappa_max' and
-            'agreement_profile', each a plain value or
-            ``{"not_computed": reason}``.
+            draws were not kept); 'ci_method', 'weights_type',
+            'weight_matrix', 'balance' and 'raters' (from PanelResult); and
+            'parts', 'kappa_max' and 'agreement_profile', each a plain value
+            or ``{"not_computed": reason}``.
         """
         result = {"point": self.point}
-        if self.confidence_interval is not None:
-            result["ci"] = self.confidence_interval.summary()
-            result["ci_lower"] = self.confidence_interval.lower
-            result["ci_upper"] = self.confidence_interval.upper
-            result["point_outside_interval"] = self.point_outside_interval
+        result["ci"] = self.confidence_interval.summary()
+        result["ci_lower"] = self.confidence_interval.lower
+        result["ci_upper"] = self.confidence_interval.upper
+        result["point_outside_interval"] = self.point_outside_interval
         if isinstance(self.bootstrap_distribution, NotComputed):
             result["bootstrap_draws_mean"] = self.bootstrap_distribution.summary()
             result["bootstrap_se"] = self.bootstrap_distribution.summary()
