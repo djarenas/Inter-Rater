@@ -245,19 +245,25 @@ class FleissKappaAnalyzer(GroupAnalyzer):
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
+        lower = point - z_crit * se_null
+        upper = point + z_crit * se_null
         return ParametricCIResult(
-            lower=point - z_crit * se_null,
-            upper=point + z_crit * se_null,
+            lower=lower,
+            upper=upper,
             alpha=self.config.alpha,
+            method_intended="parametric_null",
+            # No method ran when the formula gave no bounds (a NaN variance)
+            method_used=(
+                "parametric_null"
+                if np.isfinite(lower) and np.isfinite(upper) else None
+            ),
             variance_source="null",
             variance_reference=FLEISS_NULL_VARIANCE_SOURCE,
         )
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> FleissKappaResult:
+    def _result(self, point: float, ci) -> FleissKappaResult:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
         """
         return FleissKappaResult(
@@ -265,7 +271,6 @@ class FleissKappaAnalyzer(GroupAnalyzer):
             confidence_interval=ci,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
-            bootstrap_distribution=bootstrap_distribution,
             parts=self._agreement_parts(self.estimator_input.nij),
             kappa_max=NotComputed(KAPPA_MAX_NOT_COMPUTED),
             agreement_profile=self._agreement_profile(),

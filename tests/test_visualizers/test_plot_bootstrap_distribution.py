@@ -20,7 +20,12 @@ import pytest
 from interrater import plot_bootstrap_distribution
 from interrater.analyzers import BrennanPredigerAnalyzer, FleissKappaAnalyzer
 from interrater.analyzers.configs import BrennanPredigerConfig, FleissKappaConfig
-from interrater.intermediates.results.ci_results import BootstrapCIResult
+from interrater.analyzers.ci_methods import percentile_ci
+from interrater.intermediates.results.ci_results import (
+    BootstrapCIResult,
+    EmptyBootstrapCIResult,
+    PercentileBootstrapCIResult,
+)
 from interrater.semantics.categories import UnorderedCategories
 from interrater.semantics.ratings_semantics import RatingsSemantics
 
@@ -89,10 +94,11 @@ def test_bca_fallback_says_so(ratings):
     """Asked for BCa, got percentile: the box says the interval is percentile."""
     result = _fleiss(ratings, n_resamples=1000, ci_method="bca")
     ci = result.confidence_interval
-    fell_back = BootstrapCIResult(
-        lower=ci.lower, upper=ci.upper, alpha=ci.alpha,
-        n_resamples=ci.n_resamples, n_failed=ci.n_failed,
+    lower, upper = PercentileBootstrapCIResult.compute_bounds(ci.draws, ci.alpha)
+    fell_back = PercentileBootstrapCIResult(
+        lower=lower, upper=upper, alpha=ci.alpha,
         method_intended="bca", method_used="percentile",
+        n_resamples=ci.n_resamples, n_failed=ci.n_failed, draws=ci.draws,
     )
     fig = plot_bootstrap_distribution(dataclasses.replace(result, confidence_interval=fell_back))
     assert "BCa could not be applied" in _texts(fig)
@@ -120,7 +126,7 @@ def test_discrete_draws_get_one_bar_per_value(ratings):
     result = BrennanPredigerAnalyzer(
         ratings, BrennanPredigerConfig(n_resamples=300, random_state=42),
     ).estimate()
-    n_distinct = np.unique(np.round(result.bootstrap_distribution, 10)).size
+    n_distinct = np.unique(np.round(result.confidence_interval.draws, 10)).size
     fig = plot_bootstrap_distribution(result)
     assert f"{n_distinct} distinct values" in _caption(fig)
     assert len(fig.axes[0].patches) >= n_distinct  # one bar per value, plus the band
@@ -131,7 +137,9 @@ def test_last_bit_differences_are_one_value(ratings):
     result = _fleiss(ratings, n_resamples=300, ci_method="percentile")
     draws = np.repeat([0.4, 0.5, 0.6], 100)
     draws[::2] += 1e-16  # last-bit noise on half the draws
-    noisy = dataclasses.replace(result, bootstrap_distribution=draws)
+    noisy = dataclasses.replace(
+        result, confidence_interval=percentile_ci(draws, result.confidence_interval.alpha),
+    )
     assert "3 distinct values" in _caption(plot_bootstrap_distribution(noisy))
 
 
@@ -160,14 +168,13 @@ def test_parametric_null_refused(ratings):
 
 def test_all_draws_undefined_refused(ratings):
     result = _fleiss(ratings, n_resamples=300, ci_method="percentile")
-    # Draws and interval must agree, so both say every draw failed
+    # Every draw failed, so the interval is empty
     empty = dataclasses.replace(
         result,
-        bootstrap_distribution=np.full(300, np.nan),
-        confidence_interval=dataclasses.replace(
-            result.confidence_interval,
-            lower=float("nan"), upper=float("nan"),
-            n_failed=300, method_used=None,
+        confidence_interval=EmptyBootstrapCIResult(
+            lower=float("nan"), upper=float("nan"), alpha=0.05,
+            method_intended="percentile", method_used=None,
+            n_resamples=300, n_failed=300, draws=np.full(300, np.nan),
         ),
     )
     with pytest.raises(ValueError, match="every one of the 300"):

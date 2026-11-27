@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import ClassVar
 
 from .ci_result import CIResult
 
@@ -23,8 +24,9 @@ class ParametricCIResult(CIResult):
     I am an interval from a closed-form variance rather than a resampling.
 
     I have no resamples, so nothing about me can fail partway: either the
-    formula applied or it did not. I carry no counts, no method
-    pair and no second method fallback.
+    formula applied or it did not. I carry no counts and cannot fall back:
+    my method is always parametric_null, and when the formula gives no
+    bounds, no method ran.
 
     **Read my width carefully, and I will say so every time I print.** The
     variance I am built from is the *null* variance: the variance of the
@@ -69,6 +71,17 @@ class ParametricCIResult(CIResult):
         spread at the observed value rather than at zero.
     """
 
+    # The method I can report
+    _METHODS: ClassVar[frozenset[str]] = frozenset({"parametric_null"})
+
+    # Inherited from and populated at CIResult parent class
+    lower: float
+    upper: float
+    alpha: float
+    method_intended: str
+    method_used: str | None
+
+    # Populated at this level
     variance_source: str
     variance_reference: str
 
@@ -76,6 +89,13 @@ class ParametricCIResult(CIResult):
 
     def __post_init__(self) -> None:
         """Validate my attributes after construction, before I freeze."""
+
+        # Parent validates and populates lower, upper, and alpha attributes
+        try:
+            super().__post_init__()
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
 
         if self.variance_source not in _VALID_VARIANCE_SOURCES:
             raise ValueError(
@@ -88,12 +108,6 @@ class ParametricCIResult(CIResult):
                 f"source, e.g. 'Fleiss, Nee & Landis (1979), Eq. 12'; got "
                 f"{self.variance_reference!r}"
             )
-
-        # Parent validates the bounds and the level, and coerces them
-        try:
-            super().__post_init__()
-        except (ValueError, TypeError) as exc:
-            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
         # Last, so that an invalid interval raises rather than warning first.
         if self.variance_source == "null":
@@ -148,7 +162,8 @@ class ParametricCIResult(CIResult):
         -------
         dict
             Keys: 'lower', 'upper' (float), 'alpha', 'confidence_level'
-            (float), 'is_defined' (bool), 'variance_source',
+            (float), 'is_defined' (bool), 'method_intended' (str),
+            'method_used' (str or None), 'variance_source',
             'variance_reference' (str).
         """
         return {
@@ -157,6 +172,8 @@ class ParametricCIResult(CIResult):
             "alpha":            self.alpha,
             "confidence_level": self.confidence_level,
             "is_defined":       self.is_defined,
+            "method_intended":  self.method_intended,
+            "method_used":      self.method_used,
             "variance_source":  self.variance_source,
             "variance_reference": self.variance_reference,
         }

@@ -6,13 +6,11 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-import numpy as np
-
 from ...data_profiles.agreement_profile import AgreementProfile
 from ...not_computed import NotComputed
-from .._bootstrap_draws import check_draws_match_interval, draw_moments
 from ..agreement_parts import AgreementParts
 from ..panel_result import PanelResult
+from ..ci_results.bootstrap_ci_result import BootstrapCIResult
 from ..ci_results.ci_result import CIResult
 
 if TYPE_CHECKING:
@@ -50,12 +48,10 @@ class PointEstimateResult(PanelResult):
     OUTSIDE INTERVAL in my printed form), because it is also the signature of
     a degenerate bootstrap.
 
-    If bootstrap_distribution is provided, it contains all coefficient values
-    computed during resampling. This is useful for visualization, diagnostics,
-    and convergence checking. It and the interval are two views of one
-    bootstrap, so I refuse them if they disagree: the draws are present
-    exactly when the interval is a BootstrapCIResult, one per resample it
-    ran, with as many non-finite as it counted failed.
+    A bootstrap interval holds its draws, every coefficient value computed
+    during resampling, useful for visualization, diagnostics and convergence
+    checking. It checks them itself: its counts, and its bounds recomputed
+    from them.
 
     My parent, PanelResult, holds and checks what I share with a
     permutation result: the balance and rater profiles (so every result is
@@ -80,13 +76,6 @@ class PointEstimateResult(PanelResult):
         The interval and an account of how it was produced: its bounds and
         alpha, and, for a bootstrap interval, the method asked for against
         the one that ran and the number of resamples that failed.
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Array of shape (n_resamples,) containing coefficient values from each
-        bootstrap resample, NaN where a resample's coefficient was undefined.
-        Present exactly when confidence_interval is a BootstrapCIResult; None
-        when the interval is parametric. NotComputed when the
-        bootstrap ran but its draws were not kept (a permutation analysis
-        with keep_draws false), saying so.
     parts : AgreementParts | NotComputed
         The observed and chance terms (Po and Pe, or Do and De) the point
         estimate is built from. NotComputed when the coefficient is not one
@@ -123,7 +112,6 @@ class PointEstimateResult(PanelResult):
     # Populated at this level
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts | NotComputed
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile
@@ -155,6 +143,14 @@ class PointEstimateResult(PanelResult):
                 f"got {type(self.confidence_interval).__name__}"
             )
 
+        # My interval was asked for with my interval method
+        if self.confidence_interval.method_intended != self.ci_method:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: ci_method is '{self.ci_method}' but "
+                f"confidence_interval was asked for with "
+                f"'{self.confidence_interval.method_intended}'"
+            )
+
         # The point estimate falling outside the interval is permitted --
         # strong bias correction does that legitimately -- but it is also
         # what a degenerate bootstrap looks like, so it is never silent.
@@ -163,37 +159,17 @@ class PointEstimateResult(PanelResult):
         # in my printed form (and in a permutation table's row). A
         # warning per result would flood a run with many pairs.
 
-        # If bootstrap_distribution is provided, validate it
-        if self.bootstrap_distribution is not None and not isinstance(
-            self.bootstrap_distribution, NotComputed
+        # A BCa interval measured its bias correction against my point
+        from ..ci_results.bca_bootstrap_ci_result import BCABootstrapCIResult
+        if isinstance(self.confidence_interval, BCABootstrapCIResult) and not (
+            self.confidence_interval.point == self.point
+            or (math.isnan(self.confidence_interval.point) and math.isnan(self.point))
         ):
-            if not isinstance(self.bootstrap_distribution, np.ndarray):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution must be np.ndarray, NotComputed or None, "
-                    f"got {type(self.bootstrap_distribution).__name__}"
-                )
-
-            if self.bootstrap_distribution.ndim != 1:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution must be 1-dimensional, "
-                    f"got shape {self.bootstrap_distribution.shape}"
-                )
-
-            if len(self.bootstrap_distribution) == 0:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution must have at least 1 value"
-                )
-
-        # My draws and my interval must describe the same bootstrap
-        try:
-            check_draws_match_interval(
-                self.bootstrap_distribution,
-                self.confidence_interval,
-                draws_name="bootstrap_distribution",
-                interval_name="confidence_interval",
+            raise ValueError(
+                f"{_ERROR_PREFIX}: the BCa interval was computed at point "
+                f"{self.confidence_interval.point}, but my point is "
+                f"{self.point}"
             )
-        except ValueError as exc:
-            raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
         self._check_parts()
         self._check_kappa_max()
@@ -366,7 +342,7 @@ class PointEstimateResult(PanelResult):
         dict
             Keys: 'point' (float); 'ci' (the interval's own summary dict) plus 'ci_lower', 'ci_upper' and
             'point_outside_interval' hoisted to the top level, since those are
-            what a reader scans for; if bootstrap_distribution is not None,
+            what a reader scans for; for a bootstrap interval,
             'bootstrap_draws_mean' and 'bootstrap_se' (the mean and standard
             error of the usable draws, None when too few are usable -- the
             draw counts are in 'ci'; ``{"not_computed": reason}`` when the
@@ -380,13 +356,15 @@ class PointEstimateResult(PanelResult):
         result["ci_lower"] = self.confidence_interval.lower
         result["ci_upper"] = self.confidence_interval.upper
         result["point_outside_interval"] = self.point_outside_interval
-        if isinstance(self.bootstrap_distribution, NotComputed):
-            result["bootstrap_draws_mean"] = self.bootstrap_distribution.summary()
-            result["bootstrap_se"] = self.bootstrap_distribution.summary()
-        elif self.bootstrap_distribution is not None:
-            mean, se = draw_moments(self.bootstrap_distribution)
-            result["bootstrap_draws_mean"] = mean
-            result["bootstrap_se"] = se
+        ci = self.confidence_interval
+        if isinstance(ci, BootstrapCIResult):
+            if isinstance(ci.draws, NotComputed):
+                result["bootstrap_draws_mean"] = ci.draws.summary()
+                result["bootstrap_se"] = ci.draws.summary()
+            else:
+                mean, se = ci.compute_draw_moments()
+                result["bootstrap_draws_mean"] = mean
+                result["bootstrap_se"] = se
         result.update(self._panel_summary())
         result["parts"] = self.parts.summary()
         result["kappa_max"] = (

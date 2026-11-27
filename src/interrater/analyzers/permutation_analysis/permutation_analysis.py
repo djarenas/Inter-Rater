@@ -318,7 +318,6 @@ class PermutationAnalysis:
         unit: tuple[int, ...],
         point: float,
         ci: BootstrapCIResult,
-        draws: np.ndarray | None,
     ):
         """
         Build one pair's or subset's result with the coefficient's own analyzer.
@@ -326,7 +325,7 @@ class PermutationAnalysis:
         The analyzer is built on the unit's usable subjects (rated by at least
         two of its raters; for a pair, both) with injection off, since the
         panel's injection already ran. It is handed this analysis's point,
-        interval and draws through its ``_result``, so each unit gets the same
+        interval through its ``_result``, so each unit gets the same
         result type ``estimate()`` returns. The point is checked against the
         analyzer's own; the interval and draws are this analysis's.
 
@@ -335,9 +334,8 @@ class PermutationAnalysis:
         unit : tuple[int, ...]
             Rater positions, sorted.
         point, ci : float, BootstrapCIResult
-            What this analysis computed for the unit.
-        draws : np.ndarray | None
-            The unit's draws, or None when keep_draws is false.
+            What this analysis computed for the unit; the interval holds the
+            draws, or NotComputed in their place when keep_draws is false.
 
         Returns
         -------
@@ -405,12 +403,34 @@ class PermutationAnalysis:
                 f"is a bug."
             )
 
-        if draws is None:
-            draws = NotComputed("draws not kept: keep_draws false")
-        return analyzer._result(point, ci, draws)
+        return analyzer._result(point, ci)
+
+    @staticmethod
+    def _without_draws(ci: BootstrapCIResult) -> BootstrapCIResult:
+        """
+        The interval with its draws, and BCa's jackknife estimates, dropped.
+
+        For keep_draws false. The interval checked its bounds against them
+        when it was built; the copy keeps the counts and says why the arrays
+        are gone.
+        """
+        import dataclasses
+
+        from ...intermediates.not_computed import NotComputed
+        from ...intermediates.results.ci_results import BCABootstrapCIResult
+
+        reason = NotComputed("draws not kept: keep_draws false")
+        if isinstance(ci, BCABootstrapCIResult):
+            return dataclasses.replace(
+                ci, draws=reason,
+                jackknife_estimates=NotComputed(
+                    "jackknife estimates not kept: keep_draws false"
+                ),
+            )
+        return dataclasses.replace(ci, draws=reason)
 
     def _unit_results(
-        self, values: dict, subjects: dict, cis: dict, draws: dict | None,
+        self, values: dict, subjects: dict, cis: dict,
     ) -> dict:
         """
         Every pair's or subset's result, in unit order.
@@ -423,10 +443,7 @@ class PermutationAnalysis:
 
         results = {}
         for unit in sorted(values):
-            result = self._unit_result(
-                unit, values[unit], cis[unit],
-                None if draws is None else draws[unit],
-            )
+            result = self._unit_result(unit, values[unit], cis[unit])
             if (
                 not isinstance(result, NotComputed)
                 and result.balance_profile.n_subjects != subjects[unit]

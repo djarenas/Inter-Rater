@@ -125,6 +125,23 @@ versioning follows [semver](https://semver.org/).
   every result must state `weights_type` and `weight_matrix`: they have no
   defaults.
 
+- `BootstrapCIResult` is now abstract, with three children that check
+  themselves when built: `PercentileBootstrapCIResult` (its bounds must be
+  the quantiles of its draws), `BCABootstrapCIResult` (it holds the point
+  and the jackknife estimates, and its acceleration, bias correction and
+  bounds must follow from them and its draws) and `EmptyBootstrapCIResult`
+  (every draw failed). Before, only the counts were checked, never the
+  bounds. The draws live on the interval (`draws`), and
+  `bootstrap_distribution` and `bootstrap_distribution_of_mean` are gone
+  from the results. `percentile_ci` and `bca_ci` use the classes' own
+  `compute_*` methods, so the formula exists once.
+
+- `method_intended` and `method_used` move from `BootstrapCIResult` to
+  `CIResult`, so every interval records the method asked for and the one
+  that ran. A `ParametricCIResult` records `parametric_null`, or
+  `method_used=None` when the formula gave no bounds. A `PointEstimateResult`
+  is refused when its `ci_method` is not its interval's `method_intended`.
+
 - A `PointEstimateResult` must have a confidence interval:
   `confidence_interval=None` is refused. The analyzers always compute one.
 

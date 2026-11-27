@@ -318,10 +318,18 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
         se_null = np.sqrt(var_null)
         z_crit = stats.norm.ppf(1.0 - self.config.alpha / 2.0)
 
+        lower = point - z_crit * se_null
+        upper = point + z_crit * se_null
         return ParametricCIResult(
-            lower=point - z_crit * se_null,
-            upper=point + z_crit * se_null,
+            lower=lower,
+            upper=upper,
             alpha=self.config.alpha,
+            method_intended="parametric_null",
+            # No method ran when the formula gave no bounds (a NaN variance)
+            method_used=(
+                "parametric_null"
+                if np.isfinite(lower) and np.isfinite(upper) else None
+            ),
             variance_source="null",
             variance_reference=self._null_variance_source(),
         )
@@ -339,17 +347,14 @@ class CohenKappaAnalyzer(IndividualMarginalAnalyzer):
             else COHEN_UNWEIGHTED_NULL_VARIANCE_SOURCE
         )
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> CohenKappaResult:
+    def _result(self, point: float, ci) -> CohenKappaResult:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
         """
         return CohenKappaResult(
             point=point,
             confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(),

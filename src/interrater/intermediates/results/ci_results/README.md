@@ -7,24 +7,30 @@ holds the two bounds and the level they were taken at. The subclasses differ
 in what can go wrong on the way to them.
 
 ```
-CIResult (ABC)             lower, upper, alpha
-├── BootstrapCIResult      from resampling: counts, methods, diagnostics
-└── ParametricCIResult     from a variance formula: no counts, no fallback
+CIResult (ABC)                      lower, upper, alpha, methods
+├── BootstrapCIResult (ABC)         from resampling: draws and counts
+│   ├── PercentileBootstrapCIResult bounds = quantiles of the draws
+│   ├── BCABootstrapCIResult        point, jackknife, z0, acceleration
+│   └── EmptyBootstrapCIResult      every draw failed: no bounds
+└── ParametricCIResult              from a variance formula: no counts, no fallback
 ```
 
 | Class                | What It Holds                                                                 | Why It Exists                                                             |
 |----------------------|-------------------------------------------------------------------------------|---------------------------------------------------------------------------|
-| `CIResult`           | lower, upper, alpha; `is_defined`, `confidence_level`, `as_tuple()`           | What every interval has, whatever produced it.                            |
-| `BootstrapCIResult`  | n_resamples, n_failed, method_intended, method_used, acceleration, bias_correction; `n_usable`, `degraded`, `recommended_resamples`, `below_recommended_resamples` | A resampled interval, with what failed, what actually ran, and how many draws it ran on. |
+| `CIResult`           | lower, upper, alpha, method_intended, method_used; `is_defined`, `degraded`, `confidence_level`, `as_tuple()` | What every interval has, whatever produced it.                            |
+| `BootstrapCIResult`  | n_resamples, n_failed, draws; `n_usable`, `recommended_resamples`, `below_recommended_resamples`, `compute_draw_moments()` | A resampled interval, with its draws, what failed, and how many draws it ran on. Checks the draws against its counts. |
+| `PercentileBootstrapCIResult` | `compute_bounds()` | Percentile ran (asked for, or BCa fell back). Checks its bounds are the quantiles of its draws. |
+| `BCABootstrapCIResult` | point, jackknife_estimates, acceleration, bias_correction; `compute_acceleration()`, `compute_bias_correction()`, `compute_bounds()` | BCa ran. Checks its acceleration, z0 and bounds follow from its jackknife, point and draws. |
+| `EmptyBootstrapCIResult` | -- | Every draw failed, so no method ran and there are no bounds. |
 | `ParametricCIResult` | variance_source, variance_reference                                           | A closed-form interval. Nothing to fall back to.                          |
 
 ## Not panel results
 
-`CIResult` does not descend from `PanelResult`. The interval holds no point
-estimate and no coefficient name; a `PointEstimateResult` holds the interval.
-So an interval never checks itself against a point estimate: a strongly
-bias-corrected BCa interval can sit entirely to one side of the estimate,
-correctly. `PointEstimateResult` reports that case as
+`CIResult` does not descend from `PanelResult`. An interval holds no
+coefficient name; a `PointEstimateResult` holds the interval. Only a BCa
+interval holds a point, the one its z0 was measured against. No interval
+checks that the point lies inside it: a strongly bias-corrected BCa interval
+can sit entirely to one side of the estimate, correctly. `PointEstimateResult` reports that case as
 `point_outside_interval`.
 
 ## How an interval prints

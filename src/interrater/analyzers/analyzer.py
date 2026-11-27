@@ -164,14 +164,12 @@ class Analyzer(ABC):
 
         if self.config.ci_method == "parametric_null":
             ci = self._parametric_null_interval(point)
-            bootstrap_distribution = None
         else:
-            bootstrap_distribution = self._bootstrap_distribution()
             ci = self._compute_ci(
-                bootstrap_distribution, point, self._jackknife_estimates
+                self._bootstrap_distribution(), point, self._jackknife_estimates
             )
 
-        return self._result(point, ci, bootstrap_distribution)
+        return self._result(point, ci)
 
     @abstractmethod
     def hypothesis_test(self) -> HypothesisTestResult:
@@ -356,9 +354,9 @@ class Analyzer(ABC):
         )
 
     @abstractmethod
-    def _result(self, point: float, ci, bootstrap_distribution):
+    def _result(self, point: float, ci):
         """
-        Package my point, interval and draws into my result class.
+        Package my point and interval (which holds its draws) into my result class.
 
         The last step of ``estimate()``, kept separate so that whatever
         computed the point and interval -- ``estimate()`` itself, or a

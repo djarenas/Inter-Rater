@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from .agreement_functions.group_agreement import (
     chance_brennan_prediger,
     observed_agreement,
@@ -182,11 +180,9 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
             weighted=self.weights is not None and not self.weights.is_identity,
         )
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> BrennanPredigerResult:
+    def _result(self, point: float, ci) -> BrennanPredigerResult:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
         """
         from ..intermediates.results import BrennanPredigerResult
@@ -194,7 +190,6 @@ class BrennanPredigerAnalyzer(GroupAnalyzer):
         return BrennanPredigerResult(
             point=point,
             confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(self.estimator_input.nij),

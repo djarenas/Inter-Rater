@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-import numpy as np
-
 from ...not_computed import NotComputed
 from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
@@ -32,7 +30,7 @@ class KrippendorffAlphaResult(PointEstimateResult):
     """
     I am Krippendorff's alpha, weighted or unweighted, with data context.
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult. balance_profile tells users
     and visualizers about the balance structure of the data.
 
@@ -68,9 +66,6 @@ class KrippendorffAlphaResult(PointEstimateResult):
         Krippendorff's alpha (inherited from PointEstimateResult).
     confidence_interval : CIResult
         The bootstrap interval (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Informational only --
         alpha handles both balanced and unbalanced data exactly.
@@ -114,7 +109,6 @@ class KrippendorffAlphaResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

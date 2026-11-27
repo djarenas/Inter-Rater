@@ -63,6 +63,7 @@ def _assert_parametric_interval(result) -> None:
     assert ci.variance_source == "null"
     assert ci.is_defined
     assert ci.lower <= ci.upper
+    assert (ci.method_intended, ci.method_used) == ("parametric_null", "parametric_null")
 
 
 def _make_ratings(n_raters: int = 3) -> Ratings:
@@ -850,8 +851,8 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
-        assert len(result.bootstrap_distribution) == 10
+        assert result.confidence_interval.draws is not None
+        assert len(result.confidence_interval.draws) == 10
 
     def test_gwet_estimate_from_ratings(self):
         from interrater.analyzers.gwet_ac1_analyzer import GwetAC1Analyzer
@@ -863,8 +864,8 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
-        assert len(result.bootstrap_distribution) == 10
+        assert result.confidence_interval.draws is not None
+        assert len(result.confidence_interval.draws) == 10
 
     def test_brennan_prediger_estimate_from_ratings(self):
         from interrater.analyzers.brennan_prediger_analyzer import (
@@ -878,7 +879,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
+        assert result.confidence_interval.draws is not None
 
     def test_krippendorff_estimate_from_ratings(self):
         from interrater.analyzers.krippendorff_alpha_analyzer import (
@@ -892,7 +893,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
+        assert result.confidence_interval.draws is not None
 
     def test_scott_estimate_from_ratings(self):
         from interrater.analyzers.scotts_analyzer import ScottsAnalyzer
@@ -904,7 +905,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
+        assert result.confidence_interval.draws is not None
 
     def test_cohen_estimate(self):
         from interrater.analyzers.cohen_kappa_analyzer import CohenKappaAnalyzer
@@ -916,8 +917,8 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
-        assert len(result.bootstrap_distribution) == 10
+        assert result.confidence_interval.draws is not None
+        assert len(result.confidence_interval.draws) == 10
 
     def test_conger_estimate(self):
         from interrater.analyzers.conger_kappa_analyzer import CongerKappaAnalyzer
@@ -929,7 +930,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
+        assert result.confidence_interval.draws is not None
 
     def test_light_estimate(self):
         from interrater.analyzers.light_kappa_analyzer import LightKappaAnalyzer
@@ -941,7 +942,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_bootstrap_interval(result, n_resamples=10)
-        assert result.bootstrap_distribution is not None
+        assert result.confidence_interval.draws is not None
         assert hasattr(result, "n_pairs")
 
     def test_cohen_parametric_null_ci(self):
@@ -959,7 +960,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_parametric_interval(result)
-        assert result.bootstrap_distribution is None
+        assert not isinstance(result.confidence_interval, BootstrapCIResult)
 
     def test_fleiss_parametric_null_ci(self):
         """Fleiss supports ci_method='parametric_null' -- no bootstrap."""
@@ -976,7 +977,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_parametric_interval(result)
-        assert result.bootstrap_distribution is None
+        assert not isinstance(result.confidence_interval, BootstrapCIResult)
 
     def test_scott_parametric_null_ci(self):
         """Scott supports ci_method='parametric_null' -- no bootstrap."""
@@ -993,7 +994,7 @@ class TestSmokeEstimates:
 
         assert isinstance(result.point, float)
         _assert_parametric_interval(result)
-        assert result.bootstrap_distribution is None
+        assert not isinstance(result.confidence_interval, BootstrapCIResult)
 
 
 # ------------------------------------------------------------------ #
@@ -1081,7 +1082,7 @@ class TestBootstrapSummaryWithFailedDraws:
 
     def test_summary_uses_the_usable_draws(self):
         result = self._result()
-        draws = result.bootstrap_distribution
+        draws = result.confidence_interval.draws
         assert result.confidence_interval.n_failed == 329
         d = result.summary()
         assert d["bootstrap_draws_mean"] == pytest.approx(np.nanmean(draws))
@@ -1131,6 +1132,52 @@ class TestCiMethodInResult:
             a = FleissKappaAnalyzer(_make_ratings(3), config)
             result = a.estimate()
         assert result.ci_method == "parametric_null"
+
+
+class TestParametricCIResultMethods:
+    """
+    CIResult checks the method asked for and the method that ran, for every
+    interval; here on a parametric one, whose only method is parametric_null.
+    """
+
+    @staticmethod
+    def _ci(**fields):
+        base = dict(
+            lower=0.4, upper=0.6, alpha=0.05,
+            method_intended="parametric_null", method_used="parametric_null",
+            variance_source="null",
+            variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
+        )
+        base.update(fields)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            return ParametricCIResult(**base)
+
+    def test_records_its_method(self):
+        ci = self._ci()
+        assert (ci.method_intended, ci.method_used) == ("parametric_null", "parametric_null")
+        assert ci.degraded is False
+        assert ci.summary()["method_used"] == "parametric_null"
+
+    def test_bootstrap_method_refused(self):
+        with pytest.raises(ValueError, match=r"method_intended must be one of \['parametric_null'\], got 'bca'"):
+            self._ci(method_intended="bca", method_used="bca")
+
+    def test_no_bounds_means_no_method_ran(self):
+        ci = self._ci(lower=float("nan"), upper=float("nan"), method_used=None)
+        assert ci.is_defined is False
+
+    def test_bounds_without_a_method_refused(self):
+        with pytest.raises(ValueError, match="bounds are defined if and only if a method ran"):
+            self._ci(method_used=None)
+
+    def test_a_method_without_bounds_refused(self):
+        with pytest.raises(ValueError, match="bounds are defined if and only if a method ran"):
+            self._ci(lower=float("nan"), upper=float("nan"))
+
+    def test_error_prefix(self):
+        with pytest.raises(ValueError, match=r"\[ParametricCIResult\] Error: \[CIResult\] Error"):
+            self._ci(method_intended="bca", method_used="bca")
 
 
 # ------------------------------------------------------------------ #
@@ -1223,7 +1270,7 @@ class TestParametricNullDisclosure:
 
         with pytest.warns(UserWarning, match="reproduction of the published"):
             ci = ParametricCIResult(
-                lower=0.383, upper=0.478, alpha=0.05, variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
+                lower=0.383, upper=0.478, alpha=0.05, method_intended="parametric_null", method_used="parametric_null", variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
             )
         assert ci.variance_source == "null"
 
@@ -1238,7 +1285,7 @@ class TestParametricNullDisclosure:
             warnings.simplefilter("always")
             with pytest.raises(ValueError):
                 ParametricCIResult(
-                    lower=0.9, upper=0.1, alpha=0.05, variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
+                    lower=0.9, upper=0.1, alpha=0.05, method_intended="parametric_null", method_used="parametric_null", variance_source="null", variance_reference="Fleiss, Nee & Landis (1979), Eq. 12",
                 )
 
         assert len(caught) == 0
@@ -1684,9 +1731,7 @@ class TestOneEstimate:
             config_cls(n_resamples=50, random_state=42, ci_method="percentile"),
         )
         result = analyzer.estimate()
-        again = analyzer._result(
-            result.point, result.confidence_interval, result.bootstrap_distribution,
-        )
+        again = analyzer._result(result.point, result.confidence_interval)
         assert type(again) is type(result)
         assert str(again) == str(result)
         assert again.summary() == result.summary()

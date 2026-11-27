@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import numpy as np
-
-from .._bootstrap_draws import check_draws_match_interval, draw_moments
+from ...not_computed import NotComputed
 from ..ci_results import BootstrapCIResult
 from ..analyzer_results import result_class_for
 from .permutation_result import PermutationResult
@@ -63,7 +61,6 @@ class SubsetPermutationResult(PermutationResult):
 
     - bootstrap_mean_method: "correlated" or "independent"
     - bootstrap_ci_of_mean: CI on the mean
-    - bootstrap_distribution_of_mean: raw draws of the mean
 
     Observed spread and bootstrap width answer different questions with
     different remedies. High spread across subsets means agreement depends
@@ -117,9 +114,6 @@ class SubsetPermutationResult(PermutationResult):
         which is a different statement from an interval whose
         ``method_used`` is None -- that one was attempted and every draw
         failed.
-    bootstrap_distribution_of_mean : np.ndarray | None
-        Raw bootstrap draws of the mean (shape: n_resamples,). None if
-        no bootstrap of the mean was requested.
     """
 
     # Attribute declaration
@@ -143,7 +137,6 @@ class SubsetPermutationResult(PermutationResult):
     # Bootstrap (sampling uncertainty)
     bootstrap_mean_method: str | None
     bootstrap_ci_of_mean: BootstrapCIResult | None
-    bootstrap_distribution_of_mean: np.ndarray | None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -216,7 +209,6 @@ class SubsetPermutationResult(PermutationResult):
         # Cross-validate: mean bootstrap fields require bootstrap_mean_method
         has_mean_bootstrap = (
             self.bootstrap_ci_of_mean is not None
-            or self.bootstrap_distribution_of_mean is not None
         )
         if has_mean_bootstrap and self.bootstrap_mean_method is None:
             raise ValueError(
@@ -239,40 +231,6 @@ class SubsetPermutationResult(PermutationResult):
                     f"BootstrapCIResult or None, got "
                     f"{type(self.bootstrap_ci_of_mean).__name__}"
                 )
-
-        # Validate bootstrap_distribution_of_mean
-        if self.bootstrap_distribution_of_mean is not None:
-            if not isinstance(
-                self.bootstrap_distribution_of_mean, np.ndarray
-            ):
-                raise TypeError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution_of_mean "
-                    f"must be np.ndarray or None, got "
-                    f"{type(self.bootstrap_distribution_of_mean).__name__}"
-                )
-            if self.bootstrap_distribution_of_mean.ndim != 1:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution_of_mean "
-                    f"must be 1-dimensional, got shape "
-                    f"{self.bootstrap_distribution_of_mean.shape}"
-                )
-            if len(self.bootstrap_distribution_of_mean) == 0:
-                raise ValueError(
-                    f"{_ERROR_PREFIX}: bootstrap_distribution_of_mean "
-                    f"must have at least 1 value"
-                )
-
-        # The mean's draws and interval describe one bootstrap. Each subset's
-        # result checked its own when it was built.
-        try:
-            check_draws_match_interval(
-                self.bootstrap_distribution_of_mean,
-                self.bootstrap_ci_of_mean,
-                draws_name="bootstrap_distribution_of_mean",
-                interval_name="bootstrap_ci_of_mean",
-            )
-        except ValueError as exc:
-            raise ValueError(f"{_ERROR_PREFIX}: {exc}") from exc
 
         # Call parent validation
         try:
@@ -346,9 +304,14 @@ class SubsetPermutationResult(PermutationResult):
             result["mean_ci_lower"] = self.bootstrap_ci_of_mean.lower
             result["mean_ci_upper"] = self.bootstrap_ci_of_mean.upper
 
-        if self.bootstrap_distribution_of_mean is not None:
-            mean, se = draw_moments(self.bootstrap_distribution_of_mean)
-            result["bootstrap_draws_mean"] = mean
-            result["bootstrap_se"] = se
+        if self.bootstrap_ci_of_mean is not None:
+            draws = self.bootstrap_ci_of_mean.draws
+            if isinstance(draws, NotComputed):
+                result["bootstrap_draws_mean"] = draws.summary()
+                result["bootstrap_se"] = draws.summary()
+            else:
+                mean, se = self.bootstrap_ci_of_mean.compute_draw_moments()
+                result["bootstrap_draws_mean"] = mean
+                result["bootstrap_se"] = se
 
         return result

@@ -211,11 +211,9 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         return light_kappa(data)
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> LightKappaResult:
+    def _result(self, point: float, ci) -> LightKappaResult:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
 
         Only percentile and bca intervals: the package does not implement a
@@ -227,7 +225,6 @@ class LightKappaAnalyzer(IndividualMarginalAnalyzer):
         return LightKappaResult(
             point=point,
             confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             parts=NotComputed(PARTS_NOT_COMPUTED),

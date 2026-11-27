@@ -30,7 +30,7 @@ class CohenKappaResult(IndividualMarginalResult):
     """
     I am Cohen's kappa, weighted or unweighted, for a single pair of raters.
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult. My CI method and weights_type,
     held by PanelResult, tell anyone reading me what statistic I am.
 
@@ -67,9 +67,6 @@ class CohenKappaResult(IndividualMarginalResult):
         Cohen's kappa (inherited from PointEstimateResult).
     confidence_interval : CIResult
         Bootstrap or parametric confidence interval (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Always populated for
         Cohen's kappa. n_subjects available via balance_profile.n_subjects.
@@ -118,7 +115,6 @@ class CohenKappaResult(IndividualMarginalResult):
     # balance_profile is not None and rater_profile is a RaterProfile)
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: float
     agreement_profile: AgreementProfile

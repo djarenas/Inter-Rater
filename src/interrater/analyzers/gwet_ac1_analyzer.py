@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from .agreement_functions.group_agreement import chance_gwet_ac1, observed_agreement
 from .group_analyzer import GroupAnalyzer
 from ..intermediates.estimator_parts import EstimatorInput, NijMatrix, Weights
@@ -172,11 +170,9 @@ class GwetAC1Analyzer(GroupAnalyzer):
             weighted=self.weights is not None and not self.weights.is_identity,
         )
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> GwetsAC1Result:
+    def _result(self, point: float, ci) -> GwetsAC1Result:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
         """
         from ..intermediates.results import GwetsAC1Result
@@ -184,7 +180,6 @@ class GwetAC1Analyzer(GroupAnalyzer):
         return GwetsAC1Result(
             point=point,
             confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(self.estimator_input.nij),

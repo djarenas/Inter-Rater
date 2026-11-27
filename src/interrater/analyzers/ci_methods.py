@@ -33,7 +33,7 @@ A fallback to percentile drops ``z0`` as well as ``a``, so ``method_used``
 percentile interval, so falling back drops the two corrections and keeps the
 method they correct.
 
-``method_used`` is None only when no draw was usable.
+``method_used`` is None only when no draw was usable: there are no bounds.
 
 References
 ----------
@@ -55,6 +55,15 @@ from ..intermediates.results.ci_results.bootstrap_ci_result import (
     BootstrapCIResult,
     MIN_RESAMPLES_BCA,
     MIN_RESAMPLES_PERCENTILE,
+)
+from ..intermediates.results.ci_results.bca_bootstrap_ci_result import (
+    BCABootstrapCIResult,
+)
+from ..intermediates.results.ci_results.empty_bootstrap_ci_result import (
+    EmptyBootstrapCIResult,
+)
+from ..intermediates.results.ci_results.percentile_bootstrap_ci_result import (
+    PercentileBootstrapCIResult,
 )
 
 _ERROR_PREFIX = "[ci_methods] Error"
@@ -87,85 +96,17 @@ def _checked(bootstrap_distribution: np.ndarray, alpha: float) -> np.ndarray:
     return np.asarray(bootstrap_distribution, dtype=np.float64)
 
 
-def _usable(array: np.ndarray) -> tuple[np.ndarray, int]:
-    """
-    Split an array into its usable values and a count of the rest.
-
-
-    Usable means finite. The agreement functions mark an undefined
-    coefficient with NaN; an infinite value cannot be used for a quantile
-    either, so it is counted the same way.
-    """
-    keep = np.isfinite(array)
-    return array[keep], int(array.size - int(keep.sum()))
-
-
-def _acceleration(jackknife_estimates: np.ndarray) -> float | None:
-    """
-    Efron & Tibshirani (1986) eq. (8.5), in its jackknife form.
-
-        a = sum(d_i^3) / (6 * [sum(d_i^2)]^(3/2)),  d_i = mean(theta_(.)) - theta_(i)
-
-    where ``theta_(i)`` is the coefficient recomputed with subject i left out.
-    The published formula is written in empirical influence values ``U_i^0``,
-    which differ from these ``d_i`` by a factor of (n-1); the factor cancels
-    between numerator and denominator, so the two forms agree exactly.
-
-    Parameters
-    ----------
-    jackknife_estimates : np.ndarray
-        Leave-one-subject-out values of the coefficient, one per subject.
-        Non-finite entries are dropped -- a leave-one-out dataset can be
-        degenerate for the same reason a resample can.
-
-    Returns
-    -------
-    float | None
-        The acceleration, or None when it cannot be computed: fewer than two
-        usable values, or every usable value identical, which leaves no
-        skewness to correct.
-
-    Notes
-    -----
-    Identical values are caught by their range, not by their deviations from
-    the mean. The mean of identical floats can be one ulp off (twenty copies
-    of 0.6 average to 0.5999999999999999), leaving deviations near 1e-16.
-    ``a`` divides one such tiny number by another, so it would come out
-    ordinary-looking and BCa would correct for skew that is not there. The
-    range of identical values is exactly zero, and the cut-off is a few ulps
-    of the values' size.
-    """
-    values, _ = _usable(np.asarray(jackknife_estimates, dtype=np.float64))
-    if values.size < 2:
-        return None
-
-    # See Notes: the gate is on the spread of the values themselves.
-    scale = float(np.max(np.abs(values)))
-    noise_floor = float(np.finfo(np.float64).eps) * max(scale, 1.0) * 8.0
-    if float(np.ptp(values)) <= noise_floor:
-        return None
-
-    deviations = values.mean() - values
-    denominator = 6.0 * float(np.sum(deviations ** 2) ** 1.5)
-    if denominator == 0.0 or not np.isfinite(denominator):
-        return None
-
-    acceleration = float(np.sum(deviations ** 3) / denominator)
-    return acceleration if np.isfinite(acceleration) else None
-
-
-def _nothing_ran(
-    draws: np.ndarray, n_failed: int, alpha: float, intended: str
-) -> BootstrapCIResult:
+def _nothing_ran(draws: np.ndarray, alpha: float, intended: str) -> EmptyBootstrapCIResult:
     """The result when no resample was usable, so no method could be applied."""
-    return BootstrapCIResult(
+    return EmptyBootstrapCIResult(
         lower=float("nan"),
         upper=float("nan"),
         alpha=alpha,
-        n_resamples=draws.size,
-        n_failed=n_failed,
         method_intended=intended,
         method_used=None,
+        n_resamples=draws.size,
+        n_failed=draws.size,
+        draws=draws,
     )
 
 
@@ -203,19 +144,21 @@ def percentile_ci(
         all-NaN distribution is not an error: it is a result.
     """
     draws = _checked(bootstrap_distribution, alpha)
-    usable, n_failed = _usable(draws)
+    usable = BootstrapCIResult.usable_draws(draws)
 
     if usable.size == 0:
-        return _nothing_ran(draws, n_failed, alpha, "percentile")
+        return _nothing_ran(draws, alpha, "percentile")
 
-    return BootstrapCIResult(
-        lower=float(np.percentile(usable, (alpha / 2) * 100)),
-        upper=float(np.percentile(usable, (1 - alpha / 2) * 100)),
+    lower, upper = PercentileBootstrapCIResult.compute_bounds(draws, alpha)
+    return PercentileBootstrapCIResult(
+        lower=lower,
+        upper=upper,
         alpha=alpha,
-        n_resamples=draws.size,
-        n_failed=n_failed,
         method_intended="percentile",
         method_used="percentile",
+        n_resamples=draws.size,
+        n_failed=draws.size - usable.size,
+        draws=draws,
     )
 
 
@@ -274,8 +217,6 @@ def bca_ci(
     B = 1000 resamples, against 250 for a useful percentile interval. This
     function does not enforce that; ``n_usable`` is reported so the caller can.
     """
-    from scipy.stats import norm
-
     draws = _checked(bootstrap_distribution, alpha)
 
     if jackknife_estimates is None or len(jackknife_estimates) == 0:
@@ -286,74 +227,54 @@ def bca_ci(
             f"bootstrap distribution."
         )
 
-    usable, n_failed = _usable(draws)
+    usable = BootstrapCIResult.usable_draws(draws)
+    n_failed = draws.size - usable.size
 
     # No usable draw means no z0, so BCa cannot run whatever the jackknife
     # says, and neither can the percentile method it would fall back to.
     if usable.size == 0:
-        return _nothing_ran(draws, n_failed, alpha, "bca")
+        return _nothing_ran(draws, alpha, "bca")
 
-    def _fall_back_to_percentile() -> BootstrapCIResult:
+    def _fall_back_to_percentile() -> PercentileBootstrapCIResult:
         """A true percentile interval, bias correction discarded with the rest."""
-        return BootstrapCIResult(
-            lower=float(np.percentile(usable, (alpha / 2) * 100)),
-            upper=float(np.percentile(usable, (1 - alpha / 2) * 100)),
+        lower, upper = PercentileBootstrapCIResult.compute_bounds(draws, alpha)
+        return PercentileBootstrapCIResult(
+            lower=lower,
+            upper=upper,
             alpha=alpha,
-            n_resamples=draws.size,
-            n_failed=n_failed,
             method_intended="bca",
             method_used="percentile",
+            n_resamples=draws.size,
+            n_failed=n_failed,
+            draws=draws,
         )
 
-    acceleration = _acceleration(jackknife_estimates)
+    jackknife = np.asarray(jackknife_estimates, dtype=np.float64)
+    acceleration = BCABootstrapCIResult.compute_acceleration(jackknife)
     if acceleration is None:
         return _fall_back_to_percentile()
 
-    # Bias correction, over the usable draws only. Taking it over the whole
-    # array would count every failed draw as lying above the point estimate,
-    # since `np.nan <= point` is False -- a bias rather than an error, and so
-    # one that nothing downstream would catch.
-    #
-    # Draws equal to the point estimate count as half below and half above.
-    # Counting them all as below (`<=`) shifts the interval up, counting them
-    # all as above (Efron & Tibshirani's strict `<`) shifts it down, and on
-    # small discrete data ties are common, e.g. Brennan-Prediger, which
-    # depends only on raw agreement. This is the 'mean' rule
-    # scipy.stats.bootstrap uses.
-    n_below = np.sum(usable < point)
-    n_at_or_below = np.sum(usable <= point)
-    ecdf_point = float((n_below + n_at_or_below) / (2 * usable.size))
-    z0 = float(norm.ppf(np.clip(ecdf_point, 1e-10, 1 - 1e-10)))
+    z0 = BCABootstrapCIResult.compute_bias_correction(draws, point)
 
-    z_lower = float(norm.ppf(alpha / 2))
-    z_upper = float(norm.ppf(1 - alpha / 2))
-
-    # The correction needs 1 - a*(z0 + z) > 0 at both ends. At zero the
-    # adjusted quantile runs off to infinity; below zero it lands on the wrong
-    # side and the bounds come out inverted (possible when the point lies
-    # outside nearly all the draws, so z0 sits at its clip, and |a| is large).
-    # The data are fine, the correction is not. With z0 = a = 0, BCa reduces
-    # to the percentile interval, so falling back drops the two corrections
-    # and keeps the method they correct.
-    denom_lower = 1 - acceleration * (z0 + z_lower)
-    denom_upper = 1 - acceleration * (z0 + z_upper)
-    if not (denom_lower > 0 and denom_upper > 0):
+    # The correction needs 1 - a*(z0 + z) > 0 at both ends; when it does not
+    # hold, compute_bounds returns None. With z0 = a = 0, BCa reduces to the
+    # percentile interval, so falling back drops the two corrections and
+    # keeps the method they correct.
+    bounds = BCABootstrapCIResult.compute_bounds(draws, alpha, z0, acceleration)
+    if bounds is None:
         return _fall_back_to_percentile()
 
-    z_lower_adj = z0 + (z0 + z_lower) / denom_lower
-    z_upper_adj = z0 + (z0 + z_upper) / denom_upper
-
-    p_lower = float(np.clip(norm.cdf(z_lower_adj), 0.0, 1.0))
-    p_upper = float(np.clip(norm.cdf(z_upper_adj), 0.0, 1.0))
-
-    return BootstrapCIResult(
-        lower=float(np.quantile(usable, p_lower)),
-        upper=float(np.quantile(usable, p_upper)),
+    return BCABootstrapCIResult(
+        lower=bounds[0],
+        upper=bounds[1],
         alpha=alpha,
-        n_resamples=draws.size,
-        n_failed=n_failed,
         method_intended="bca",
         method_used="bca",
+        n_resamples=draws.size,
+        n_failed=n_failed,
+        draws=draws,
+        point=point,
+        jackknife_estimates=jackknife,
         acceleration=acceleration,
         bias_correction=z0,
     )

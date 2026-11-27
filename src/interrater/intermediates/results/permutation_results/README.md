@@ -16,8 +16,8 @@ PermutationResult               coefficient_name, ci_method, balance_profile,
 | Class                       | What It Holds                                                                 | Why It Exists                                                        |
 |-----------------------------|--------------------------------------------------------------------------------|----------------------------------------------------------------------|
 | `PermutationResult`         | coefficient_name, ci_method, balance_profile, rater_profile, weights_type, weight_matrix | Shared base. Deliberately carries no point estimate -- see below.    |
-| `PairwisePermutationResult` | pair_results (each pair's own result, or NotComputed), n_pairs, mean_over_pairs; optionally bootstrap_mean_method, bootstrap_ci_of_mean, bootstrap_distribution_of_mean | All C(n_raters, 2) pairwise coefficients, each a full result.                |
-| `SubsetPermutationResult`   | subset_results (each subset's own result, or NotComputed), n_subsets, subset_k, mean_over_subsets; the same three optional fields for the mean | Leave-one-out or leave-k-out at a single k.                          |
+| `PairwisePermutationResult` | pair_results (each pair's own result, or NotComputed), n_pairs, mean_over_pairs; optionally bootstrap_mean_method and bootstrap_ci_of_mean (holding the mean's draws) | All C(n_raters, 2) pairwise coefficients, each a full result.                |
+| `SubsetPermutationResult`   | subset_results (each subset's own result, or NotComputed), n_subsets, subset_k, mean_over_subsets; the same two optional fields for the mean | Leave-one-out or leave-k-out at a single k.                          |
 | `MultiKSubsetResult`        | per_k_results (dict[int, SubsetPermutationResult]), ks                          | Stability curve: how the coefficient moves as more raters are removed. |
 
 ## No single point estimate
@@ -77,9 +77,8 @@ that.
 ## The mean's bootstrap is optional
 
 Each pair or subset is always bootstrapped; its interval is in its result.
-The bootstrap of the mean is requested, not assumed: `bootstrap_mean_method`,
-`bootstrap_ci_of_mean` and `bootstrap_distribution_of_mean` are `None`
-without it. The spread of the units is itself a diagnostic, and absence is
+The bootstrap of the mean is requested, not assumed: `bootstrap_mean_method`
+and `bootstrap_ci_of_mean` are `None` without it. The spread of the units is itself a diagnostic, and absence is
 recorded as `None` rather than as an empty container.
 
 The correlated mean resamples subjects and recomputes every pair or subset
@@ -127,10 +126,12 @@ holds `NotComputed`.
 `SubsetPermutationResult` for k = 3, `len(result)` counts the k values, and
 iterating yields them in sorted order. The `ks` field lists them.
 
-Each unit's `bootstrap_distribution` holds its raw draws, for callers who
-want to plot or re-analyse them rather than read the summarised interval.
-With `keep_draws: false` it is `NotComputed("draws not kept: keep_draws
-false")` (see `analyzers/permutation_analysis/README.md`).
+Each unit's interval holds its raw draws (`confidence_interval.draws`), for
+callers who want to plot or re-analyse them rather than read the summarised
+interval. With `keep_draws: false` the interval holds
+`NotComputed("draws not kept: keep_draws false")` in their place, and a BCa
+interval its jackknife estimates too (see
+`analyzers/permutation_analysis/README.md`).
 
 `to_frame()` gives one row per pair or subset -- raters, estimate,
 ci_lower, ci_upper, point_outside_interval, method_used, n_failed,
@@ -145,8 +146,8 @@ frame's column says True.
 `subset_results` hold each unit's own `summary()`, or
 `{"not_computed": reason}`. When the mean was bootstrapped,
 `bootstrap_draws_mean` and `bootstrap_se` describe its usable draws, as in
-`PointEstimateResult`. The mean's draws must agree with the mean's interval;
-each unit's draws are checked against its interval by its own result.
+`PointEstimateResult`. The mean's draws are on the mean's interval, which
+checks them itself, as each unit's interval does.
 
 ## Dependencies
 

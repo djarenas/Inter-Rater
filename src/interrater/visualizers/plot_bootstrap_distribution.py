@@ -83,20 +83,19 @@ def plot_bootstrap_distribution(
     from ..intermediates.not_computed import NotComputed
 
     ci = result.confidence_interval
-    if isinstance(result.bootstrap_distribution, NotComputed):
-        raise ValueError(
-            f"{_ERROR_PREFIX}: this result's bootstrap draws were not kept "
-            f"({result.bootstrap_distribution.reason}). Rerun with "
-            f"keep_draws: true to plot them."
-        )
-    if not isinstance(ci, BootstrapCIResult) or result.bootstrap_distribution is None:
+    if not isinstance(ci, BootstrapCIResult):
         raise ValueError(
             f"{_ERROR_PREFIX}: this result has no bootstrap distribution. "
             f"A parametric_null interval is computed from a formula, not "
             f"from draws; use ci_method='percentile' or 'bca' to get one."
         )
+    if isinstance(ci.draws, NotComputed):
+        raise ValueError(
+            f"{_ERROR_PREFIX}: this result's bootstrap draws were not kept "
+            f"({ci.draws.reason}). Rerun with keep_draws: true to plot them."
+        )
 
-    draws = np.asarray(result.bootstrap_distribution, dtype=float)
+    draws = np.asarray(ci.draws, dtype=float)
     usable = draws[np.isfinite(draws)]
     if usable.size == 0:
         raise ValueError(

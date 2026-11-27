@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from abc import abstractmethod
+from dataclasses import dataclass, field
+from typing import ClassVar
 
 import numpy as np
 
+from ...not_computed import NotComputed
 from .ci_result import CIResult
 
 _ERROR_PREFIX = "[BootstrapCIResult] Error"
-
-_VALID_METHODS = ("percentile", "bca")
 
 # Efron & Tibshirani (1986) section 9, p. 72: "B = 1000 is a rough minimum for
 # the number of Monte Carlo bootstraps necessary to compute the BC or BC_a
@@ -37,9 +38,9 @@ class BootstrapCIResult(CIResult):
     I am an interval from a bootstrap, and a clear account of what it was
     computed from.
 
-    I am what a CI method returns and not a panel result, since I
-    hold no point estimate, no coefficient name, and no
-    opinion about the data.
+    I am what a CI method returns and not a panel result: I hold no
+    coefficient name and no opinion about the data. Only my BCa child holds a
+    point, the one its bias correction was measured against.
 
     I carry the number of resamples that failed. A resample commonly fails
     when it contains only one category, which drives chance agreement to 1.
@@ -60,6 +61,11 @@ class BootstrapCIResult(CIResult):
     and 100 is what the quantiles were taken over. This is disclosure, not a
     verdict.
 
+    I hold the draws themselves, and check them against my counts: one draw
+    per resample, and as many non-finite draws as I counted failed. Each of
+    my children checks its own bounds against the draws: Percentile,
+    BCA and Empty.
+
     Attributes
     ----------
     n_resamples : int
@@ -67,31 +73,34 @@ class BootstrapCIResult(CIResult):
     n_failed : int
         How many of those were unusable -- NaN, which is how an undefined
         coefficient arrives, or infinite.
-    method_intended : str
-        The method that was asked for: 'percentile' or 'bca'.
-    method_used : str | None
-        The method that actually produced my bounds, or None when no method
-        could be applied at all. None is an absence, not a substitution:
-        every resample failed, so there was nothing to take quantiles of.
-        Otherwise equal to method_intended, unless BCa fell back.
-    acceleration : float | None
-        BCa's acceleration constant. None whenever method_used is not 'bca',
-        including after a fallback -- an unused diagnostic stored anyway
-        invites someone to read it as applied.
-    bias_correction : float | None
-        BCa's z0. None whenever method_used is not 'bca', for the same reason.
+    draws : np.ndarray | NotComputed
+        The draws, shape (n_resamples,), NaN where a resample's coefficient
+        was undefined. NotComputed when they were not kept (a permutation
+        analysis with keep_draws false), saying why.
+    (method_intended and method_used are inherited from CIResult; mine are
+    'percentile' or 'bca', and BCa can fall back to percentile.)
 
     See Also
     --------
     CIResult : my base, which holds the bounds and the level.
     """
 
+    # The methods I can report
+    _METHODS: ClassVar[frozenset[str]] = frozenset({"percentile", "bca"})
+
+    # Inherited from and populated at CIResult parent class
+    lower: float
+    upper: float
+    alpha: float
+    method_intended: str
+    method_used: str | None
+
+    # Populated at this level
     n_resamples:     int
     n_failed:        int
-    method_intended: str
-    method_used:     str | None
-    acceleration:    float | None = None
-    bias_correction: float | None = None
+    # Left out of equality and repr: an array has no single truth value,
+    # and a thousand numbers do not belong in a one-line repr
+    draws:           np.ndarray | NotComputed = field(compare=False, repr=False)
 
     # Constructor ------------------------------------------------------------ #
 
@@ -105,6 +114,12 @@ class BootstrapCIResult(CIResult):
         is a real concern, but is not one of mine. I hold the counts, so
         whoever holds or prints me can weigh them.
         """
+        # Parent validates and populates lower, upper, and alpha attributes
+        try:
+            super().__post_init__()
+        except (ValueError, TypeError) as exc:
+            raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
+
 
         # Counts must be ints, and must agree with each other
         for name, value in (
@@ -125,91 +140,70 @@ class BootstrapCIResult(CIResult):
                 f"got {self.n_failed}"
             )
 
-        # Something was always asked for
-        if self.method_intended not in _VALID_METHODS:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: method_intended must be one of "
-                f"{list(_VALID_METHODS)}, got {self.method_intended!r}"
-            )
+        # The draws, when kept, are the ones my counts describe
+        if not isinstance(self.draws, NotComputed):
+            if not isinstance(self.draws, np.ndarray):
+                raise TypeError(
+                    f"{_ERROR_PREFIX}: draws must be np.ndarray or "
+                    f"NotComputed, got {type(self.draws).__name__}"
+                )
+            if self.draws.ndim != 1:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: draws must be 1-dimensional, got "
+                    f"shape {self.draws.shape}"
+                )
+            if self.draws.size != self.n_resamples:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: there are {self.draws.size} draws but "
+                    f"n_resamples is {self.n_resamples}"
+                )
+            n_unusable = int(np.count_nonzero(~np.isfinite(self.draws)))
+            if n_unusable != self.n_failed:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: {n_unusable} draws are non-finite but "
+                    f"n_failed is {self.n_failed}"
+                )
 
-        # Something ran, or nothing did
-        if self.method_used is not None and self.method_used not in _VALID_METHODS:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: method_used must be None or one of "
-                f"{list(_VALID_METHODS)}, got {self.method_used!r}"
-            )
-
-        # Percentile has no failure that substitutes another method for it, so
-        # it either ran or nothing did. Only BCa can degrade.
-        if (
-            self.method_intended == "percentile"
-            and self.method_used not in ("percentile", None)
-        ):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: percentile cannot fall back, but method_used "
-                f"is {self.method_used!r}"
-            )
-
-        # Three facts that move together: a method runs only when some
-        # resample was usable, and bounds exist only when a method ran.
-        # Quantiles of nothing do not exist, and quantiles of a non-empty set
-        # of finite numbers are finite.
-        ran = self.method_used is not None
-        bounds_defined = bool(np.isfinite(self.lower) and np.isfinite(self.upper))
-
-        if ran != bounds_defined:
-            raise ValueError(
-                f"{_ERROR_PREFIX}: bounds are defined if and only if a method "
-                f"ran, but method_used is {self.method_used!r} and bounds are "
-                f"({self.lower}, {self.upper})"
-            )
-        if ran != (self.n_usable > 0):
-            raise ValueError(
-                f"{_ERROR_PREFIX}: a method runs if and only if some resample "
-                f"was usable, but method_used is {self.method_used!r} and "
-                f"{self.n_usable} of {self.n_resamples} resamples were usable"
-            )
-
-        # Diagnostics belong to BCa and only to BCa
-        diagnostics = (
-            ("acceleration", self.acceleration),
-            ("bias_correction", self.bias_correction),
-        )
-        if self.method_used == "bca":
-            for name, value in diagnostics:
-                if value is None:
-                    raise ValueError(
-                        f"{_ERROR_PREFIX}: {name} is required when method_used "
-                        f"is 'bca'"
-                    )
-                if not isinstance(value, (int, float, np.floating)) or isinstance(
-                    value, bool
-                ):
-                    raise TypeError(
-                        f"{_ERROR_PREFIX}: {name} must be float, "
-                        f"got {type(value).__name__}"
-                    )
-                if not np.isfinite(value):
-                    raise ValueError(
-                        f"{_ERROR_PREFIX}: {name} must be finite, got {value}"
-                    )
-            object.__setattr__(self, "acceleration", float(self.acceleration))
-            object.__setattr__(self, "bias_correction", float(self.bias_correction))
-        else:
-            for name, value in diagnostics:
-                if value is not None:
-                    raise ValueError(
-                        f"{_ERROR_PREFIX}: {name} must be None when method_used "
-                        f"is {self.method_used!r}, got {value}"
-                    )
-
-        # Parent validates the bounds and the level, and coerces them
+        # My child checks its method and its bounds
         try:
-            super().__post_init__()
+            self._check_method()
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
+    @abstractmethod
+    def _check_method(self) -> None:
+        """Check my method, and my bounds against my draws. Each child says."""
+        # Just an extra precaution to ensure proper inheritance of the
+        # abstract method.
+        raise NotImplementedError(
+            f"{_ERROR_PREFIX}: _check_method() must be implemented by subclass"
+        )
+
     # Public API ------------------------------------------------------------- #
+
+    @staticmethod
+    def usable_draws(draws: np.ndarray) -> np.ndarray:
+        """The usable draws: the finite ones, as floats."""
+        values = np.asarray(draws, dtype=np.float64)
+        return values[np.isfinite(values)]
+
+    def compute_draw_moments(self) -> tuple[float | None, float | None]:
+        """
+        Mean and bootstrap standard error of my usable draws.
+
+        The standard error divides by n - 1 (Efron & Tibshirani 1993, eq.
+        6.6). The mean is None with no usable draw; the standard error is
+        None with fewer than two. Raises when my draws were not kept.
+        """
+        if isinstance(self.draws, NotComputed):
+            raise ValueError(
+                f"{_ERROR_PREFIX}: my draws were not kept "
+                f"({self.draws.reason}), so they have no moments"
+            )
+        usable = self.usable_draws(self.draws)
+        mean = float(np.mean(usable)) if usable.size >= 1 else None
+        se = float(np.std(usable, ddof=1)) if usable.size >= 2 else None
+        return mean, se
 
     @property
     def n_usable(self) -> int:
@@ -238,19 +232,6 @@ class BootstrapCIResult(CIResult):
         """
         minimum = self.recommended_resamples
         return minimum is not None and self.n_usable < minimum
-
-    @property
-    def degraded(self) -> bool:
-        """
-        Whether a different method ran than the one asked for.
-
-        False when nothing ran at all. That is an absence, not a
-        substitution, and ``method_used is None`` already says it.
-        """
-        return (
-            self.method_used is not None
-            and self.method_intended != self.method_used
-        )
 
     def __str__(self) -> str:
         """
@@ -311,8 +292,8 @@ class BootstrapCIResult(CIResult):
             (float), 'method_intended' (str), 'method_used' (str or None),
             'degraded', 'is_defined', 'below_recommended_resamples' (bool),
             'n_resamples', 'n_failed', 'n_usable' (int),
-            'recommended_resamples' (int or None), and 'acceleration',
-            'bias_correction' (float) only when method_used is 'bca'.
+            'recommended_resamples' (int or None). BCa adds 'acceleration'
+            and 'bias_correction' (float).
         """
         result = {
             "lower":            self.lower,
@@ -329,7 +310,4 @@ class BootstrapCIResult(CIResult):
             "recommended_resamples":      self.recommended_resamples,
             "below_recommended_resamples": self.below_recommended_resamples,
         }
-        if self.method_used == "bca":
-            result["acceleration"]    = self.acceleration
-            result["bias_correction"] = self.bias_correction
         return result

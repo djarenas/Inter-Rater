@@ -40,7 +40,7 @@ class LightKappaResult(PointEstimateResult):
     I am Light's kappa -- the mean of all C(n_raters, 2) pairwise Cohen's
     kappas.
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult.
 
     I am the headline number: one summary of average pairwise agreement.
@@ -76,9 +76,6 @@ class LightKappaResult(PointEstimateResult):
         Light's kappa (inherited from PointEstimateResult).
     confidence_interval : CIResult
         Bootstrap confidence interval (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited).
     rater_profile : RaterProfile
@@ -120,7 +117,6 @@ class LightKappaResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: NotComputed
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

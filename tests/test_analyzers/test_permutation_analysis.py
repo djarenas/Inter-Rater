@@ -595,7 +595,7 @@ class TestPairwiseComputationA:
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.bootstrap_mean_method is None
         assert result.bootstrap_ci_of_mean is None
-        assert result.bootstrap_distribution_of_mean is None
+        assert result.bootstrap_ci_of_mean is None
 
 
 class TestPairwiseComputationB:
@@ -623,7 +623,7 @@ class TestPairwiseComputationB:
         config = _pairwise_config(n_resamples=100)
         result = PairwisePermutationAnalysis(ratings, config).run()
         for pair, unit in result.pair_results.items():
-            dist = unit.bootstrap_distribution
+            dist = unit.confidence_interval.draws
             assert isinstance(dist, np.ndarray)
             assert dist.shape == (100,)
 
@@ -634,7 +634,7 @@ class TestPairwiseComputationB:
             ratings, _pairwise_config(n_resamples=20)
         ).run()
         assert sum(
-            isinstance(unit.bootstrap_distribution, np.ndarray)
+            isinstance(unit.confidence_interval.draws, np.ndarray)
             for unit in result.pair_results.values()
         ) == 21
 
@@ -647,7 +647,7 @@ class TestPairwiseComputationB:
         assert len(result.pair_results) == 21
         for unit in result.pair_results.values():
             assert isinstance(unit.confidence_interval, BootstrapCIResult)
-            assert unit.bootstrap_distribution.reason == (
+            assert unit.confidence_interval.draws.reason == (
                 "draws not kept: keep_draws false"
             )
 
@@ -660,8 +660,8 @@ class TestPairwiseComputationB:
         for pair in r1.pair_results:
             assert r1.pair_results[pair].point == r2.pair_results[pair].point
             np.testing.assert_array_equal(
-                r1.pair_results[pair].bootstrap_distribution,
-                r2.pair_results[pair].bootstrap_distribution,
+                r1.pair_results[pair].confidence_interval.draws,
+                r2.pair_results[pair].confidence_interval.draws,
             )
 
     def test_different_seed_produces_different_bootstrap(self):
@@ -681,8 +681,8 @@ class TestPairwiseComputationB:
         # Bootstrap distributions should differ
         pair = sorted(r1.pair_results.keys())[0]
         assert not np.array_equal(
-            r1.pair_results[pair].bootstrap_distribution,
-            r2.pair_results[pair].bootstrap_distribution,
+            r1.pair_results[pair].confidence_interval.draws,
+            r2.pair_results[pair].confidence_interval.draws,
         )
 
 
@@ -749,8 +749,8 @@ class TestPairwiseComputationC:
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.bootstrap_mean_method == "correlated"
-        assert result.bootstrap_distribution_of_mean is not None
-        assert result.bootstrap_distribution_of_mean.shape == (100,)
+        assert result.bootstrap_ci_of_mean.draws is not None
+        assert result.bootstrap_ci_of_mean.draws.shape == (100,)
         ci = result.bootstrap_ci_of_mean
         assert ci is not None
         assert ci.lower <= ci.upper + TOL
@@ -764,8 +764,8 @@ class TestPairwiseComputationC:
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
         assert result.bootstrap_mean_method == "independent"
-        assert result.bootstrap_distribution_of_mean is not None
-        assert result.bootstrap_distribution_of_mean.shape == (100,)
+        assert result.bootstrap_ci_of_mean.draws is not None
+        assert result.bootstrap_ci_of_mean.draws.shape == (100,)
         assert result.bootstrap_ci_of_mean is not None
 
     def test_correlated_wider_than_independent(self):
@@ -832,7 +832,7 @@ class TestPairwiseComputationC:
         r1 = PairwisePermutationAnalysis(ratings, config).run()
         r2 = PairwisePermutationAnalysis(ratings, config).run()
         np.testing.assert_array_equal(
-            r1.bootstrap_distribution_of_mean, r2.bootstrap_distribution_of_mean,
+            r1.bootstrap_ci_of_mean.draws, r2.bootstrap_ci_of_mean.draws,
         )
 
     def test_mean_bootstrap_reproducible(self):
@@ -845,8 +845,8 @@ class TestPairwiseComputationC:
         r1 = PairwisePermutationAnalysis(ratings, config).run()
         r2 = PairwisePermutationAnalysis(ratings, config).run()
         np.testing.assert_array_equal(
-            r1.bootstrap_distribution_of_mean,
-            r2.bootstrap_distribution_of_mean,
+            r1.bootstrap_ci_of_mean.draws,
+            r2.bootstrap_ci_of_mean.draws,
         )
 
 
@@ -912,7 +912,7 @@ class TestMeanUsesTheSamePairs:
         expected = self._expected_correlated(
             analysis, defined, lambda d: estimate_pairs(d, analysis.estimator)
         )
-        draws = result.bootstrap_distribution_of_mean
+        draws = result.bootstrap_ci_of_mean.draws
         np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
         np.testing.assert_allclose(draws[~np.isnan(draws)], expected[~np.isnan(expected)])
         # This data does lose pairs in some draws, and they are counted
@@ -927,13 +927,13 @@ class TestMeanUsesTheSamePairs:
         # coefficient's seed (see IndependentMeanDraws).
         rng = np.random.default_rng(42)
         sampled = np.array([
-            result.pair_results[p].bootstrap_distribution[
+            result.pair_results[p].confidence_interval.draws[
                 rng.integers(0, self.N, size=self.N)
             ]
             for p in defined
         ])
         expected = sampled.mean(axis=0)  # NaN if any pair's value is NaN
-        draws = result.bootstrap_distribution_of_mean
+        draws = result.bootstrap_ci_of_mean.draws
         np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
         np.testing.assert_allclose(draws[~np.isnan(draws)], expected[~np.isnan(expected)])
         assert result.bootstrap_ci_of_mean.n_failed > 0
@@ -964,7 +964,7 @@ class TestMeanUsesTheSamePairs:
         expected = self._expected_correlated(
             analysis, defined, lambda d: estimate_subsets(d, analysis.estimator, 2)
         )
-        draws = result.bootstrap_distribution_of_mean
+        draws = result.bootstrap_ci_of_mean.draws
         np.testing.assert_array_equal(np.isnan(draws), np.isnan(expected))
         assert result.bootstrap_ci_of_mean.n_failed == int(np.isnan(expected).sum()) > 0
 
@@ -1226,7 +1226,7 @@ class TestSubsetComputationB:
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
         for unit in r.subset_results.values():
-            assert unit.bootstrap_distribution.shape == (100,)
+            assert unit.confidence_interval.draws.shape == (100,)
 
     def test_per_subset_draws_kept_past_the_old_limit(self):
         """2.0.0 dropped them above 120 subsets."""
@@ -1236,7 +1236,7 @@ class TestSubsetComputationB:
         ).run()
         r = result.per_k_results[3]
         assert sum(
-            isinstance(unit.bootstrap_distribution, np.ndarray)
+            isinstance(unit.confidence_interval.draws, np.ndarray)
             for unit in r.subset_results.values()
         ) == 220
 
@@ -1250,7 +1250,7 @@ class TestSubsetComputationB:
         assert len(r.subset_results) == 220
         for unit in r.subset_results.values():
             assert isinstance(unit.confidence_interval, BootstrapCIResult)
-            assert unit.bootstrap_distribution.reason == (
+            assert unit.confidence_interval.draws.reason == (
                 "draws not kept: keep_draws false"
             )
 
@@ -1281,8 +1281,8 @@ class TestSubsetComputationC:
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
         assert r.bootstrap_mean_method == "correlated"
-        assert r.bootstrap_distribution_of_mean is not None
-        assert r.bootstrap_distribution_of_mean.shape == (100,)
+        assert r.bootstrap_ci_of_mean.draws is not None
+        assert r.bootstrap_ci_of_mean.draws.shape == (100,)
         assert r.bootstrap_ci_of_mean is not None
 
     def test_independent_mean_bootstrap(self):
@@ -1296,7 +1296,7 @@ class TestSubsetComputationC:
         result = SubsetPermutationAnalysis(ratings, config).run()
         r = result.per_k_results[3]
         assert r.bootstrap_mean_method == "independent"
-        assert r.bootstrap_distribution_of_mean is not None
+        assert r.bootstrap_ci_of_mean.draws is not None
         assert r.bootstrap_ci_of_mean is not None
 
 
@@ -1461,7 +1461,7 @@ class TestResultSummary:
             n_resamples=400, bootstrap_mean="correlated"
         )
         result = PairwisePermutationAnalysis(ratings, config).run()
-        draws = result.bootstrap_distribution_of_mean
+        draws = result.bootstrap_ci_of_mean.draws
         n_nan = int(np.isnan(draws).sum())
         assert n_nan > 0
         assert result.bootstrap_ci_of_mean.n_failed == n_nan
@@ -1512,7 +1512,7 @@ class TestKeepDrawsChangesNoNumber:
             assert ua.point == ub.point or (np.isnan(ua.point) and np.isnan(ub.point)), key
             assert ua.confidence_interval.summary() == ub.confidence_interval.summary(), key
         np.testing.assert_array_equal(
-            a.bootstrap_distribution_of_mean, b.bootstrap_distribution_of_mean,
+            a.bootstrap_ci_of_mean.draws, b.bootstrap_ci_of_mean.draws,
         )
         assert a.bootstrap_ci_of_mean.summary() == b.bootstrap_ci_of_mean.summary()
 
@@ -1526,9 +1526,9 @@ class TestKeepDrawsChangesNoNumber:
             for keep in (True, False)
         )
         for unit in _computed(kept.pair_results).values():
-            assert isinstance(unit.bootstrap_distribution, np.ndarray)
+            assert isinstance(unit.confidence_interval.draws, np.ndarray)
         for unit in _computed(tossed.pair_results).values():
-            assert isinstance(unit.bootstrap_distribution, NotComputed)
+            assert isinstance(unit.confidence_interval.draws, NotComputed)
         self._same(kept, tossed, kept.pair_results, tossed.pair_results)
 
     @pytest.mark.parametrize("method", ["correlated", "independent"])
@@ -1542,9 +1542,9 @@ class TestKeepDrawsChangesNoNumber:
             for keep in (True, False)
         )
         for unit in _computed(kept.subset_results).values():
-            assert isinstance(unit.bootstrap_distribution, np.ndarray)
+            assert isinstance(unit.confidence_interval.draws, np.ndarray)
         for unit in _computed(tossed.subset_results).values():
-            assert isinstance(unit.bootstrap_distribution, NotComputed)
+            assert isinstance(unit.confidence_interval.draws, NotComputed)
         self._same(kept, tossed, kept.subset_results, tossed.subset_results)
 
     def test_independent_mean_is_the_mean_of_picks_from_each_unit(self):
@@ -1554,7 +1554,7 @@ class TestKeepDrawsChangesNoNumber:
             n_resamples=50, bootstrap_mean="independent",
         )).run()
         draws = {
-            pair: unit.bootstrap_distribution
+            pair: unit.confidence_interval.draws
             for pair, unit in r.pair_results.items()
         }
         rng = np.random.default_rng(42)  # the coefficient's random_state
@@ -1562,7 +1562,7 @@ class TestKeepDrawsChangesNoNumber:
         for pair in sorted(draws):
             expected += draws[pair][rng.integers(0, 50, size=50)]
         np.testing.assert_allclose(
-            r.bootstrap_distribution_of_mean, expected / len(draws),
+            r.bootstrap_ci_of_mean.draws, expected / len(draws),
         )
 
 
@@ -1799,7 +1799,7 @@ class TestResampleWithAnIdleRater:
         drops = np.array([
             0 not in child.choice(10, size=10, replace=True) for _ in range(n)
         ])
-        draws = unit.bootstrap_distribution
+        draws = unit.confidence_interval.draws
         assert drops.any()
         assert np.isnan(draws[drops]).all()
         assert unit.confidence_interval.n_failed == int(np.isnan(draws).sum())

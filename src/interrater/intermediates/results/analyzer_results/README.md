@@ -5,8 +5,7 @@ Every class descends from `PointEstimateResult`, which is the shape an
 analyzer returns when it has estimated a single coefficient. It holds:
 
 - `point`: the estimate.
-- `confidence_interval`: required, and `bootstrap_distribution`: the draws
-  behind it (None for a parametric interval).
+- `confidence_interval`: required; a bootstrap interval holds its draws.
 - `parts`: the observed and chance terms the point was built from. They must
   rebuild it: `(Po - Pe) / (1 - Pe)` must equal `point`, and a result whose
   parts give a different number is refused at construction.
@@ -88,9 +87,8 @@ as unweighted by Light 1971) always record "identity" and None.
 
 ## Draws and the interval
 
-`bootstrap_distribution` is present exactly when the interval is a
-`BootstrapCIResult`, and must agree with its counts (see `../README.md`).
-`summary()` describes the draws with `bootstrap_draws_mean` and
+A bootstrap interval holds its draws and checks them itself (see
+`../ci_results/README.md`). `summary()` describes the draws with `bootstrap_draws_mean` and
 `bootstrap_se`, computed over the usable (finite) draws, with the standard
 error dividing by n - 1. Either is `None` when too few draws are usable. The
 draw counts are in the interval's own summary, under `ci`.

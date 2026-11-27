@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ...not_computed import NotComputed
 from .point_estimate_result import PointEstimateResult
 
 if TYPE_CHECKING:
@@ -45,7 +44,7 @@ class IndividualMarginalResult(PointEstimateResult):
     coefficients that use each rater's own category distribution rather than
     pooling marginals across all raters.
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult.
 
     Individual marginal coefficients (Cohen, Conger, Light) require rater
@@ -66,9 +65,6 @@ class IndividualMarginalResult(PointEstimateResult):
         The coefficient value (inherited from PointEstimateResult).
     confidence_interval : CIResult
         The interval, bootstrap or parametric (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Must not be None for
         individual marginal coefficients.
@@ -89,7 +85,6 @@ class IndividualMarginalResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -100,7 +95,7 @@ class IndividualMarginalResult(PointEstimateResult):
         rater in the rater profile.
         """
         # Call parent validation (validates point, confidence_interval,
-        # bootstrap_distribution, balance_profile type)
+        # balance_profile type)
         try:
             super().__post_init__()
         except (ValueError, TypeError) as exc:

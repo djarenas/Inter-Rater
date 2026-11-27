@@ -33,9 +33,12 @@ from interrater.intermediates.data_profiles import (
 from interrater.intermediates.results import AgreementParts
 from interrater.intermediates.results.hypothesis_test_result import HypothesisTestResult
 from interrater.intermediates.results.ci_results import (
+    BCABootstrapCIResult,
     BootstrapCIResult,
     CIResult,
+    EmptyBootstrapCIResult,
     ParametricCIResult,
+    PercentileBootstrapCIResult,
 )
 from interrater.intermediates.results.analyzer_results import (
     BrennanPredigerResult,
@@ -188,6 +191,9 @@ __all__ = [
     "MultiKSubsetResult",
     "CIResult",
     "BootstrapCIResult",
+    "PercentileBootstrapCIResult",
+    "BCABootstrapCIResult",
+    "EmptyBootstrapCIResult",
     "ParametricCIResult",
     "HypothesisTestResult",
     "AgreementParts",

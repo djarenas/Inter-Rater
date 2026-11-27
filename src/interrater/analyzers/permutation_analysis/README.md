@@ -165,8 +165,9 @@ being held through the whole run.)
 `keep_draws: false` is for panels whose draws will not fit. Each unit is
 bootstrapped, its interval built, its share of the mean added, and its draws
 discarded, so memory holds one unit's draws at a time. Every value and
-interval is the same; each unit's `bootstrap_distribution` is
-`NotComputed("draws not kept: keep_draws false")`.
+interval is the same; each unit's interval holds
+`NotComputed("draws not kept: keep_draws false")` in place of its draws (and,
+for BCa, its jackknife estimates).
 
 The same seed gives the same numbers under either setting. The independent
 mean picks its values as each unit is bootstrapped, before the draws can be

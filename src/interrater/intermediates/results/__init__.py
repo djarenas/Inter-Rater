@@ -27,6 +27,9 @@ from .hypothesis_test_result import HypothesisTestResult
 from .ci_results import (
     CIResult,
     BootstrapCIResult,
+    PercentileBootstrapCIResult,
+    BCABootstrapCIResult,
+    EmptyBootstrapCIResult,
     ParametricCIResult,
 )
 
@@ -54,6 +57,9 @@ __all__ = [
     "AgreementParts",
     "CIResult",
     "BootstrapCIResult",
+    "PercentileBootstrapCIResult",
+    "BCABootstrapCIResult",
+    "EmptyBootstrapCIResult",
     "ParametricCIResult",
     "PointEstimateResult",
     "FleissKappaResult",

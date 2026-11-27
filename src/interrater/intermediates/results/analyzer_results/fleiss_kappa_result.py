@@ -6,8 +6,6 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-import numpy as np
-
 from ...not_computed import NotComputed
 from ..agreement_parts import AgreementParts
 from .point_estimate_result import PointEstimateResult
@@ -36,7 +34,7 @@ class FleissKappaResult(PointEstimateResult):
     I am Fleiss' kappa, exact or approximate, weighted or unweighted,
     with data context.
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult. balance_profile tells users
     and visualizers whether this is the exact coefficient from Fleiss 1971
     or a generalization applied to unbalanced data.
@@ -61,9 +59,6 @@ class FleissKappaResult(PointEstimateResult):
         Fleiss' kappa (inherited from PointEstimateResult).
     confidence_interval : CIResult
         The interval, bootstrap or parametric (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
@@ -109,7 +104,6 @@ class FleissKappaResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

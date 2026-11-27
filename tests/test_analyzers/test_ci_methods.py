@@ -1,4 +1,4 @@
-"""Tests for ci_methods.py -- percentile_ci, bca_ci, _acceleration.
+"""Tests for ci_methods.py -- percentile_ci, bca_ci -- and the bootstrap intervals they build.
 
 Deterministic tests only: no bootstrap loops. Tolerance is 1e-12 for
 exact computations, relaxed where floating-point order matters.
@@ -13,6 +13,7 @@ happily on an interval that silently fell back.
 from __future__ import annotations
 
 import csv
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -22,9 +23,14 @@ import yaml
 from interrater.analyzers.ci_methods import (
     percentile_ci,
     bca_ci,
-    _acceleration,
 )
-from interrater.intermediates.results.ci_results import BootstrapCIResult
+from interrater.intermediates.not_computed import NotComputed
+from interrater.intermediates.results.ci_results import (
+    BCABootstrapCIResult,
+    BootstrapCIResult,
+    EmptyBootstrapCIResult,
+)
+
 
 
 # A jackknife with some spread in it, for the BCa tests that are not about
@@ -126,8 +132,7 @@ class TestPercentileCi:
         assert ci.method_intended == "percentile"
         assert ci.method_used == "percentile"
         assert ci.degraded is False
-        assert ci.acceleration is None
-        assert ci.bias_correction is None
+        assert not isinstance(ci, BCABootstrapCIResult)
 
     def test_carries_alpha_and_level(self):
         ci = percentile_ci(np.arange(1, 101, dtype=float), 0.10)
@@ -200,17 +205,17 @@ class TestPercentileCi:
 
 
 # ------------------------------------------------------------------ #
-# _acceleration                                                        #
+# BCABootstrapCIResult.compute_acceleration                            #
 # ------------------------------------------------------------------ #
 
 
 class TestAcceleration:
-    """Tests for _acceleration() -- the jackknife skewness of eq. (8.5)."""
+    """Tests for compute_acceleration() -- the jackknife skewness of eq. (8.5)."""
 
     def test_symmetric_jackknife_gives_zero(self):
         """Symmetric leave-one-out values have no skewness to correct."""
         values = np.array([0.4, 0.45, 0.5, 0.55, 0.6])
-        assert _acceleration(values) == pytest.approx(0.0, abs=1e-12)
+        assert BCABootstrapCIResult.compute_acceleration(values) == pytest.approx(0.0, abs=1e-12)
 
     def test_matches_hand_computed_value(self):
         """a = sum(d^3) / (6 * [sum(d^2)]^1.5), d = mean - value."""
@@ -219,36 +224,36 @@ class TestAcceleration:
         expected = float(
             np.sum(deviations ** 3) / (6.0 * np.sum(deviations ** 2) ** 1.5)
         )
-        assert _acceleration(values) == pytest.approx(expected, abs=1e-12)
+        assert BCABootstrapCIResult.compute_acceleration(values) == pytest.approx(expected, abs=1e-12)
 
     def test_sign_follows_skewness(self):
         """Left-skewed values and their mirror image give opposite signs."""
         values = np.array([0.1, 0.2, 0.9])
         mirrored = 1.0 - values
-        assert _acceleration(values) == pytest.approx(
-            -_acceleration(mirrored), abs=1e-12
+        assert BCABootstrapCIResult.compute_acceleration(values) == pytest.approx(
+            -BCABootstrapCIResult.compute_acceleration(mirrored), abs=1e-12
         )
 
     def test_constant_jackknife_returns_none(self):
         """No spread means no skewness -- not zero, undefined."""
-        assert _acceleration(np.full(20, 0.6)) is None
+        assert BCABootstrapCIResult.compute_acceleration(np.full(20, 0.6)) is None
 
     def test_single_value_returns_none(self):
-        assert _acceleration(np.array([0.5])) is None
+        assert BCABootstrapCIResult.compute_acceleration(np.array([0.5])) is None
 
     def test_empty_returns_none(self):
-        assert _acceleration(np.array([])) is None
+        assert BCABootstrapCIResult.compute_acceleration(np.array([])) is None
 
     def test_nan_values_are_dropped_not_propagated(self):
         """A degenerate leave-one-out dataset must not poison the rest."""
         clean = np.array([0.1, 0.2, 0.9])
         holed = np.array([0.1, 0.2, 0.9, np.nan, np.nan])
-        assert _acceleration(holed) == pytest.approx(
-            _acceleration(clean), abs=1e-12
+        assert BCABootstrapCIResult.compute_acceleration(holed) == pytest.approx(
+            BCABootstrapCIResult.compute_acceleration(clean), abs=1e-12
         )
 
     def test_all_nan_returns_none(self):
-        assert _acceleration(np.full(10, np.nan)) is None
+        assert BCABootstrapCIResult.compute_acceleration(np.full(10, np.nan)) is None
 
 
 # ------------------------------------------------------------------ #
@@ -315,7 +320,7 @@ class TestBcaCi:
         jackknife = np.array([0.1, 0.2, 0.9, 0.45, 0.5])
         ci = bca_ci(dist, 0.5, 0.05, jackknife)
         assert ci.acceleration == pytest.approx(
-            _acceleration(jackknife), abs=1e-12
+            BCABootstrapCIResult.compute_acceleration(jackknife), abs=1e-12
         )
 
     def test_ties_at_the_point_count_half(self):
@@ -366,8 +371,7 @@ class TestBcaCi:
         fallen = bca_ci(dist, 0.9, 0.05, np.full(20, 0.6))
         plain = percentile_ci(dist, 0.05)
 
-        assert fallen.acceleration is None
-        assert fallen.bias_correction is None
+        assert not isinstance(fallen, BCABootstrapCIResult)
         assert fallen.lower == pytest.approx(plain.lower, abs=1e-12)
         assert fallen.upper == pytest.approx(plain.upper, abs=1e-12)
 
@@ -396,7 +400,7 @@ class TestBcaCi:
         assert ci.method_used is None
         assert ci.is_defined is False
         assert ci.n_failed == 200
-        assert ci.acceleration is None
+        assert not isinstance(ci, BCABootstrapCIResult)
 
     def test_counts_failed_draws(self):
         rng = np.random.default_rng(42)
@@ -433,6 +437,102 @@ class TestBcaCi:
     def test_alpha_one_raises(self):
         with pytest.raises(ValueError, match=r"alpha must be in \(0, 1\)"):
             bca_ci(np.arange(100.0), 0.5, 1.0, _JACKKNIFE)
+
+
+# ------------------------------------------------------------------ #
+# The intervals check themselves                                       #
+# ------------------------------------------------------------------ #
+
+
+class TestBootstrapIntervalsCheckThemselves:
+    """
+    Each bootstrap interval refuses draws, bounds, a bias correction or an
+    acceleration that do not follow from what it holds.
+    """
+
+    @staticmethod
+    def _draws(n=1000, n_failed=0, seed=42):
+        draws = np.random.default_rng(seed).normal(0.5, 0.05, n)
+        draws[:n_failed] = np.nan
+        return draws
+
+    def test_percentile_bounds_must_be_the_quantiles(self):
+        ci = percentile_ci(self._draws(), 0.05)
+        with pytest.raises(ValueError, match="not the percentile bounds of my draws"):
+            dataclasses.replace(ci, lower=ci.lower - 0.01)
+
+    def test_draw_count_must_match(self):
+        ci = percentile_ci(self._draws(), 0.05)
+        with pytest.raises(ValueError, match="there are 999 draws but n_resamples is 1000"):
+            dataclasses.replace(ci, draws=ci.draws[1:])
+
+    def test_failed_count_must_match(self):
+        ci = percentile_ci(self._draws(n_failed=3), 0.05)
+        with pytest.raises(ValueError, match="3 draws are non-finite but n_failed is 0"):
+            dataclasses.replace(ci, n_failed=0)
+
+    def test_infinite_draw_counts_as_failed(self):
+        draws = self._draws()
+        draws[0] = np.inf
+        assert percentile_ci(draws, 0.05).n_failed == 1
+
+    def test_draws_must_be_an_array_or_not_computed(self):
+        ci = percentile_ci(self._draws(), 0.05)
+        with pytest.raises(TypeError, match="draws must be np.ndarray or NotComputed, got list"):
+            dataclasses.replace(ci, draws=list(ci.draws))
+        with pytest.raises(ValueError, match="draws must be 1-dimensional"):
+            dataclasses.replace(ci, draws=ci.draws.reshape(10, 100))
+
+    def test_draws_not_kept_skip_the_bounds_check(self):
+        ci = percentile_ci(self._draws(), 0.05)
+        kept_out = dataclasses.replace(ci, draws=NotComputed("not kept"))
+        assert kept_out.as_tuple() == ci.as_tuple()
+
+    def test_bca_acceleration_must_follow_from_the_jackknife(self):
+        ci = bca_ci(self._draws(), 0.5, 0.05, jackknife_estimates=_JACKKNIFE)
+        with pytest.raises(ValueError, match="is not the one my jackknife estimates give"):
+            dataclasses.replace(ci, acceleration=ci.acceleration + 0.01)
+
+    def test_bca_bias_correction_must_follow_from_the_draws(self):
+        ci = bca_ci(self._draws(), 0.5, 0.05, jackknife_estimates=_JACKKNIFE)
+        with pytest.raises(ValueError, match="is not the one my draws and point give"):
+            dataclasses.replace(ci, point=0.6)
+
+    def test_bca_bounds_must_be_the_adjusted_quantiles(self):
+        ci = bca_ci(self._draws(), 0.5, 0.05, jackknife_estimates=_JACKKNIFE)
+        with pytest.raises(ValueError, match="not the BCa bounds of my draws"):
+            dataclasses.replace(ci, upper=ci.upper + 0.01)
+
+    def test_bca_class_always_ran_bca(self):
+        ci = bca_ci(self._draws(), 0.5, 0.05, jackknife_estimates=_JACKKNIFE)
+        with pytest.raises(ValueError, match="must both be 'bca'"):
+            dataclasses.replace(ci, method_used="percentile")
+
+    def test_percentile_class_always_ran_percentile(self):
+        ci = percentile_ci(self._draws(), 0.05)
+        with pytest.raises(ValueError, match="method_used must be 'percentile'"):
+            dataclasses.replace(ci, method_used="bca")
+
+    def test_empty_needs_every_draw_failed(self):
+        with pytest.raises(ValueError, match="an empty interval has every draw failed"):
+            EmptyBootstrapCIResult(
+                lower=float("nan"), upper=float("nan"), alpha=0.05,
+                method_intended="percentile", method_used=None,
+                n_resamples=3, n_failed=2, draws=np.array([np.nan, np.nan, 0.5]),
+            )
+
+    def test_parent_cannot_be_built(self):
+        with pytest.raises(TypeError, match="abstract"):
+            BootstrapCIResult(
+                lower=0.4, upper=0.6, alpha=0.05,
+                method_intended="percentile", method_used="percentile",
+                n_resamples=3, n_failed=0, draws=np.array([0.4, 0.5, 0.6]),
+            )
+
+    def test_error_prefix_chains(self):
+        ci = percentile_ci(self._draws(), 0.05)
+        with pytest.raises(ValueError, match=r"\[PercentileBootstrapCIResult\] Error: \[BootstrapCIResult\] Error"):
+            dataclasses.replace(ci, lower=ci.lower - 0.01)
 
 
 # ------------------------------------------------------------------ #
@@ -477,7 +577,7 @@ class TestEfronLawSchool:
         about acceleration is a question of what we feed it.
 
         The influence values cannot be passed in as they stand. They are
-        already deviations, and _acceleration takes *estimates* and forms
+        already deviations, and compute_acceleration takes *estimates* and forms
         its own deviations as ``mean - value`` -- hand it U_i directly and
         every deviation comes back negated, which cubes to the right
         magnitude with the wrong sign. The two are related by
@@ -494,7 +594,7 @@ class TestEfronLawSchool:
         n = len(influence)
         pseudo_estimates = expected["point"] - influence / (n - 1)
 
-        assert _acceleration(pseudo_estimates) == pytest.approx(
+        assert BCABootstrapCIResult.compute_acceleration(pseudo_estimates) == pytest.approx(
             expected["acceleration"], abs=5e-5
         )
 
@@ -510,8 +610,8 @@ class TestEfronLawSchool:
         n = len(influence)
         pseudo_estimates = expected["point"] - influence / (n - 1)
 
-        assert _acceleration(influence) == pytest.approx(
-            -_acceleration(pseudo_estimates), abs=1e-12
+        assert BCABootstrapCIResult.compute_acceleration(influence) == pytest.approx(
+            -BCABootstrapCIResult.compute_acceleration(pseudo_estimates), abs=1e-12
         )
 
     def test_point_estimate_matches_published(self):
@@ -536,7 +636,7 @@ class TestEfronLawSchool:
             self._correlation(np.delete(lsat, i), np.delete(gpa, i))
             for i in range(len(lsat))
         ])
-        acceleration = _acceleration(jackknife)
+        acceleration = BCABootstrapCIResult.compute_acceleration(jackknife)
 
         assert acceleration == pytest.approx(-0.0757, abs=5e-4)
         assert acceleration == pytest.approx(

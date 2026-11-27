@@ -13,10 +13,16 @@ standing caveat about the variance it was built from.
 
 from .ci_result import CIResult
 from .bootstrap_ci_result import BootstrapCIResult
+from .percentile_bootstrap_ci_result import PercentileBootstrapCIResult
+from .bca_bootstrap_ci_result import BCABootstrapCIResult
+from .empty_bootstrap_ci_result import EmptyBootstrapCIResult
 from .parametric_ci_result import ParametricCIResult
 
 __all__ = [
     "CIResult",
     "BootstrapCIResult",
+    "PercentileBootstrapCIResult",
+    "BCABootstrapCIResult",
+    "EmptyBootstrapCIResult",
     "ParametricCIResult",
 ]

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from .agreement_functions.krippendorff import (
     expected_disagreement,
     observed_disagreement,
@@ -186,11 +184,9 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
             weighted=self.weights is not None and not self.weights.is_identity,
         )
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> KrippendorffAlphaResult:
+    def _result(self, point: float, ci) -> KrippendorffAlphaResult:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
         """
         from ..intermediates.results import KrippendorffAlphaResult
@@ -198,7 +194,6 @@ class KrippendorffAlphaAnalyzer(GroupAnalyzer):
         return KrippendorffAlphaResult(
             point=point,
             confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             parts=self._disagreement_parts(self.estimator_input.nij),

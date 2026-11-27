@@ -34,11 +34,10 @@ alone. Each subfolder owns its own base (`PointEstimateResult`,
 `CIResult` is a separate tree: an interval has no point estimate and no
 coefficient name. A `PointEstimateResult` holds one.
 
-**Draws and their interval must agree.** A result that stores bootstrap
-draws also holds the interval made from them, and is refused if the two
-disagree: draws come exactly with a `BootstrapCIResult`, one per resample it
-counted, with as many non-finite draws as it counted failed. The check is in
-`_bootstrap_draws.py`, shared by every result that holds draws.
+**A bootstrap interval holds its draws and checks them:** one draw per
+resample, as many non-finite draws as it counted failed, and its bounds
+recomputed from the draws; a BCa interval also recomputes its z0 and its
+acceleration. See `ci_results/README.md`.
 
 ## The classes at this level
 

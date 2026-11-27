@@ -6,8 +6,6 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-import numpy as np
-
 from ...not_computed import NotComputed
 from ..agreement_parts import AgreementParts
 from .individual_marginal_result import (
@@ -37,7 +35,7 @@ class CongerKappaResult(IndividualMarginalResult):
     """
     I am Conger's kappa for any number of raters (n >= 2).
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult.
 
     Conger's kappa generalises Cohen's kappa to many raters while keeping
@@ -65,9 +63,6 @@ class CongerKappaResult(IndividualMarginalResult):
         Conger's kappa (inherited from PointEstimateResult).
     confidence_interval : CIResult
         Bootstrap confidence interval (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited).
     rater_profile : RaterProfile
@@ -103,7 +98,6 @@ class CongerKappaResult(IndividualMarginalResult):
     # balance_profile is not None and rater_profile is a RaterProfile)
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: float | NotComputed
     agreement_profile: AgreementProfile

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
-
 from .individual_marginal_analyzer import IndividualMarginalAnalyzer, check_complete
 
 from ..data_objects.ratings import Ratings
@@ -201,11 +199,9 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         """
         return conger_kappa(data)
 
-    def _result(
-        self, point: float, ci, bootstrap_distribution: np.ndarray | None
-    ) -> CongerKappaResult:
+    def _result(self, point: float, ci) -> CongerKappaResult:
         """
-        My result: the point, interval and draws ``estimate()`` (or a
+        My result: the point and interval ``estimate()`` (or a
         permutation analysis) computed, with my parts, ceiling and profiles.
 
         Only percentile and bca intervals: the package does not implement a
@@ -214,7 +210,6 @@ class CongerKappaAnalyzer(IndividualMarginalAnalyzer):
         return CongerKappaResult(
             point=point,
             confidence_interval=ci,
-            bootstrap_distribution=bootstrap_distribution,
             balance_profile=self.balance_profile,
             rater_profile=self.rater_profile,
             parts=self._agreement_parts(),

@@ -22,7 +22,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ...contracts import EMPTY
-from ...intermediates.results.ci_results import BootstrapCIResult
+from ...intermediates.results.ci_results import (
+    BootstrapCIResult,
+    EmptyBootstrapCIResult,
+)
 from .independent_mean_draws import IndependentMeanDraws
 from .permutation_analysis import PermutationAnalysis
 
@@ -143,24 +146,22 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         )
 
         # Computation B -- always
-        pairwise_distributions, pairwise_cis = (
+        pairwise_cis = (
             self._compute_per_pair_bootstrap(pairwise_values, independent)
         )
 
         # Computation C -- if mean bootstrap requested
-        mean_distribution = None
         mean_ci = None
         mean_method = None
         if bmc is not None:
             mean_method = bmc.method
-            mean_distribution, mean_ci = self._compute_mean_bootstrap(
+            mean_ci = self._compute_mean_bootstrap(
                 independent, mean_over_pairs, defined_pairs
             )
 
         n_pairs = len(pairwise_values)
         pair_results = self._unit_results(
             pairwise_values, subjects_per_pair, pairwise_cis,
-            pairwise_distributions,
         )
 
         return PairwisePermutationResult(
@@ -174,7 +175,6 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             mean_over_pairs=mean_over_pairs,
             bootstrap_mean_method=mean_method,
             bootstrap_ci_of_mean=mean_ci,
-            bootstrap_distribution_of_mean=mean_distribution,
         )
 
     # Private helpers ---------------------------------------------------- #
@@ -245,11 +245,9 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         Returns
         -------
-        tuple[dict | None, dict]
-            (pairwise_distributions, pairwise_cis)
-            distributions: dict[pair -> np.ndarray of shape (n_resamples,)],
-            or None when keep_draws is false
-            cis: dict[pair -> BootstrapCIResult]
+        dict[pair -> BootstrapCIResult]
+            Each pair's interval, holding its draws, or NotComputed in their
+            place when keep_draws is false.
         """
         coc = self.config.config_of_coefficient
         n_resamples = coc.n_resamples
@@ -266,7 +264,6 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
         pairs = sorted(pairwise_values.keys())
         child_seeds = ss.spawn(len(pairs))
 
-        distributions: dict[tuple, np.ndarray] = {}
         cis: dict[tuple, BootstrapCIResult] = {}
 
         for pair, seed in zip(pairs, child_seeds):
@@ -285,17 +282,18 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
                 # Fewer than two shared subjects: no coefficient, so every
                 # draw fails and no method runs. The result says so instead
                 # of carrying bare NaNs.
-                if keep_draws:
-                    distributions[pair] = np.full(n_resamples, np.nan)
-                cis[pair] = BootstrapCIResult(
+                cis[pair] = EmptyBootstrapCIResult(
                     lower=float("nan"),
                     upper=float("nan"),
                     alpha=alpha,
-                    n_resamples=n_resamples,
-                    n_failed=n_resamples,
                     method_intended=ci_method,
                     method_used=None,
+                    n_resamples=n_resamples,
+                    n_failed=n_resamples,
+                    draws=np.full(n_resamples, np.nan),
                 )
+                if not keep_draws:
+                    cis[pair] = self._without_draws(cis[pair])
                 continue
 
             # Bootstrap loop: resample shared subjects with replacement
@@ -310,8 +308,6 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
             if independent is not None:
                 independent.add(pair, draws)
-            if keep_draws:
-                distributions[pair] = draws
             point = pairwise_values[pair]
 
             # BCa's jackknife uses only the pair's shared subjects (see
@@ -329,15 +325,19 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             cis[pair] = self._compute_ci(
                 draws, point, ci_method, alpha, jackknife_fn=_jackknife
             )
+            # The interval checked its bounds against the draws when it was
+            # built; with keep_draws false they go now, one pair at a time
+            if not keep_draws:
+                cis[pair] = self._without_draws(cis[pair])
 
-        return (distributions if keep_draws else None), cis
+        return cis
 
     def _compute_mean_bootstrap(
         self,
         independent: IndependentMeanDraws | None,
         mean_over_pairs: float,
         defined_pairs: list,
-    ) -> tuple[np.ndarray, BootstrapCIResult]:
+    ) -> BootstrapCIResult:
         """
         Computation C: mean bootstrap.
 
@@ -370,8 +370,8 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
 
         Returns
         -------
-        tuple[np.ndarray, BootstrapCIResult]
-            (mean_distribution, mean_ci)
+        BootstrapCIResult
+            The mean's interval, holding its draws.
             distribution: shape (n_resamples,)
             ci: the interval of the mean
         """
@@ -413,7 +413,7 @@ class PairwisePermutationAnalysis(PermutationAnalysis):
             jackknife_fn=jackknife_fn,
         )
 
-        return mean_distribution, mean_ci
+        return mean_ci
 
     def _mean_jackknife_correlated(self, defined_pairs: list) -> np.ndarray:
         """

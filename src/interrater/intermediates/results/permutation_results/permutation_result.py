@@ -333,7 +333,7 @@ class PermutationResult(PanelResult):
                     f"weighted as its {word}s are"
                 )
             points.append(float(unit.point))
-            kept.add(not isinstance(unit.bootstrap_distribution, NotComputed))
+            kept.add(not isinstance(unit.confidence_interval.draws, NotComputed))
 
         # keep_draws applies to the whole analysis, so a mix is a bug
         if len(kept) > 1:

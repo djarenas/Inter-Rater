@@ -35,7 +35,7 @@ class BrennanPredigerResult(PointEstimateResult):
     I am Brennan-Prediger's coefficient, exact or approximate, weighted or
     unweighted, with data context.
 
-    I inherit point, confidence_interval, bootstrap_distribution, and
+    I inherit point, confidence_interval, and
     balance_profile from PointEstimateResult. balance_profile tells users
     and visualizers whether the data was balanced.
 
@@ -61,9 +61,6 @@ class BrennanPredigerResult(PointEstimateResult):
         Brennan-Prediger coefficient (inherited from PointEstimateResult).
     confidence_interval : CIResult
         The bootstrap interval (inherited).
-    bootstrap_distribution : np.ndarray | NotComputed | None
-        Bootstrap distribution (inherited); NotComputed when the draws were
-        not kept.
     balance_profile : BalanceProfile
         Balance structure of the data (inherited). Its is_balanced property
         determines whether this result is exact or approximate.
@@ -106,7 +103,6 @@ class BrennanPredigerResult(PointEstimateResult):
     # Inherited from parent class PointEstimateResult
     point: float
     confidence_interval: CIResult
-    bootstrap_distribution: np.ndarray | NotComputed | None
     parts: AgreementParts
     kappa_max: NotComputed
     agreement_profile: AgreementProfile

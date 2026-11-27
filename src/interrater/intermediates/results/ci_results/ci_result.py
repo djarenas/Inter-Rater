@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 
@@ -15,10 +16,10 @@ class CIResult(ABC):
     """
     I am the base for every confidence interval this package produces.
 
-    I hold the three things every interval has whatever produced it: two
-    bounds and the level they were taken at. How they were arrived at --
-    resampling, a variance formula, something later -- belongs to my
-    subclasses, and so does the account of what could go wrong on the way.
+    I hold what every interval has whatever produced it: two bounds, the
+    level they were taken at, the method asked for and the method that ran.
+    How that method works -- resampling, a variance formula, something later
+    -- belongs to my subclasses, and so does the account of what could go wrong on the way.
 
     I carry alpha because an interval without its level is ambiguous, and
     because the thing holding me should not have to consult a config to
@@ -30,7 +31,7 @@ class CIResult(ABC):
     usually perfectly well defined even when the interval is not, so refusing
     to exist would destroy the useful half of the answer.
 
-    I know nothing about the point estimate and want to know nothing. A
+    I do not check my bounds against the point estimate. A
     strongly bias-corrected interval can sit entirely to one side of it,
     which is correct behaviour rather than a contradiction, so whether the
     two are consistent is a question for whoever holds both of us.
@@ -44,11 +45,23 @@ class CIResult(ABC):
     alpha : float
         Significance level the bounds were taken at, e.g. 0.05 for a 95%
         interval.
+    method_intended : str
+        The method that was asked for: one of my class's ``_METHODS``.
+    method_used : str | None
+        The method that actually produced my bounds, or None when no method
+        could be applied, so there are no bounds. Otherwise equal to
+        method_intended, unless a method fell back to another.
     """
 
+    # The methods my class can report. Each subclass names its own.
+    _METHODS: ClassVar[frozenset[str]] = frozenset()
+
+    # Populated at this level
     lower: float
     upper: float
     alpha: float
+    method_intended: str
+    method_used: str | None
 
     # Constructor ------------------------------------------------------------ #
 
@@ -99,6 +112,28 @@ class CIResult(ABC):
                 f"{self.upper}"
             )
 
+        # Something was always asked for
+        if self.method_intended not in self._METHODS:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: method_intended must be one of "
+                f"{sorted(self._METHODS)}, got {self.method_intended!r}"
+            )
+
+        # Something ran, or nothing did
+        if self.method_used is not None and self.method_used not in self._METHODS:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: method_used must be None or one of "
+                f"{sorted(self._METHODS)}, got {self.method_used!r}"
+            )
+
+        # Bounds exist exactly when a method ran
+        if (self.method_used is not None) != lower_defined:
+            raise ValueError(
+                f"{_ERROR_PREFIX}: bounds are defined if and only if a method "
+                f"ran, but method_used is {self.method_used!r} and bounds are "
+                f"({self.lower}, {self.upper})"
+            )
+
         # These values arrive from numpy arithmetic, so they arrive as numpy
         # scalars. Coerce once, here, rather than at each place that reads me:
         # a caller reaching for my bounds should get a float, not a float that
@@ -113,6 +148,19 @@ class CIResult(ABC):
     def is_defined(self) -> bool:
         """Whether there is an interval at all."""
         return bool(np.isfinite(self.lower) and np.isfinite(self.upper))
+
+    @property
+    def degraded(self) -> bool:
+        """
+        Whether a different method ran than the one asked for.
+
+        False when nothing ran at all. That is an absence, not a
+        substitution, and ``method_used is None`` already says it.
+        """
+        return (
+            self.method_used is not None
+            and self.method_intended != self.method_used
+        )
 
     @property
     def confidence_level(self) -> float:
