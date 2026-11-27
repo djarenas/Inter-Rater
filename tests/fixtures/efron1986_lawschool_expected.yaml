@@ -2,7 +2,7 @@
 # Confidence Intervals, and Other Measures of Statistical Accuracy."
 # Statistical Science 1(1): 54-77.
 #
-# Data: Fig. 1, p. 55 -- a random sample of 15 American law schools.
+# Data: Fig. 1, p. 55 -- 15 American law schools.
 # Point estimate: p. 56. Everything else: Example 3, p. 71.
 #
 # Two traps when reproducing this. The published interval is CENTRAL 90%,
@@ -21,7 +21,6 @@ bias_correction_z0: -0.0927
 acceleration: -0.0817
 ci_bca: [0.43, 0.92]
 n_resamples_published: 100000
-n_resamples_suggested: 4000
 empirical_influence_values:
   - -1.507
   -  0.168

@@ -175,7 +175,7 @@ Both construction pathways are exercised:
     csv/txt -> DataFrame -> ndarray -> NijMatrix
 
 **Resample counts here are the published floors, not the fastest numbers that
-pass.** 250 for percentile intervals, 1000 for BCa (Efron & Tibshirani 1993,
+pass.** 250 for percentile intervals, 1000 for BCa (Efron & Tibshirani 1986,
 §9 p. 72). An integration test that reports an interval should report an
 interval the package itself would call adequate. The whole package runs in
 about five seconds, which is close to half the suite's total runtime and still

@@ -39,9 +39,10 @@ References
 ----------
 Efron, B., & Tibshirani, R. (1986). "Bootstrap Methods for Standard Errors,
 Confidence Intervals, and Other Measures of Statistical Accuracy."
-*Statistical Science*, 1(1), 54-77. Table 6 (p. 68) for the nested sequence
-of intervals; eq. (8.5) (p. 71) for the acceleration; section 9 (p. 72) for
-the resample counts each method needs.
+*Statistical Science*, 1(1), 54-77. Table 6 (p. 68) for the four methods,
+each correct under more general assumptions than the one before; eq. (8.5)
+(p. 71) for the acceleration; section 9 (p. 72) for the resample counts each
+method needs.
 
 Efron, B. (1987). "Better Bootstrap Confidence Intervals." *Journal of the
 American Statistical Association*, 82(397), 171-185.
@@ -119,9 +120,9 @@ def percentile_ci(
     """
     The alpha/2 and 1 - alpha/2 quantiles of the bootstrap distribution.
 
-    The simpler of the two methods in Efron & Tibshirani's Table 6, and the
-    floor of this module: BCa can decline and hand its work here, while this
-    has nothing simpler to hand off to in turn.
+    The percentile method, line 2 of Efron & Tibshirani's Table 6 (1986,
+    p. 68), and the floor of this module: BCa can decline and hand its work
+    here, while this has nothing simpler to hand off to in turn.
 
     Parameters
     ----------

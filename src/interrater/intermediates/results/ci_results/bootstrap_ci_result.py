@@ -120,7 +120,6 @@ class BootstrapCIResult(CIResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-
         # Counts must be ints, and must agree with each other
         for name, value in (
             ("n_resamples", self.n_resamples), ("n_failed", self.n_failed)
@@ -191,8 +190,8 @@ class BootstrapCIResult(CIResult):
         """
         Mean and bootstrap standard error of my usable draws.
 
-        The standard error divides by n - 1 (Efron & Tibshirani 1993, eq.
-        6.6). The mean is None with no usable draw; the standard error is
+        The standard error divides by B - 1, B being my usable draws (Efron
+        & Tibshirani 1986, eq. 2.4). The mean is None with no usable draw; the standard error is
         None with fewer than two. Raises when my draws were not kept.
         """
         if isinstance(self.draws, NotComputed):

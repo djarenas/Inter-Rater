@@ -987,7 +987,7 @@ class TestPointEstimateResultDrawMoments:
         assert d["bootstrap_se"] == 1.0
 
     def test_se_divides_by_n_minus_1(self):
-        """Efron & Tibshirani (1993) eq. 6.6."""
+        """Efron & Tibshirani (1986) eq. 2.4."""
         draws = np.array([0.0, 1.0])
         d = PointEstimateResult(
             point=0.5, confidence_interval=_ci_from(draws), balance_profile=_bp(), weights_type="identity", weight_matrix=None, ci_method="percentile",

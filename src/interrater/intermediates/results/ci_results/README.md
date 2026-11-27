@@ -114,7 +114,7 @@ data and published values in `tests/fixtures/efron1986_lawschool_*`.
   this package's formula for `a` (their eq. 8.5), they give -0.0817, the
   published value. The remaining difference in `a` comes from its input:
   Efron uses the infinitesimal jackknife (their eq. 10.11), this package the
-  delete-one jackknife, as in Efron & Tibshirani (1993).
+  delete-one jackknife (their eq. 10.8).
 - The published interval is 90%, so `alpha=0.10`; a 95% interval will look
   wrong against it.
 - The paper used B = 100,000, "about 100 times more than actually
@@ -154,5 +154,3 @@ reach into this package.
   Confidence Intervals, and Other Measures of Statistical Accuracy."
   *Statistical Science* 1(1): 54-77. §9 p. 72 for the resample minimums;
   eq. 8.5 for the acceleration; Example 3 p. 71 for the law school check.
-- Efron, B. & Tibshirani, R. J. 1993. *An Introduction to the Bootstrap.*
-  Chapman & Hall.

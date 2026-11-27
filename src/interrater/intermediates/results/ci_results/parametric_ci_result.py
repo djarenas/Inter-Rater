@@ -96,7 +96,6 @@ class ParametricCIResult(CIResult):
         except (ValueError, TypeError) as exc:
             raise type(exc)(f"{_ERROR_PREFIX}: {exc}") from exc
 
-
         if self.variance_source not in _VALID_VARIANCE_SOURCES:
             raise ValueError(
                 f"{_ERROR_PREFIX}: variance_source must be one of "
