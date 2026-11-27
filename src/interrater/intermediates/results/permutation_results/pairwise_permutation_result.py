@@ -201,14 +201,21 @@ class PairwisePermutationResult(PermutationResult):
             )
 
         # Validate bootstrap_ci_of_mean. An interval validates its own
-        # bounds, level, counts, and method at construction, so the only
-        # thing left to check here is that it is one.
+        # bounds, level, counts, and method at construction, so what is
+        # left to check here is that it is one and that it was asked for
+        # my ci_method.
         if self.bootstrap_ci_of_mean is not None:
             if not isinstance(self.bootstrap_ci_of_mean, BootstrapCIResult):
                 raise TypeError(
                     f"{_ERROR_PREFIX}: bootstrap_ci_of_mean must be "
                     f"BootstrapCIResult or None, got "
                     f"{type(self.bootstrap_ci_of_mean).__name__}"
+                )
+            if self.bootstrap_ci_of_mean.method_intended != self.ci_method:
+                raise ValueError(
+                    f"{_ERROR_PREFIX}: bootstrap_ci_of_mean was asked for "
+                    f"'{self.bootstrap_ci_of_mean.method_intended}', but my "
+                    f"ci_method is '{self.ci_method}'"
                 )
 
         # Call parent validation

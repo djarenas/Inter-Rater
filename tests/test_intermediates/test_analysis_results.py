@@ -1991,6 +1991,15 @@ class TestPairwisePermutationResultValidation:
                 bootstrap_ci_of_mean=(0.7, 0.3),
             ))
 
+    def test_bootstrap_ci_of_mean_must_be_asked_for_my_ci_method(self):
+        """A BCa fallback interval on a percentile result is refused."""
+        with pytest.raises(ValueError, match="but my ci_method is 'percentile'"):
+            PairwisePermutationResult(**_pairwise_with_bootstrap(
+                bootstrap_ci_of_mean=_ci(
+                    0.45, 0.55, n_resamples=3, method_intended="bca",
+                ),
+            ))
+
     def test_pairs_may_fail_independently(self):
         """The reason each pair carries its own interval object.
 
@@ -2285,6 +2294,15 @@ class TestSubsetPermutationResultValidation:
                 bootstrap_ci_of_mean=(0.7, 0.3),
             ))
 
+    def test_bootstrap_ci_of_mean_must_be_asked_for_my_ci_method(self):
+        """A BCa fallback interval on a percentile result is refused."""
+        with pytest.raises(ValueError, match="but my ci_method is 'percentile'"):
+            SubsetPermutationResult(**_subset_with_bootstrap(
+                bootstrap_ci_of_mean=_ci(
+                    0.45, 0.55, n_resamples=3, method_intended="bca",
+                ),
+            ))
+
     def test_subsets_may_fail_independently(self):
         """Routine here rather than exceptional.
 
@@ -2424,7 +2442,7 @@ class TestPermutationDrawsMatchIntervals:
         cls, kwargs = kind
         r = cls(**kwargs(
             bootstrap_mean_method="correlated",
-            bootstrap_ci_of_mean=_undefined_ci(),
+            bootstrap_ci_of_mean=_undefined_ci(method_intended="percentile"),
         ))
         d = r.summary()
         assert d["bootstrap_draws_mean"] is None
@@ -2727,7 +2745,7 @@ class TestMultiKSubsetResultStr:
         result_k2 = SubsetPermutationResult(**_subset_kwargs(
             balance_profile=bp,
             bootstrap_mean_method="correlated",
-            bootstrap_ci_of_mean=_undefined_ci(),
+            bootstrap_ci_of_mean=_undefined_ci(method_intended="percentile"),
             
         ))
         r = MultiKSubsetResult(
